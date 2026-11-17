@@ -177,6 +177,92 @@ class SpawnReviewView(discord.ui.View):
         await interaction.response.send_modal(CorrectPokemonModal(self))
 
 
+class ShinyHuntSwitchView(discord.ui.View):
+    """Confirm replacing one shiny hunt with another."""
+
+    def __init__(
+        self,
+        cog,
+        guild_id: int,
+        user_id: int,
+        old_pokemon: str,
+        new_pokemon: str,
+    ):
+        super().__init__(timeout=60)
+        self.cog = cog
+        self.guild_id = guild_id
+        self.user_id = user_id
+        self.old_pokemon = old_pokemon
+        self.new_pokemon = new_pokemon
+        self.completed = False
+
+    async def reject_other_user(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id == self.user_id:
+            return False
+        await interaction.response.send_message(
+            "Only the person starting this shiny hunt can answer.",
+            ephemeral=True,
+        )
+        return True
+
+    def disable_buttons(self):
+        self.completed = True
+        self.stop()
+        for child in self.children:
+            if isinstance(child, discord.ui.Button):
+                child.disabled = True
+
+    @discord.ui.button(label="Yes", style=discord.ButtonStyle.success)
+    async def confirm_switch(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ):
+        del button
+        if await self.reject_other_user(interaction):
+            return
+        if self.completed:
+            await interaction.response.send_message(
+                "This shiny-hunt change has already been handled.",
+                ephemeral=True,
+            )
+            return
+        self.cog.set_shiny_hunt(
+            self.guild_id,
+            self.user_id,
+            self.new_pokemon,
+        )
+        self.disable_buttons()
+        await interaction.response.edit_message(
+            content=(
+                f"✅ Switched your shiny hunt from **{self.old_pokemon}** "
+                f"to **{self.new_pokemon}**. Chain reset to **0**."
+            ),
+            view=self,
+        )
+
+    @discord.ui.button(label="No", style=discord.ButtonStyle.danger)
+    async def cancel_switch(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ):
+        del button
+        if await self.reject_other_user(interaction):
+            return
+        if self.completed:
+            await interaction.response.send_message(
+                "This shiny-hunt change has already been handled.",
+                ephemeral=True,
+            )
+            return
+        self.disable_buttons()
+        await interaction.response.edit_message(
+            content=f"Kept your **{self.old_pokemon}** shiny hunt.",
+            view=self,
+        )
+
+
 class PokéTwoNamingBot(commands.Cog):
     """Pokétwo naming bot cog with commands for naming Pokémon"""
 
@@ -229,6 +315,7 @@ class PokéTwoNamingBot(commands.Cog):
         pokemon_name: str,
         confidence: float,
         guild_id: int | None = None,
+        shiny_hunters: list[str] | None = None,
     ) -> str:
         """Format the prediction with every correct primary/secondary type icon."""
         icons = "".join(
@@ -246,7 +333,52 @@ class PokéTwoNamingBot(commands.Cog):
             ).get(pokemon_name)
             if reserved_user_id:
                 output += f"\nreserved: <@{reserved_user_id}>"
+            else:
+                if shiny_hunters is None:
+                    shiny_hunters = self.shiny_hunters_for_spawn(
+                        guild_id,
+                        pokemon_name,
+                    )
+                if shiny_hunters:
+                    mentions = " ".join(f"<@{user_id}>" for user_id in shiny_hunters)
+                    output += f"\nshinyhunt: {mentions}"
         return output
+
+    def set_shiny_hunt(
+        self,
+        guild_id: int,
+        user_id: int,
+        pokemon_name: str,
+    ):
+        """Create or replace a member's shiny hunt with a fresh chain."""
+        guild_hunts = self.bot_state["shiny_hunts"].setdefault(
+            str(guild_id),
+            {},
+        )
+        guild_hunts[str(user_id)] = {
+            "pokemon": str(pokemon_name),
+            "chain": 0,
+        }
+        self.save_bot_state()
+
+    def shiny_hunters_for_spawn(
+        self,
+        guild_id: int,
+        pokemon_name: str,
+    ) -> list[str]:
+        """Increment and return members hunting the spawned Pokémon."""
+        guild_hunts = self.bot_state["shiny_hunts"].get(str(guild_id), {})
+        hunters = []
+        changed = False
+        for user_id, hunt in guild_hunts.items():
+            if hunt.get("pokemon") != pokemon_name:
+                continue
+            hunt["chain"] = int(hunt.get("chain", 0)) + 1
+            hunters.append(user_id)
+            changed = True
+        if changed:
+            self.save_bot_state()
+        return hunters
 
     def load_pokemon_best_names(self):
         """Load and validate the shortest localized name for each model class."""
@@ -312,6 +444,7 @@ class PokéTwoNamingBot(commands.Cog):
                 "paused_channels": {},
                 "reserves": {},
                 "active_incenses": {},
+                "shiny_hunts": {},
             }
         with open(BOT_STATE_FILE, "r", encoding="utf-8") as f:
             state = json.load(f)
@@ -319,6 +452,7 @@ class PokéTwoNamingBot(commands.Cog):
         state.setdefault("paused_channels", {})
         state.setdefault("reserves", {})
         state.setdefault("active_incenses", {})
+        state.setdefault("shiny_hunts", {})
         return state
 
     def save_bot_state(self):
@@ -595,6 +729,11 @@ class PokéTwoNamingBot(commands.Cog):
         if pokemon_name.casefold() == "missingno":
             missingno_pause = await self.pause_missingno_channel(message.channel)
 
+        shiny_hunters = (
+            self.shiny_hunters_for_spawn(message.guild.id, pokemon_name)
+            if message.guild
+            else []
+        )
         if (
             message.channel.id == TRAINING_REVIEW_CHANNEL_ID
             and confidence < REVIEW_CONFIDENCE_THRESHOLD
@@ -617,6 +756,22 @@ class PokéTwoNamingBot(commands.Cog):
                 value=f"{confidence:.2f}%",
                 inline=True,
             )
+            reserved_user_id = self.bot_state.get("reserves", {}).get(
+                str(message.guild.id),
+                {},
+            ).get(pokemon_name) if message.guild else None
+            if reserved_user_id:
+                embed.add_field(
+                    name="Reserved",
+                    value=f"<@{reserved_user_id}>",
+                    inline=True,
+                )
+            elif shiny_hunters:
+                embed.add_field(
+                    name="Shiny hunt",
+                    value=" ".join(f"<@{user_id}>" for user_id in shiny_hunters),
+                    inline=True,
+                )
             embed.set_image(url="attachment://spawn-review.webp")
             with Image.open(BytesIO(image_data)) as image:
                 review_buffer = BytesIO()
@@ -637,6 +792,7 @@ class PokéTwoNamingBot(commands.Cog):
                     pokemon_name,
                     confidence,
                     message.guild.id if message.guild else None,
+                    shiny_hunters,
                 )
             )
 
@@ -808,6 +964,78 @@ class PokéTwoNamingBot(commands.Cog):
         self.bot_state["restricted_roles"][str(ctx.guild.id)] = str(role.id)
         self.save_bot_state()
         await ctx.send(f"✅ Restricted commands are now available to {role.mention}.")
+
+    @commands.group(name="sh", invoke_without_command=True)
+    async def shiny_hunt(self, ctx, *, pokemon_name: str = ""):
+        """Start or change the caller's shiny hunt."""
+        if ctx.invoked_subcommand is not None:
+            return
+        if ctx.guild is None:
+            await ctx.send("Shiny hunts can only be managed inside a server.")
+            return
+        pokemon_name = pokemon_name.strip()
+        if not pokemon_name:
+            await ctx.send("Usage: `v!sh <pokémon name>`")
+            return
+        resolved_name = self.class_names.get(pokemon_name.casefold())
+        if resolved_name is None:
+            await ctx.send(f"❌ Unknown Pokémon: `{pokemon_name}`")
+            return
+
+        hunt = self.bot_state["shiny_hunts"].get(
+            str(ctx.guild.id),
+            {},
+        ).get(str(ctx.author.id))
+        if hunt and hunt.get("pokemon") == resolved_name:
+            await ctx.send(
+                f"You are already shiny hunting **{resolved_name}**. "
+                f"Chain: **{int(hunt.get('chain', 0))}**."
+            )
+            return
+        if hunt:
+            old_pokemon = str(hunt.get("pokemon"))
+            await ctx.send(
+                (
+                    f"You are currently shiny hunting **{old_pokemon}**.\n"
+                    f"Switch to **{resolved_name}** and reset the chain?"
+                ),
+                view=ShinyHuntSwitchView(
+                    self,
+                    ctx.guild.id,
+                    ctx.author.id,
+                    old_pokemon,
+                    str(resolved_name),
+                ),
+            )
+            return
+
+        self.set_shiny_hunt(
+            ctx.guild.id,
+            ctx.author.id,
+            str(resolved_name),
+        )
+        await ctx.send(
+            f"✨ Shiny hunting **{resolved_name}**. Chain: **0**."
+        )
+
+    @shiny_hunt.command(name="clear")
+    async def clear_shiny_hunt(self, ctx):
+        """Clear the caller's current shiny hunt."""
+        if ctx.guild is None:
+            await ctx.send("Shiny hunts can only be managed inside a server.")
+            return
+        guild_hunts = self.bot_state["shiny_hunts"].get(
+            str(ctx.guild.id),
+            {},
+        )
+        hunt = guild_hunts.pop(str(ctx.author.id), None)
+        if hunt is None:
+            await ctx.send("You are not currently shiny hunting a Pokémon.")
+            return
+        self.save_bot_state()
+        await ctx.send(
+            f"✅ Cleared your **{hunt.get('pokemon')}** shiny hunt."
+        )
 
     @commands.group(name="r", invoke_without_command=True)
     async def resume_or_reserve(self, ctx):
@@ -1307,6 +1535,16 @@ class PokéTwoNamingBot(commands.Cog):
         embed.add_field(
             name="v!r",
             value="Resume a channel paused after MissingNo (restricted)",
+            inline=False
+        )
+        embed.add_field(
+            name="v!sh <pokemon>",
+            value="Start or switch your shiny hunt with confirmation",
+            inline=False
+        )
+        embed.add_field(
+            name="v!sh clear",
+            value="Clear your current shiny hunt",
             inline=False
         )
         embed.add_field(
