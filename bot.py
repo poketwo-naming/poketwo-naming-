@@ -51,9 +51,6 @@ class PokéTwoNamingBot(commands.Cog):
         # Check if message is from Pokétwo bot
         if message.author.id == POKETWO_BOT_ID:
             await self.handle_poketwo_spawn(message)
-        
-        # Still process commands
-        await self.bot.process_commands(message)
 
     async def handle_poketwo_spawn(self, message):
         """Handle Pokétwo spawn messages"""
