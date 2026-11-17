@@ -191,6 +191,7 @@ class PokéTwoNamingBot(commands.Cog):
         self.active_incenses = {}
         self.class_names = {name.casefold(): name for name in self.recognizer.classes}
         self.pokemon_types = self.load_pokemon_types()
+        self.pokemon_best_names = self.load_pokemon_best_names()
         self.reviewed_spawn_count = self.load_collected_training_count()
         self.bot_state = self.load_bot_state()
         self.premium_servers_file = os.getenv(
@@ -220,7 +221,24 @@ class PokéTwoNamingBot(commands.Cog):
             TYPE_EMOJIS[pokemon_type]
             for pokemon_type in self.pokemon_types[pokemon_name]
         )
-        return f"{icons} {pokemon_name} {confidence:.2f}%"
+        return (
+            f"{icons} {pokemon_name} {confidence:.2f}%\n"
+            f"best name: {self.pokemon_best_names[pokemon_name]}"
+        )
+
+    def load_pokemon_best_names(self):
+        """Load and validate the shortest localized name for each model class."""
+        with open("pokemon_best_names.json", "r", encoding="utf-8") as f:
+            best_names = json.load(f)
+        missing_classes = [
+            name for name in self.recognizer.classes if name not in best_names
+        ]
+        if missing_classes:
+            raise ValueError(
+                "Missing Pokémon best-name mappings: "
+                + ", ".join(missing_classes[:10])
+            )
+        return best_names
 
     async def cog_load(self):
         """Create shared HTTP resources for spawn image downloads."""

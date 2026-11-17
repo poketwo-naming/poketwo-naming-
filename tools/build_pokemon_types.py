@@ -153,55 +153,60 @@ def canonical_types():
     }
 
 
-def build_type_map(types_by_identifier):
+def resolve_class_identifier(class_name, identifiers) -> str:
+    """Resolve a trained Pokétwo class to a canonical PokéAPI identifier."""
+    if class_name in CUSTOM_TYPES:
+        raise ValueError(f"{class_name} is a custom class")
     by_normalized_name = {
         normalize(identifier): identifier
-        for identifier in types_by_identifier
+        for identifier in identifiers
     }
+    identifier = CANONICAL_OVERRIDES.get(class_name)
+    if identifier is None:
+        words = class_name.split()
+        candidates = [normalize(class_name)]
+        if words and words[0].casefold() in REGION_SUFFIXES:
+            base_name = " ".join(words[1:])
+            candidates.insert(
+                0,
+                normalize(base_name + REGION_SUFFIXES[words[0].casefold()]),
+            )
+        identifier = next(
+            (
+                by_normalized_name[candidate]
+                for candidate in candidates
+                if candidate in by_normalized_name
+            ),
+            None,
+        )
+        if identifier is None:
+            normalized = normalize(class_name)
+            suffix_matches = [
+                key for key in by_normalized_name if normalized.endswith(key)
+            ]
+            if suffix_matches:
+                identifier = by_normalized_name[max(suffix_matches, key=len)]
+
+    if not isinstance(identifier, str) or identifier not in identifiers:
+        raise ValueError(f"Cannot resolve Pokémon class: {class_name}")
+    return identifier
+
+
+def build_type_map(types_by_identifier):
     classes = sorted(
         path.name for path in TRAINING_ROOT.iterdir() if path.is_dir()
     )
     result = {}
-    unresolved = []
-
     for class_name in classes:
         if class_name in CUSTOM_TYPES:
             result[class_name] = CUSTOM_TYPES[class_name]
             continue
-
-        identifier = CANONICAL_OVERRIDES.get(class_name)
-        if identifier is None:
-            words = class_name.split()
-            candidates = [normalize(class_name)]
-            if words and words[0].casefold() in REGION_SUFFIXES:
-                base_name = " ".join(words[1:])
-                candidates.insert(
-                    0,
-                    normalize(base_name + REGION_SUFFIXES[words[0].casefold()]),
-                )
-            identifier = next(
-                (
-                    by_normalized_name[candidate]
-                    for candidate in candidates
-                    if candidate in by_normalized_name
-                ),
-                None,
-            )
-            if identifier is None:
-                normalized = normalize(class_name)
-                suffix_matches = [
-                    key for key in by_normalized_name if normalized.endswith(key)
-                ]
-                if suffix_matches:
-                    identifier = by_normalized_name[max(suffix_matches, key=len)]
-
+        identifier = resolve_class_identifier(
+            class_name,
+            set(types_by_identifier),
+        )
         if identifier and identifier in types_by_identifier:
             result[class_name] = types_by_identifier[identifier]
-        else:
-            unresolved.append(class_name)
-
-    if unresolved:
-        raise RuntimeError(f"Unresolved Pokémon classes: {', '.join(unresolved)}")
     return result
 
 
