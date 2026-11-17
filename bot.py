@@ -424,6 +424,8 @@ class PokéTwoNamingBot(commands.Cog):
 
         # Check if message is from Pokétwo bot
         if message.author.id == POKETWO_BOT_ID:
+            if message.guild and self.premium_tier(message.guild.id) is None:
+                return
             self.track_incense(message)
             if self.is_spawn_message(message) and self.channel_within_incense_capacity(
                 message

@@ -41,6 +41,9 @@ restricted staff role with `v!permission <role_id>`; that role can use `v!r`
 to restore Pokétwo's previous permissions. The bot requires **Manage
 Channels** permission for this pause/resume feature.
 
+Spawn recognition and MissingNo handling require Bronze, Silver, or Gold
+premium access. Other informational and configuration commands remain usable.
+
 The bot uses the Pokémon-named folders in `pokemon_images/training_data` to build
 the recognition model. Rebuild it after changing the training images:
 
