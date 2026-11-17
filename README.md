@@ -21,6 +21,7 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 | `v!deletename <id>` | `v!deletename 12345` | Delete a saved Pokémon name |
 | `v!ping` | `v!ping` | Check bot status and latency |
 | `v!api` | `v!api` | Display API and spawn-recognition performance |
+| `v!servers` | `v!servers` | List every connected Discord server and ID |
 | `v!training` | `v!training` | Show reviewed training images in the review channel |
 | `v!export_training` | `v!export_training` | Download reviewed images for retraining |
 | `v!help_naming` | `v!help_naming` | Display this help message |

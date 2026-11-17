@@ -6,7 +6,8 @@ from hashlib import sha256
 from io import BytesIO
 import json
 import os
-from time import perf_counter
+import re
+from time import monotonic, perf_counter
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import aiohttp
@@ -21,6 +22,7 @@ POKETWO_BOT_ID = 716390085896962058
 TRAINING_REVIEW_CHANNEL_ID = 1531476097970212915
 TRAINING_ROOT = "pokemon_images/training_data"
 TRAINING_COLLECTION_FILE = "pokemon_images/new_training_images.json"
+MODEL_READ_VERSION = "V2.0.0"
 
 
 def normalize_pokemon_name(name: str) -> str:
@@ -119,11 +121,17 @@ class PokéTwoNamingBot(commands.Cog):
         self.bot = bot
         self.names_file = "pokemon_names.json"
         self.suggestions_file = "pokemon_suggestions.json"
+        model_started = perf_counter()
         self.recognizer = PokemonImageRecognizer()
+        self.model_load_seconds = perf_counter() - model_started
         self.http_session = None
         self.spawn_response_times = deque(maxlen=100)
+        self.inference_times = deque(maxlen=100)
+        self.store_times = deque(maxlen=100)
         self.last_spawn_metrics = None
         self.recognized_spawn_count = 0
+        self.recent_spawn_times = {}
+        self.active_incenses = {}
         self.class_names = {name.casefold(): name for name in self.recognizer.classes}
         self.reviewed_spawn_count = self.load_collected_training_count()
         self.load_names()
@@ -155,11 +163,13 @@ class PokéTwoNamingBot(commands.Cog):
 
     def load_suggestions(self):
         """Load Pokémon suggestions from file"""
+        started = perf_counter()
         if os.path.exists(self.suggestions_file):
             with open(self.suggestions_file, "r") as f:
                 self.suggestions = json.load(f)
         else:
             self.suggestions = {}
+        self.json_load_seconds = perf_counter() - started
 
     def load_collected_training_count(self):
         """Return the number of feedback images collected for retraining."""
@@ -171,6 +181,7 @@ class PokéTwoNamingBot(commands.Cog):
 
     def save_training_image(self, pokemon_name: str, image_data: bytes):
         """Save a reviewed image and track it for a later training export."""
+        started = perf_counter()
         requested_name = normalize_pokemon_name(pokemon_name)
         pokemon_name = self.class_names.setdefault(
             requested_name.casefold(),
@@ -212,7 +223,56 @@ class PokéTwoNamingBot(commands.Cog):
                     json.dump(collected, f, indent=2, ensure_ascii=False)
                 self.reviewed_spawn_count += 1
 
+        self.store_times.append(perf_counter() - started)
         return pokemon_name, saved_path
+
+    def track_incense(self, message):
+        """Track explicit incense notices and burst spawn activity by channel."""
+        channel_id = int(message.channel.id)
+        now = monotonic()
+        text_parts = [message.content or ""]
+        for embed in message.embeds:
+            text_parts.extend(
+                filter(
+                    None,
+                    [
+                        embed.title,
+                        embed.description,
+                        embed.footer.text if embed.footer else None,
+                    ],
+                )
+            )
+        text = " ".join(text_parts).lower()
+
+        if "incense" in text:
+            if re.search(r"\b(end|ended|expired|stopped|inactive)\w*\b", text):
+                self.active_incenses.pop(channel_id, None)
+                return
+            if re.search(r"\b(active|activated|started|remaining)\w*\b", text):
+                self.active_incenses[channel_id] = now + 60 * 60
+
+        recent = self.recent_spawn_times.setdefault(
+            channel_id,
+            deque(maxlen=20),
+        )
+        recent.append(now)
+        recent_count = sum(now - spawned < 90 for spawned in recent)
+        if recent_count >= 3:
+            self.active_incenses[channel_id] = now + 20 * 60
+
+    def active_incense_count(self, guild_id: int | None = None) -> int:
+        """Count unexpired incense channels, optionally within one guild."""
+        now = monotonic()
+        for channel_id, expires_at in list(self.active_incenses.items()):
+            if expires_at <= now:
+                self.active_incenses.pop(channel_id, None)
+        if guild_id is None:
+            return len(self.active_incenses)
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            return 0
+        channel_ids = {channel.id for channel in guild.channels}
+        return sum(channel_id in channel_ids for channel_id in self.active_incenses)
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -223,6 +283,7 @@ class PokéTwoNamingBot(commands.Cog):
 
         # Check if message is from Pokétwo bot
         if message.author.id == POKETWO_BOT_ID:
+            self.track_incense(message)
             await self.handle_poketwo_spawn(message)
 
     async def handle_poketwo_spawn(self, message):
@@ -271,6 +332,7 @@ class PokéTwoNamingBot(commands.Cog):
             await message.channel.send(f"{pokemon_name} {confidence:.2f}%")
         total_seconds = perf_counter() - started
         self.spawn_response_times.append(total_seconds)
+        self.inference_times.append(inference_seconds)
         self.last_spawn_metrics = {
             "download": download_seconds,
             "inference": inference_seconds,
@@ -315,56 +377,127 @@ class PokéTwoNamingBot(commands.Cog):
 
     @commands.command(name="api")
     async def api_status(self, ctx):
-        """Display current bot and spawn-recognition performance."""
-        average_seconds = (
-            sum(self.spawn_response_times) / len(self.spawn_response_times)
-            if self.spawn_response_times
-            else 0
-        )
-        metrics = self.last_spawn_metrics or {
-            "download": 0,
-            "inference": 0,
-            "total": 0,
-        }
+        """Display live recognition, latency, and model performance."""
+        def timing(values, mode="avg"):
+            if not values:
+                return 0.0
+            if mode == "latest":
+                return values[-1]
+            if mode == "fastest":
+                return min(values)
+            if mode == "slowest":
+                return max(values)
+            return sum(values) / len(values)
+
         embed = discord.Embed(
             title="API Status",
-            description="Pokémon recognition performance",
-            color=discord.Color.green(),
+            color=0x000000,
         )
-        embed.add_field(
-            name="Activity",
-            value=f"🟢 Active\nClasses `{len(self.recognizer.classes)}`",
-            inline=True,
-        )
-        embed.add_field(
-            name="Recognition",
-            value=(
-                f"Validation `{self.recognizer.validation_accuracy:.2%}`\n"
-                f"Spawns `{self.recognized_spawn_count}`"
+        if self.bot.user:
+            embed.set_author(
+                name=self.bot.user.display_name,
+                icon_url=self.bot.user.display_avatar.url,
+            )
+
+        fields = [
+            (
+                "Activity",
+                (
+                    "🟢 Waiting for spawns"
+                    if not self.spawn_response_times
+                    else (
+                        "🟢 Very High Activity"
+                        if timing(self.spawn_response_times) < 0.2
+                        else "🟡 Active"
+                    )
+                ),
             ),
-            inline=True,
-        )
-        embed.add_field(
-            name="Gateway",
-            value=f"Latency `{self.bot.latency * 1000:.2f} ms`",
-            inline=True,
-        )
-        embed.add_field(
-            name="Latest Download",
-            value=f"`{metrics['download'] * 1000:.2f} ms`",
-            inline=True,
-        )
-        embed.add_field(
-            name="Latest Inference",
-            value=f"`{metrics['inference'] * 1000:.2f} ms`",
-            inline=True,
-        )
-        embed.add_field(
-            name="Average Naming",
-            value=f"`{average_seconds * 1000:.2f} ms`",
-            inline=True,
+            (
+                "Active Incense",
+                str(self.active_incense_count()),
+            ),
+            (
+                "Store (latest)",
+                f"{timing(self.store_times, 'latest') * 1000:.0f} ms",
+            ),
+            (
+                "Store (avg)",
+                f"{timing(self.store_times) * 1000:.0f} ms",
+            ),
+            (
+                "JSON load",
+                f"{self.json_load_seconds * 1000:.0f} ms",
+            ),
+            (
+                "CSV load",
+                f"{self.model_load_seconds * 1000:.0f} ms",
+            ),
+            (
+                "Inference Fastest",
+                f"{timing(self.inference_times, 'fastest') * 1000:.0f} ms",
+            ),
+            (
+                "Inference Slowest",
+                f"{timing(self.inference_times, 'slowest') * 1000:.0f} ms",
+            ),
+            (
+                "Inference Avg",
+                f"{timing(self.inference_times) * 1000:.0f} ms",
+            ),
+            (
+                "Inference Latest",
+                f"{timing(self.inference_times, 'latest') * 1000:.0f} ms",
+            ),
+            (
+                "Response Fastest",
+                f"{timing(self.spawn_response_times, 'fastest') * 1000:.0f} ms",
+            ),
+            (
+                "Response Slowest",
+                f"{timing(self.spawn_response_times, 'slowest') * 1000:.0f} ms",
+            ),
+            (
+                "Response Avg",
+                f"{timing(self.spawn_response_times) * 1000:.2f} ms",
+            ),
+            (
+                "Response Latest",
+                f"{timing(self.spawn_response_times, 'latest') * 1000:.0f} ms",
+            ),
+            (
+                "Pokémons Named",
+                str(self.recognized_spawn_count),
+            ),
+        ]
+        for name, value in fields:
+            embed.add_field(name=name, value=value, inline=True)
+        server_names = ", ".join(sorted(guild.name for guild in self.bot.guilds))
+        server_summary = server_names if server_names else "No connected servers"
+        if len(server_summary) > 700:
+            server_summary = f"{server_summary[:697]}..."
+        embed.set_footer(
+            text=(
+                f"Model: {MODEL_READ_VERSION} | ONNX fp32 "
+                f"| Window: latest 100 recognitions"
+                f"\nServers ({len(self.bot.guilds)}): {server_summary}"
+            )
         )
         await ctx.send(embed=embed)
+
+    @commands.command(name="servers")
+    async def servers(self, ctx):
+        """List every Discord server this bot is connected to."""
+        guilds = sorted(self.bot.guilds, key=lambda guild: guild.name.casefold())
+        if not guilds:
+            await ctx.send("This bot is not connected to any servers.")
+            return
+        lines = [
+            f"• **{discord.utils.escape_markdown(guild.name)}** — `{guild.id}`"
+            for guild in guilds
+        ]
+        await ctx.send(
+            f"Connected to **{len(guilds)}** server(s):\n" + "\n".join(lines)
+        )
 
     @commands.command(name="training")
     async def training_status(self, ctx):
@@ -539,6 +672,11 @@ class PokéTwoNamingBot(commands.Cog):
         embed.add_field(
             name="v!api",
             value="View Pokémon recognition and response timings",
+            inline=False
+        )
+        embed.add_field(
+            name="v!servers",
+            value="List every server where the bot is active",
             inline=False
         )
         embed.add_field(
