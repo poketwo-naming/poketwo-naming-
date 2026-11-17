@@ -215,16 +215,29 @@ class PokéTwoNamingBot(commands.Cog):
             )
         return pokemon_types
 
-    def format_spawn_prediction(self, pokemon_name: str, confidence: float) -> str:
+    def format_spawn_prediction(
+        self,
+        pokemon_name: str,
+        confidence: float,
+        guild_id: int | None = None,
+    ) -> str:
         """Format the prediction with every correct primary/secondary type icon."""
         icons = "".join(
             TYPE_EMOJIS[pokemon_type]
             for pokemon_type in self.pokemon_types[pokemon_name]
         )
-        return (
+        output = (
             f"{icons} {pokemon_name} {confidence:.2f}%\n"
             f"best name: {self.pokemon_best_names[pokemon_name]}"
         )
+        if guild_id is not None:
+            reserved_user_id = self.bot_state.get("reserves", {}).get(
+                str(guild_id),
+                {},
+            ).get(pokemon_name)
+            if reserved_user_id:
+                output += f"\nreserved: <@{reserved_user_id}>"
+        return output
 
     def load_pokemon_best_names(self):
         """Load and validate the shortest localized name for each model class."""
@@ -285,11 +298,16 @@ class PokéTwoNamingBot(commands.Cog):
     def load_bot_state(self):
         """Load persistent restricted roles and paused channel overwrites."""
         if not os.path.exists(BOT_STATE_FILE):
-            return {"restricted_roles": {}, "paused_channels": {}}
+            return {
+                "restricted_roles": {},
+                "paused_channels": {},
+                "reserves": {},
+            }
         with open(BOT_STATE_FILE, "r", encoding="utf-8") as f:
             state = json.load(f)
         state.setdefault("restricted_roles", {})
         state.setdefault("paused_channels", {})
+        state.setdefault("reserves", {})
         return state
 
     def save_bot_state(self):
@@ -565,7 +583,11 @@ class PokéTwoNamingBot(commands.Cog):
             )
         else:
             await message.channel.send(
-                self.format_spawn_prediction(pokemon_name, confidence)
+                self.format_spawn_prediction(
+                    pokemon_name,
+                    confidence,
+                    message.guild.id if message.guild else None,
+                )
             )
 
         if pokemon_name.casefold() == "missingno":
@@ -737,9 +759,11 @@ class PokéTwoNamingBot(commands.Cog):
         self.save_bot_state()
         await ctx.send(f"✅ Restricted commands are now available to {role.mention}.")
 
-    @commands.command(name="r")
-    async def resume_poketwo(self, ctx):
+    @commands.group(name="r", invoke_without_command=True)
+    async def resume_or_reserve(self, ctx):
         """Restore Pokétwo's previous permissions after a MissingNo spawn."""
+        if ctx.invoked_subcommand is not None:
+            return
         if not self.has_restricted_permission(ctx):
             await ctx.send("❌ You do not have permission to resume this channel.")
             return
@@ -777,6 +801,92 @@ class PokéTwoNamingBot(commands.Cog):
         del self.bot_state["paused_channels"][str(ctx.channel.id)]
         self.save_bot_state()
         await ctx.send("✅ Channel resumed. Pokétwo can send messages again.")
+
+    @resume_or_reserve.command(name="add")
+    async def add_reserve(self, ctx, *, entry: str):
+        """Reserve a Pokémon for a member. Restricted command."""
+        if ctx.guild is None:
+            await ctx.send("Reservations can only be managed inside a server.")
+            return
+        if not self.has_restricted_permission(ctx):
+            await ctx.send("❌ You do not have permission to add reserves.")
+            return
+
+        match = re.search(r"(?:<@!?)?(\d+)>?\s*$", entry)
+        if match is None:
+            await ctx.send("Usage: `v!r add <pokémon name> <@user>`")
+            return
+        pokemon_input = entry[: match.start()].strip()
+        user_id = int(match.group(1))
+        member = ctx.guild.get_member(user_id)
+        if member is None:
+            await ctx.send("❌ That user is not in this server.")
+            return
+        pokemon_name = self.class_names.get(pokemon_input.casefold())
+        if pokemon_name is None:
+            await ctx.send(f"❌ Unknown Pokémon: `{pokemon_input}`")
+            return
+
+        guild_reserves = self.bot_state["reserves"].setdefault(
+            str(ctx.guild.id),
+            {},
+        )
+        guild_reserves[pokemon_name] = str(member.id)
+        self.save_bot_state()
+        await ctx.send(
+            f"✅ Reserved **{pokemon_name}** for {member.mention}."
+        )
+
+    @resume_or_reserve.command(name="list")
+    async def list_reserves(self, ctx, member: discord.Member | None = None):
+        """List server reserves, optionally only those of one member."""
+        if ctx.guild is None:
+            await ctx.send("Reservations can only be viewed inside a server.")
+            return
+        guild_reserves = self.bot_state["reserves"].get(
+            str(ctx.guild.id),
+            {},
+        )
+        filtered = sorted(
+            (
+                (pokemon_name, user_id)
+                for pokemon_name, user_id in guild_reserves.items()
+                if member is None or user_id == str(member.id)
+            ),
+            key=lambda reserve: reserve[0].casefold(),
+        )
+        if not filtered:
+            target = f" for {member.mention}" if member else ""
+            await ctx.send(f"No Pokémon are currently reserved{target}.")
+            return
+
+        lines = [
+            f"• **{pokemon_name}** — <@{user_id}>"
+            for pokemon_name, user_id in filtered
+        ]
+        title = (
+            f"{member.display_name}'s Pokémon Reserves"
+            if member
+            else f"{ctx.guild.name} Pokémon Reserves"
+        )
+        embeds = []
+        chunk_size = 45
+        for start in range(0, len(lines), chunk_size):
+            description = "\n".join(lines[start : start + chunk_size])
+            embeds.append(
+                discord.Embed(
+                    title=title,
+                    description=description,
+                    color=discord.Color.purple(),
+                ).set_footer(
+                    text=(
+                        f"{start + 1}-{min(start + chunk_size, len(lines))} "
+                        f"of {len(lines)} reserves"
+                    )
+                )
+            )
+        for embed_chunk in range(0, len(embeds), 10):
+            await ctx.send(embeds=embeds[embed_chunk : embed_chunk + 10])
 
     @commands.command(name="api")
     async def api_status(self, ctx):
