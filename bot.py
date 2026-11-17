@@ -8,7 +8,7 @@ import asyncio
 import json
 import os
 import re
-from time import monotonic, perf_counter
+from time import perf_counter, time
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import aiohttp
@@ -188,12 +188,15 @@ class PokéTwoNamingBot(commands.Cog):
         self.last_spawn_metrics = None
         self.recognized_spawn_count = 0
         self.recent_spawn_times = {}
-        self.active_incenses = {}
         self.class_names = {name.casefold(): name for name in self.recognizer.classes}
         self.pokemon_types = self.load_pokemon_types()
         self.pokemon_best_names = self.load_pokemon_best_names()
         self.reviewed_spawn_count = self.load_collected_training_count()
         self.bot_state = self.load_bot_state()
+        self.active_incenses = {
+            int(channel_id): float(expires_at)
+            for channel_id, expires_at in self.bot_state["active_incenses"].items()
+        }
         self.premium_servers_file = os.getenv(
             "PREMIUM_SERVERS_FILE",
             "data/premium_servers.json",
@@ -302,12 +305,14 @@ class PokéTwoNamingBot(commands.Cog):
                 "restricted_roles": {},
                 "paused_channels": {},
                 "reserves": {},
+                "active_incenses": {},
             }
         with open(BOT_STATE_FILE, "r", encoding="utf-8") as f:
             state = json.load(f)
         state.setdefault("restricted_roles", {})
         state.setdefault("paused_channels", {})
         state.setdefault("reserves", {})
+        state.setdefault("active_incenses", {})
         return state
 
     def save_bot_state(self):
@@ -366,7 +371,7 @@ class PokéTwoNamingBot(commands.Cog):
         if capacity is None:
             return True
 
-        now = monotonic()
+        now = time()
         active_channel_ids = sorted(
             channel_id
             for channel_id, expires_at in self.active_incenses.items()
@@ -447,7 +452,7 @@ class PokéTwoNamingBot(commands.Cog):
     def track_incense(self, message):
         """Track explicit incense notices and burst spawn activity by channel."""
         channel_id = int(message.channel.id)
-        now = monotonic()
+        now = time()
         text_parts = [message.content or ""]
         for embed in message.embeds:
             text_parts.extend(
@@ -465,9 +470,14 @@ class PokéTwoNamingBot(commands.Cog):
         if "incense" in text:
             if re.search(r"\b(end|ended|expired|stopped|inactive)\w*\b", text):
                 self.active_incenses.pop(channel_id, None)
+                self.bot_state["active_incenses"].pop(str(channel_id), None)
+                self.save_bot_state()
                 return
-            if re.search(r"\b(active|activated|started|remaining)\w*\b", text):
-                self.active_incenses[channel_id] = now + 60 * 60
+            self.active_incenses[channel_id] = now + 60 * 60
+            self.bot_state["active_incenses"][str(channel_id)] = (
+                self.active_incenses[channel_id]
+            )
+            self.save_bot_state()
 
         if self.is_spawn_message(message):
             recent = self.recent_spawn_times.setdefault(
@@ -478,15 +488,27 @@ class PokéTwoNamingBot(commands.Cog):
             recent_count = sum(now - spawned < 90 for spawned in recent)
             if recent_count >= 3:
                 self.active_incenses[channel_id] = now + 20 * 60
+                self.bot_state["active_incenses"][str(channel_id)] = (
+                    self.active_incenses[channel_id]
+                )
+                self.save_bot_state()
 
     def active_incense_count(self, guild_id: int | None = None) -> int:
         """Count unexpired incense channels, optionally within one guild."""
-        now = monotonic()
+        now = time()
+        changed = False
         for channel_id, expires_at in list(self.active_incenses.items()):
             if expires_at <= now:
                 self.active_incenses.pop(channel_id, None)
+                self.bot_state["active_incenses"].pop(str(channel_id), None)
+                changed = True
+        if changed:
+            self.save_bot_state()
         if guild_id is None:
-            return len(self.active_incenses)
+            return sum(
+                self.bot.get_channel(channel_id) is not None
+                for channel_id in self.active_incenses
+            )
         guild = self.bot.get_guild(guild_id)
         if guild is None:
             return 0
