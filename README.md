@@ -9,6 +9,7 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 - **View Saved Names** - Display all your saved Pokémon nicknames
 - **Delete Names** - Remove nicknames from your collection
 - **Recognize Spawns** - Identify every Pokétwo spawn from its image and display confidence
+- **Type Icons** - Prefix each prediction with its primary and secondary type emojis
 - **Bot Status** - Check if the bot is online
 
 ## Commands
@@ -50,10 +51,11 @@ the recognition model. Rebuild it after changing the training images:
 ```bash
 pip install -r requirements-train.txt
 python tools/build_pokemon_model.py
+python tools/build_pokemon_types.py
 ```
 
-The source images are ignored by Git. Commit and deploy the generated
-`pokemon_image_model.npz` file.
+The source images are ignored by Git. Commit and deploy the generated model,
+encoder, and `pokemon_types.json` files.
 
 ## Installation
 

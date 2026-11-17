@@ -32,6 +32,26 @@ PREMIUM_CAPACITIES = {
     "silver": 200,
     "gold": 300,
 }
+TYPE_EMOJIS = {
+    "water": "<:water:1560303864094130357>",
+    "rock": "<:rock:1564789532384174100>",
+    "grass": "<:grass:1560307079896502282>",
+    "fire": "<:fire:1560301436074729532>",
+    "dark": "<:dark:1564786204699005129>",
+    "bug": "<:bug:1564785932496797757>",
+    "steel": "<:Steel:1564789710440898610>",
+    "psychic": "<:Psychic:1564788957437366342>",
+    "poison": "<:Poison:1564788700687114310>",
+    "normal": "<:Normal:1560305235279482930>",
+    "ice": "<:Ice:1560307867200782386>",
+    "ground": "<:Ground:1564789353648230441>",
+    "ghost": "<:Ghost:1564787837306540213>",
+    "flying": "<:Flying:1564787610143162489>",
+    "fighting": "<:Fighting:1564787413547483156>",
+    "fairy": "<:Fairy:1564786928631677068>",
+    "electric": "<:Electric:1560306053164572732>",
+    "dragon": "<:Dragon:1564786673840160818>",
+}
 
 
 def normalize_pokemon_name(name: str) -> str:
@@ -170,6 +190,7 @@ class PokéTwoNamingBot(commands.Cog):
         self.recent_spawn_times = {}
         self.active_incenses = {}
         self.class_names = {name.casefold(): name for name in self.recognizer.classes}
+        self.pokemon_types = self.load_pokemon_types()
         self.reviewed_spawn_count = self.load_collected_training_count()
         self.bot_state = self.load_bot_state()
         self.premium_servers_file = os.getenv(
@@ -179,6 +200,27 @@ class PokéTwoNamingBot(commands.Cog):
         self.premium_servers = self.load_premium_servers()
         self.load_names()
         self.load_suggestions()
+
+    def load_pokemon_types(self):
+        """Load and validate the type metadata for every model class."""
+        with open("pokemon_types.json", "r", encoding="utf-8") as f:
+            pokemon_types = json.load(f)
+        missing_classes = [
+            name for name in self.recognizer.classes if name not in pokemon_types
+        ]
+        if missing_classes:
+            raise ValueError(
+                "Missing Pokémon type mappings: " + ", ".join(missing_classes[:10])
+            )
+        return pokemon_types
+
+    def format_spawn_prediction(self, pokemon_name: str, confidence: float) -> str:
+        """Format the prediction with every correct primary/secondary type icon."""
+        icons = " ".join(
+            TYPE_EMOJIS[pokemon_type]
+            for pokemon_type in self.pokemon_types[pokemon_name]
+        )
+        return f"{icons} {pokemon_name} {confidence:.2f}%"
 
     async def cog_load(self):
         """Create shared HTTP resources for spawn image downloads."""
@@ -475,7 +517,15 @@ class PokéTwoNamingBot(commands.Cog):
                 title="Is this Pokémon correct?",
                 color=discord.Color.blurple(),
             )
-            embed.add_field(name="Guess", value=pokemon_name, inline=True)
+            type_icons = " ".join(
+                TYPE_EMOJIS[pokemon_type]
+                for pokemon_type in self.pokemon_types[pokemon_name]
+            )
+            embed.add_field(
+                name="Guess",
+                value=f"{type_icons} {pokemon_name}",
+                inline=True,
+            )
             embed.add_field(
                 name="Confidence",
                 value=f"{confidence:.2f}%",
@@ -496,7 +546,9 @@ class PokéTwoNamingBot(commands.Cog):
                 view=SpawnReviewView(self, pokemon_name, image_data),
             )
         else:
-            await message.channel.send(f"{pokemon_name} {confidence:.2f}%")
+            await message.channel.send(
+                self.format_spawn_prediction(pokemon_name, confidence)
+            )
 
         if pokemon_name.casefold() == "missingno":
             guild_id = str(message.guild.id)
