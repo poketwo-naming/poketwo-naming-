@@ -7,13 +7,18 @@ import json
 import os
 
 
+POKETWO_BOT_ID = 716390085896962058
+
+
 class PokéTwoNamingBot(commands.Cog):
     """Pokétwo naming bot cog with commands for naming Pokémon"""
 
     def __init__(self, bot):
         self.bot = bot
         self.names_file = "pokemon_names.json"
+        self.suggestions_file = "pokemon_suggestions.json"
         self.load_names()
+        self.load_suggestions()
 
     def load_names(self):
         """Load saved names from file"""
@@ -28,6 +33,87 @@ class PokéTwoNamingBot(commands.Cog):
         with open(self.names_file, "w") as f:
             json.dump(self.names, f, indent=2)
 
+    def load_suggestions(self):
+        """Load Pokémon suggestions from file"""
+        if os.path.exists(self.suggestions_file):
+            with open(self.suggestions_file, "r") as f:
+                self.suggestions = json.load(f)
+        else:
+            self.suggestions = {}
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        """Listen for Pokétwo spawn messages"""
+        # Ignore bot's own messages
+        if message.author.id == self.bot.user.id:
+            return
+
+        # Check if message is from Pokétwo bot
+        if message.author.id == POKETWO_BOT_ID:
+            await self.handle_poketwo_spawn(message)
+        
+        # Still process commands
+        await self.bot.process_commands(message)
+
+    async def handle_poketwo_spawn(self, message):
+        """Handle Pokétwo spawn messages"""
+        try:
+            # Check if message has embeds (Pokétwo spawn format)
+            if not message.embeds:
+                return
+
+            embed = message.embeds[0]
+            
+            # Extract Pokémon info from embed
+            pokemon_name = None
+            pokemon_id = None
+            
+            # Try to get Pokémon name from embed title or description
+            if embed.title:
+                pokemon_name = embed.title.strip()
+            
+            # Try to extract from embed description or fields
+            if embed.description:
+                lines = embed.description.split('\n')
+                for line in lines:
+                    if 'level' in line.lower() or 'id' in line.lower():
+                        pokemon_id = line
+                        break
+            
+            # If we found a Pokémon, announce it
+            if pokemon_name:
+                # Check if we have a saved name for this Pokémon type
+                pokemon_lower = pokemon_name.lower()
+                
+                # Get suggested names
+                suggested_names = self.suggestions.get(pokemon_lower, [])
+                
+                # Create response embed
+                embed_response = discord.Embed(
+                    title=f"🎯 {pokemon_name} Spawn Detected!",
+                    description=f"A wild **{pokemon_name}** has appeared!",
+                    color=discord.Color.orange()
+                )
+                
+                if suggested_names:
+                    embed_response.add_field(
+                        name="📝 Suggested Names",
+                        value="\n".join(f"• {name}" for name in suggested_names[:5]),
+                        inline=False
+                    )
+                
+                embed_response.add_field(
+                    name="💡 Usage",
+                    value=f"Use `!nameit {pokemon_name.lower()}` to name it",
+                    inline=False
+                )
+                
+                # Send response in the same channel
+                await message.channel.send(embed=embed_response)
+                
+        except Exception as e:
+            print(f"Error handling Pokétwo spawn: {e}")
+
     @commands.command(name="ping")
     async def ping(self, ctx):
         """Check if the bot is responsive"""
@@ -36,22 +122,13 @@ class PokéTwoNamingBot(commands.Cog):
     @commands.command(name="suggestname")
     async def suggest_name(self, ctx, pokemon_name: str):
         """Suggest a name for a Pokémon"""
-        suggestions = {
-            "pikachu": ["Sparky", "Thunder", "Bolt", "Zappy", "Chu"],
-            "charizard": ["Blaze", "Inferno", "Dragon", "Flame", "Char"],
-            "blastoise": ["Tsunami", "Aqua", "Wave", "Splash", "Hydro"],
-            "venusaur": ["Leafy", "Thorns", "Veggie", "Garden", "Sprout"],
-            "dragonite": ["Sky", "Comet", "Drake", "Storm", "Wings"],
-            "alakazam": ["Genius", "Smart", "Psyche", "Mind", "Brain"],
-            "machamp": ["Crusher", "Brute", "Fist", "Power", "Mighty"],
-            "gyarados": ["Rage", "Terror", "Leviathan", "Monster", "King"],
-        }
-
         pokemon = pokemon_name.lower()
-        if pokemon in suggestions:
+        
+        if pokemon in self.suggestions:
+            suggestions = self.suggestions[pokemon]
             embed = discord.Embed(
                 title=f"Name Suggestions for {pokemon_name}",
-                description="\n".join(f"• {name}" for name in suggestions[pokemon]),
+                description="\n".join(f"• {name}" for name in suggestions),
                 color=discord.Color.gold()
             )
             await ctx.send(embed=embed)
@@ -75,6 +152,23 @@ class PokéTwoNamingBot(commands.Cog):
             color=discord.Color.green()
         )
         await ctx.send(embed=embed)
+
+    @commands.command(name="nameit")
+    async def name_it(self, ctx, *, pokemon_name: str):
+        """Quick name a Pokémon (use with Pokétwo catch)"""
+        pokemon = pokemon_name.lower()
+        
+        if pokemon in self.suggestions:
+            suggestions = self.suggestions[pokemon]
+            embed = discord.Embed(
+                title=f"🎀 Quick Name for {pokemon_name}",
+                description=f"Top suggestion: **{suggestions[0]}**\n\nOther options:\n" + 
+                           "\n".join(f"• {name}" for name in suggestions[1:5]),
+                color=discord.Color.purple()
+            )
+            await ctx.send(embed=embed)
+        else:
+            await ctx.send(f"❌ No suggestions for {pokemon_name}!")
 
     @commands.command(name="mynames")
     async def my_names(self, ctx):
@@ -123,6 +217,11 @@ class PokéTwoNamingBot(commands.Cog):
             inline=False
         )
         embed.add_field(
+            name="!nameit <pokemon>",
+            value="Quick names for catching a Pokémon",
+            inline=False
+        )
+        embed.add_field(
             name="!savename <id> <nickname>",
             value="Save a nickname for your Pokémon",
             inline=False
@@ -140,6 +239,11 @@ class PokéTwoNamingBot(commands.Cog):
         embed.add_field(
             name="!ping",
             value="Check bot status",
+            inline=False
+        )
+        embed.add_field(
+            name="📡 Auto-Detection",
+            value="Bot automatically detects Pokétwo spawns and shows naming suggestions!",
             inline=False
         )
         await ctx.send(embed=embed)
