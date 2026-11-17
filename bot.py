@@ -217,7 +217,7 @@ class PokéTwoNamingBot(commands.Cog):
 
     def format_spawn_prediction(self, pokemon_name: str, confidence: float) -> str:
         """Format the prediction with every correct primary/secondary type icon."""
-        icons = " ".join(
+        icons = "".join(
             TYPE_EMOJIS[pokemon_type]
             for pokemon_type in self.pokemon_types[pokemon_name]
         )
@@ -535,7 +535,7 @@ class PokéTwoNamingBot(commands.Cog):
                 title="Is this Pokémon correct?",
                 color=discord.Color.blurple(),
             )
-            type_icons = " ".join(
+            type_icons = "".join(
                 TYPE_EMOJIS[pokemon_type]
                 for pokemon_type in self.pokemon_types[pokemon_name]
             )
