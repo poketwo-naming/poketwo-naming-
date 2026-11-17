@@ -450,7 +450,7 @@ class PokéTwoNamingBot(commands.Cog):
         return pokemon_name, saved_path
 
     def track_incense(self, message):
-        """Track explicit incense notices and burst spawn activity by channel."""
+        """Track incense activation, updates, and completion in a channel."""
         channel_id = int(message.channel.id)
         now = time()
         text_parts = [message.content or ""]
@@ -468,10 +468,18 @@ class PokéTwoNamingBot(commands.Cog):
         text = " ".join(text_parts).lower()
 
         if "incense" in text:
-            if re.search(r"\b(end|ended|expired|stopped|inactive)\w*\b", text):
-                self.active_incenses.pop(channel_id, None)
-                self.bot_state["active_incenses"].pop(str(channel_id), None)
-                self.save_bot_state()
+            end_phrases = (
+                r"\b0\s+(?:spawn|pokemon|pokémon)s?\s+remaining\b",
+                r"\bincense\s+(?:has\s+|is\s+)?(?:end|ended|finish|finished|expired|stopped|inactive)",
+                r"\bno\s+longer\s+(?:spawn|spawning|active)\b",
+                r"\bincense\s+(?:no\s+longer\s+active|ran\s+out|ran\s+off)\b",
+                r"\bremaining\s+incense\s+:\s*0\b",
+            )
+            if any(re.search(pattern, text) for pattern in end_phrases):
+                removed = self.active_incenses.pop(channel_id, None)
+                if removed is not None or str(channel_id) in self.bot_state["active_incenses"]:
+                    self.bot_state["active_incenses"].pop(str(channel_id), None)
+                    self.save_bot_state()
                 return
             self.active_incenses[channel_id] = now + 60 * 60
             self.bot_state["active_incenses"][str(channel_id)] = (
@@ -531,6 +539,15 @@ class PokéTwoNamingBot(commands.Cog):
                 message
             ):
                 await self.handle_poketwo_spawn(message)
+
+    @commands.Cog.listener()
+    async def on_message_edit(self, before, after):
+        """Update incense state when Pokétwo edits a status/countdown embed."""
+        del before
+        if after.author.id == self.bot.user.id:
+            return
+        if after.author.id == POKETWO_BOT_ID:
+            self.track_incense(after)
 
     @staticmethod
     def is_spawn_message(message) -> bool:
