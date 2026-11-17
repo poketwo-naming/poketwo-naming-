@@ -881,6 +881,58 @@ class PokéTwoNamingBot(commands.Cog):
             f"✅ Reserved **{pokemon_name}** for {member.mention}."
         )
 
+    @resume_or_reserve.command(name="remove")
+    async def remove_reserve(self, ctx, *, entry: str):
+        """Remove a server Pokémon reservation. Restricted command."""
+        if ctx.guild is None:
+            await ctx.send("Reservations can only be managed inside a server.")
+            return
+        if not self.has_restricted_permission(ctx):
+            await ctx.send("❌ You do not have permission to remove reserves.")
+            return
+
+        match = re.search(r"\s+(?:<@!?)?(\d+)>?\s*$", entry)
+        member = None
+        if match is None:
+            pokemon_input = entry.strip()
+        else:
+            pokemon_input = entry[: match.start()].strip()
+            user_id = int(match.group(1))
+            member = ctx.guild.get_member(user_id)
+            if member is None:
+                try:
+                    member = await ctx.guild.fetch_member(user_id)
+                except (discord.NotFound, discord.Forbidden):
+                    member = None
+            if member is None:
+                await ctx.send("❌ That user is not in this server.")
+                return
+
+        pokemon_name = self.class_names.get(pokemon_input.casefold())
+        if pokemon_name is None:
+            await ctx.send(f"❌ Unknown Pokémon: `{pokemon_input}`")
+            return
+
+        guild_reserves = self.bot_state["reserves"].get(str(ctx.guild.id), {})
+        reserved_user_id = guild_reserves.get(str(pokemon_name))
+        if reserved_user_id is None:
+            await ctx.send(f"❌ **{pokemon_name}** is not reserved.")
+            return
+        if member is not None and reserved_user_id != str(member.id):
+            await ctx.send(
+                f"❌ **{pokemon_name}** is not reserved for {member.mention}."
+            )
+            return
+
+        del guild_reserves[str(pokemon_name)]
+        self.save_bot_state()
+        if member is None:
+            await ctx.send(f"✅ Removed the reserve for **{pokemon_name}**.")
+        else:
+            await ctx.send(
+                f"✅ Removed **{pokemon_name}** from {member.mention}'s reserves."
+            )
+
     @resume_or_reserve.command(name="list")
     async def list_reserves(self, ctx, member: discord.Member | None = None):
         """List server reserves, optionally only those of one member."""

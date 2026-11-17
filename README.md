@@ -28,6 +28,7 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 | `v!premium add <tier> <server_id>` | `v!premium add gold 123456789` | Owner-only tier grant from the main server |
 | `v!r` | `v!r` | Resume a channel paused after a MissingNo spawn |
 | `v!r add <pokemon> <@user>` | `v!r add Pikachu @user` | Reserve a Pokémon for a member (restricted) |
+| `v!r remove <pokemon> [@user]` | `v!r remove Pikachu @user` | Remove a Pokémon reserve (restricted) |
 | `v!r list [@user]` | `v!r list @user` | List all server reserves or one member's reserves |
 | `v!permission <role_id>` | `v!permission 123456789` | Grant a role restricted-command access |
 | `v!training` | `v!training` | Show reviewed training images in the review channel |
