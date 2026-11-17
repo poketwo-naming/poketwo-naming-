@@ -57,7 +57,7 @@ You should see: `Your Bot Name has connected to Discord!`
 
 In your Discord server, type:
 ```
-!ping
+v!ping
 ```
 
 If the bot responds with latency, you're good to go! 🎉
@@ -65,10 +65,10 @@ If the bot responds with latency, you're good to go! 🎉
 ## Try These Commands
 
 ```
-!help_naming          - Show all commands
-!suggestname pikachu  - Get name suggestions
-!savename 123 Sparky  - Save a name
-!mynames              - View your saved names
+v!help_naming          - Show all commands
+v!suggestname pikachu  - Get name suggestions
+v!savename 123 Sparky  - Save a name
+v!mynames              - View your saved names
 ```
 
 ## Troubleshooting

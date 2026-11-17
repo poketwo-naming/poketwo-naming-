@@ -1,10 +1,18 @@
 """
 Pokétwo Naming Bot - Core bot functionality for naming Pokémon
 """
+from collections import deque
+from io import BytesIO
+from time import perf_counter
+
+import aiohttp
 import discord
 from discord.ext import commands
 import json
 import os
+from PIL import Image, UnidentifiedImageError
+
+from pokemon_recognition import PokemonImageRecognizer
 
 
 POKETWO_BOT_ID = 716390085896962058
@@ -17,8 +25,24 @@ class PokéTwoNamingBot(commands.Cog):
         self.bot = bot
         self.names_file = "pokemon_names.json"
         self.suggestions_file = "pokemon_suggestions.json"
+        self.recognizer = PokemonImageRecognizer()
+        self.http_session = None
+        self.spawn_response_times = deque(maxlen=100)
+        self.last_spawn_metrics = None
+        self.recognized_spawn_count = 0
         self.load_names()
         self.load_suggestions()
+
+    async def cog_load(self):
+        """Create shared HTTP resources for spawn image downloads."""
+        self.http_session = aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=10)
+        )
+
+    async def cog_unload(self):
+        """Close shared HTTP resources."""
+        if self.http_session is not None:
+            await self.http_session.close()
 
     def load_names(self):
         """Load saved names from file"""
@@ -53,68 +77,119 @@ class PokéTwoNamingBot(commands.Cog):
             await self.handle_poketwo_spawn(message)
 
     async def handle_poketwo_spawn(self, message):
-        """Handle Pokétwo spawn messages"""
-        try:
-            # Check if message has embeds (Pokétwo spawn format)
-            if not message.embeds:
-                return
+        """Identify a Pokétwo spawn and report the predicted Pokémon."""
+        started = perf_counter()
+        image_data, download_seconds = await self._get_spawn_image(message)
+        if image_data is None:
+            print("Pokétwo spawn did not contain a readable image.")
+            return
 
-            embed = message.embeds[0]
-            
-            # Extract Pokémon info from embed
-            pokemon_name = None
-            pokemon_id = None
-            
-            # Try to get Pokémon name from embed title or description
-            if embed.title:
-                pokemon_name = embed.title.strip()
-            
-            # Try to extract from embed description or fields
-            if embed.description:
-                lines = embed.description.split('\n')
-                for line in lines:
-                    if 'level' in line.lower() or 'id' in line.lower():
-                        pokemon_id = line
-                        break
-            
-            # If we found a Pokémon, announce it
-            if pokemon_name:
-                # Check if we have a saved name for this Pokémon type
-                pokemon_lower = pokemon_name.lower()
-                
-                # Get suggested names
-                suggested_names = self.suggestions.get(pokemon_lower, [])
-                
-                # Create response embed
-                embed_response = discord.Embed(
-                    title=f"🎯 {pokemon_name} Spawn Detected!",
-                    description=f"A wild **{pokemon_name}** has appeared!",
-                    color=discord.Color.orange()
+        try:
+            with Image.open(BytesIO(image_data)) as image:
+                pokemon_name, confidence, inference_seconds = (
+                    self.recognizer.recognize(image)
                 )
-                
-                if suggested_names:
-                    embed_response.add_field(
-                        name="📝 Suggested Names",
-                        value="\n".join(f"• {name}" for name in suggested_names[:5]),
-                        inline=False
-                    )
-                
-                embed_response.add_field(
-                    name="💡 Usage",
-                    value=f"Use `!nameit {pokemon_name.lower()}` to name it",
-                    inline=False
-                )
-                
-                # Send response in the same channel
-                await message.channel.send(embed=embed_response)
-                
-        except Exception as e:
-            print(f"Error handling Pokétwo spawn: {e}")
+        except (UnidentifiedImageError, OSError) as error:
+            print(f"Could not read Pokétwo spawn image: {error}")
+            return
+
+        await message.channel.send(f"{pokemon_name} {confidence:.2f}%")
+        total_seconds = perf_counter() - started
+        self.spawn_response_times.append(total_seconds)
+        self.last_spawn_metrics = {
+            "download": download_seconds,
+            "inference": inference_seconds,
+            "total": total_seconds,
+        }
+        self.recognized_spawn_count += 1
+
+    async def _get_spawn_image(self, message):
+        """Return the spawn image bytes and download duration."""
+        started = perf_counter()
+        for attachment in message.attachments:
+            if (attachment.content_type or "").startswith("image/"):
+                return await attachment.read(), perf_counter() - started
+
+        image_url = None
+        for embed in message.embeds:
+            if embed.image and embed.image.url:
+                image_url = embed.image.url
+                break
+            if embed.thumbnail and embed.thumbnail.url:
+                image_url = embed.thumbnail.url
+                break
+
+        if image_url is None:
+            return None, perf_counter() - started
+
+        if self.http_session is None:
+            raise RuntimeError("Pokétwo image HTTP session is not initialized")
+
+        try:
+            async with self.http_session.get(image_url) as response:
+                response.raise_for_status()
+                return await response.read(), perf_counter() - started
+        except (aiohttp.ClientError, TimeoutError) as error:
+            print(f"Could not download Pokétwo spawn image: {error}")
+            return None, perf_counter() - started
 
     @commands.command(name="ping")
     async def ping(self, ctx):
         """Check if the bot is responsive"""
         await ctx.send(f"Pong! {self.bot.latency * 1000:.2f}ms")
+
+    @commands.command(name="api")
+    async def api_status(self, ctx):
+        """Display current bot and spawn-recognition performance."""
+        average_seconds = (
+            sum(self.spawn_response_times) / len(self.spawn_response_times)
+            if self.spawn_response_times
+            else 0
+        )
+        metrics = self.last_spawn_metrics or {
+            "download": 0,
+            "inference": 0,
+            "total": 0,
+        }
+        embed = discord.Embed(
+            title="API Status",
+            description="Pokémon recognition performance",
+            color=discord.Color.green(),
+        )
+        embed.add_field(
+            name="Activity",
+            value=f"🟢 Active\nClasses `{len(self.recognizer.classes)}`",
+            inline=True,
+        )
+        embed.add_field(
+            name="Recognition",
+            value=(
+                f"Validation `{self.recognizer.validation_accuracy:.2%}`\n"
+                f"Spawns `{self.recognized_spawn_count}`"
+            ),
+            inline=True,
+        )
+        embed.add_field(
+            name="Gateway",
+            value=f"Latency `{self.bot.latency * 1000:.2f} ms`",
+            inline=True,
+        )
+        embed.add_field(
+            name="Latest Download",
+            value=f"`{metrics['download'] * 1000:.2f} ms`",
+            inline=True,
+        )
+        embed.add_field(
+            name="Latest Inference",
+            value=f"`{metrics['inference'] * 1000:.2f} ms`",
+            inline=True,
+        )
+        embed.add_field(
+            name="Average Naming",
+            value=f"`{average_seconds * 1000:.2f} ms`",
+            inline=True,
+        )
+        await ctx.send(embed=embed)
 
     @commands.command(name="suggestname")
     async def suggest_name(self, ctx, pokemon_name: str):
@@ -209,33 +284,38 @@ class PokéTwoNamingBot(commands.Cog):
             color=discord.Color.purple()
         )
         embed.add_field(
-            name="!suggestname <pokemon>",
+            name="v!suggestname <pokemon>",
             value="Get name suggestions for a Pokémon",
             inline=False
         )
         embed.add_field(
-            name="!nameit <pokemon>",
+            name="v!nameit <pokemon>",
             value="Quick names for catching a Pokémon",
             inline=False
         )
         embed.add_field(
-            name="!savename <id> <nickname>",
+            name="v!savename <id> <nickname>",
             value="Save a nickname for your Pokémon",
             inline=False
         )
         embed.add_field(
-            name="!mynames",
+            name="v!mynames",
             value="View all your saved Pokémon names",
             inline=False
         )
         embed.add_field(
-            name="!deletename <id>",
+            name="v!deletename <id>",
             value="Delete a saved Pokémon name",
             inline=False
         )
         embed.add_field(
-            name="!ping",
+            name="v!ping",
             value="Check bot status",
+            inline=False
+        )
+        embed.add_field(
+            name="v!api",
+            value="View Pokémon recognition and response timings",
             inline=False
         )
         embed.add_field(

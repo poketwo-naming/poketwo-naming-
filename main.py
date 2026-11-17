@@ -2,24 +2,31 @@
 Pokétwo Naming Bot - Main entry point
 """
 import os
-import sys
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 
 load_dotenv()
 
-TOKEN = os.getenv("DISCORD_TOKEN")
 
-if not TOKEN:
-    print("ERROR: DISCORD_TOKEN not found in environment variables!")
-    print("Please set DISCORD_TOKEN in your hosting platform's environment variables.")
-    sys.exit(1)
+def get_token() -> str:
+    """Load the required Discord token from the hosting environment."""
+    token = os.getenv("DISCORD_TOKEN")
+    if not token:
+        print("ERROR: DISCORD_TOKEN not found in environment variables!")
+        print(
+            "Please set DISCORD_TOKEN in your hosting platform's environment variables."
+        )
+        raise RuntimeError("DISCORD_TOKEN is required")
+    return token
+
+
+TOKEN = get_token()
 
 intents = discord.Intents.default()
 intents.message_content = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="v!", intents=intents)
 
 
 @bot.event

@@ -44,3 +44,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Pokémon image training data (the compact generated index is tracked separately)
+pokemon_images/

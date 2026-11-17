@@ -8,18 +8,31 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 - **Save Names** - Store nicknames for your Pokémon with IDs
 - **View Saved Names** - Display all your saved Pokémon nicknames
 - **Delete Names** - Remove nicknames from your collection
+- **Recognize Spawns** - Identify every Pokétwo spawn from its image and display confidence
 - **Bot Status** - Check if the bot is online
 
 ## Commands
 
 | Command | Usage | Description |
 |---------|-------|-------------|
-| `!suggestname <pokemon>` | `!suggestname pikachu` | Get name suggestions for a Pokémon |
-| `!savename <id> <nickname>` | `!savename 12345 Sparky` | Save a nickname for your Pokémon |
-| `!mynames` | `!mynames` | View all your saved Pokémon names |
-| `!deletename <id>` | `!deletename 12345` | Delete a saved Pokémon name |
-| `!ping` | `!ping` | Check bot status and latency |
-| `!help_naming` | `!help_naming` | Display this help message |
+| `v!suggestname <pokemon>` | `v!suggestname pikachu` | Get name suggestions for a Pokémon |
+| `v!savename <id> <nickname>` | `v!savename 12345 Sparky` | Save a nickname for your Pokémon |
+| `v!mynames` | `v!mynames` | View all your saved Pokémon names |
+| `v!deletename <id>` | `v!deletename 12345` | Delete a saved Pokémon name |
+| `v!ping` | `v!ping` | Check bot status and latency |
+| `v!api` | `v!api` | Display API and spawn-recognition performance |
+| `v!help_naming` | `v!help_naming` | Display this help message |
+
+The bot uses the Pokémon-named folders in `pokemon_images/training_data` to build
+the recognition model. Rebuild it after changing the training images:
+
+```bash
+pip install -r requirements-train.txt
+python tools/build_pokemon_model.py
+```
+
+The source images are ignored by Git. Commit and deploy the generated
+`pokemon_image_model.npz` file.
 
 ## Installation
 
@@ -85,20 +98,15 @@ poketwo-naming-/
 ## Example Usage
 
 ```
-User: !suggestname charizard
-Bot: 
-🎀 Name Suggestions for charizard
-• Blaze
-• Inferno
-• Dragon
-• Flame
-• Char
+Pokétwo spawn
+Bot:
+Charizard 99.95%
 
-User: !savename 54321 Inferno
+User: v!savename 54321 Inferno
 Bot: ✅ Name Saved!
 Pokémon 54321 is now named Inferno
 
-User: !mynames
+User: v!mynames
 Bot:
 👤 YourName's Pokémon Names
 ID: 54321
