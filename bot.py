@@ -21,6 +21,9 @@ from pokemon_recognition import PokemonImageRecognizer
 
 POKETWO_BOT_ID = 716390085896962058
 TRAINING_REVIEW_CHANNEL_ID = 1531476097970212915
+INCENSE_INACTIVITY_SECONDS = float(
+    os.getenv("INCENSE_INACTIVITY_SECONDS", "90")
+)
 TRAINING_ROOT = "pokemon_images/training_data"
 TRAINING_COLLECTION_FILE = "pokemon_images/new_training_images.json"
 MODEL_READ_VERSION = "V2.0.0"
@@ -484,7 +487,7 @@ class PokéTwoNamingBot(commands.Cog):
                     self.bot_state["active_incenses"].pop(str(channel_id), None)
                     self.save_bot_state()
                 return
-            self.active_incenses[channel_id] = now + 60 * 60
+            self.active_incenses[channel_id] = now + INCENSE_INACTIVITY_SECONDS
             self.bot_state["active_incenses"][str(channel_id)] = (
                 self.active_incenses[channel_id]
             )
@@ -497,8 +500,10 @@ class PokéTwoNamingBot(commands.Cog):
             )
             recent.append(now)
             recent_count = sum(now - spawned < 90 for spawned in recent)
-            if recent_count >= 3:
-                self.active_incenses[channel_id] = now + 20 * 60
+            if channel_id in self.active_incenses or recent_count >= 3:
+                self.active_incenses[channel_id] = (
+                    now + INCENSE_INACTIVITY_SECONDS
+                )
                 self.bot_state["active_incenses"][str(channel_id)] = (
                     self.active_incenses[channel_id]
                 )
