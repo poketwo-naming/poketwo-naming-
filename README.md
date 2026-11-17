@@ -35,10 +35,12 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 | `v!export_training` | `v!export_training` | Download reviewed images for retraining |
 | `v!help_naming` | `v!help_naming` | Display this help message |
 
-In channel `1531476097970212915`, spawn guesses include **Yes/No** review
-buttons. Yes saves the image under the predicted Pokémon folder. No opens a
-modal for the correct Pokémon name, creating that folder when necessary.
-Reviewed images can be downloaded with `v!export_training` before retraining.
+In channel `1531476097970212915`, spawn guesses below 50% confidence include
+**Yes/No** review buttons. Yes saves the image under the predicted Pokémon
+folder. No opens a modal for the correct Pokémon name, creating that folder
+when necessary. Higher-confidence guesses use normal naming output. Reviewed
+images can be downloaded with `v!export_training` before retraining. The
+threshold can be changed with `REVIEW_CONFIDENCE_THRESHOLD`.
 
 MissingNo detection immediately denies Pokétwo's Send Messages permission in
 the current channel and asks staff not to catch it. Administrators configure a

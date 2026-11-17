@@ -27,6 +27,9 @@ MODEL_READ_VERSION = "V2.0.0"
 TRAINING_REVIEWER_USER_IDS = {217819108329259008}
 BOT_STATE_FILE = "bot_state.json"
 PREMIUM_MAIN_GUILD_ID = 1530949341013868635
+REVIEW_CONFIDENCE_THRESHOLD = float(
+    os.getenv("REVIEW_CONFIDENCE_THRESHOLD", "50")
+)
 PREMIUM_CAPACITIES = {
     "bronze": 100,
     "silver": 200,
@@ -587,7 +590,10 @@ class PokéTwoNamingBot(commands.Cog):
         if pokemon_name.casefold() == "missingno":
             missingno_pause = await self.pause_missingno_channel(message.channel)
 
-        if message.channel.id == TRAINING_REVIEW_CHANNEL_ID:
+        if (
+            message.channel.id == TRAINING_REVIEW_CHANNEL_ID
+            and confidence < REVIEW_CONFIDENCE_THRESHOLD
+        ):
             embed = discord.Embed(
                 title="Is this Pokémon correct?",
                 color=discord.Color.blurple(),
