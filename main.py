@@ -13,7 +13,7 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 
 if not TOKEN:
     print("ERROR: DISCORD_TOKEN not found in environment variables!")
-    print("Make sure you have a .env file with DISCORD_TOKEN=your_token_here")
+    print("Please set DISCORD_TOKEN in your hosting platform's environment variables.")
     sys.exit(1)
 
 intents = discord.Intents.default()
