@@ -23,6 +23,7 @@ TRAINING_REVIEW_CHANNEL_ID = 1531476097970212915
 TRAINING_ROOT = "pokemon_images/training_data"
 TRAINING_COLLECTION_FILE = "pokemon_images/new_training_images.json"
 MODEL_READ_VERSION = "V2.0.0"
+TRAINING_REVIEWER_USER_IDS = {217819108329259008}
 
 
 def normalize_pokemon_name(name: str) -> str:
@@ -67,7 +68,31 @@ class SpawnReviewView(discord.ui.View):
         self.image_data = image_data
         self.completed = False
 
+    @staticmethod
+    def can_review(interaction: discord.Interaction) -> bool:
+        """Allow configured reviewers and server administrators."""
+        if interaction.user.id in TRAINING_REVIEWER_USER_IDS:
+            return True
+        return bool(
+            isinstance(interaction.user, discord.Member)
+            and (
+                interaction.user.guild_permissions.administrator
+                or interaction.user.guild_permissions.manage_guild
+            )
+        )
+
+    async def reject_unauthorized(self, interaction: discord.Interaction) -> bool:
+        if self.can_review(interaction):
+            return False
+        await interaction.response.send_message(
+            "Only an authorized reviewer can label this spawn.",
+            ephemeral=True,
+        )
+        return True
+
     async def confirm(self, interaction: discord.Interaction, pokemon_name: str):
+        if await self.reject_unauthorized(interaction):
+            return
         if self.completed:
             await interaction.response.send_message(
                 "This spawn has already been reviewed.",
@@ -96,6 +121,8 @@ class SpawnReviewView(discord.ui.View):
         button: discord.ui.Button,
     ):
         del button
+        if await self.reject_unauthorized(interaction):
+            return
         await self.confirm(interaction, self.pokemon_name)
 
     @discord.ui.button(label="No", style=discord.ButtonStyle.danger)
@@ -105,6 +132,8 @@ class SpawnReviewView(discord.ui.View):
         button: discord.ui.Button,
     ):
         del button
+        if await self.reject_unauthorized(interaction):
+            return
         if self.completed:
             await interaction.response.send_message(
                 "This spawn has already been reviewed.",
