@@ -27,7 +27,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
-bot = commands.Bot(command_prefix="v!", intents=intents)
+bot = commands.Bot(command_prefix=("v!", "V!"), intents=intents)
 
 
 @bot.event
