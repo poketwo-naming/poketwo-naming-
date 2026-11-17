@@ -313,14 +313,32 @@ class PokéTwoNamingBot(commands.Cog):
         # Check if message is from Pokétwo bot
         if message.author.id == POKETWO_BOT_ID:
             self.track_incense(message)
-            await self.handle_poketwo_spawn(message)
+            if self.is_spawn_message(message):
+                await self.handle_poketwo_spawn(message)
+
+    @staticmethod
+    def is_spawn_message(message) -> bool:
+        """Return whether a Pokétwo message is an image-guessing spawn."""
+        text_parts = [message.content or ""]
+        for embed in message.embeds:
+            text_parts.extend(
+                filter(
+                    None,
+                    [
+                        embed.title,
+                        embed.description,
+                        embed.footer.text if embed.footer else None,
+                    ],
+                )
+            )
+        text = " ".join(text_parts).casefold()
+        return "guess the" in text and "pok" in text
 
     async def handle_poketwo_spawn(self, message):
         """Identify a Pokétwo spawn and report the predicted Pokémon."""
         started = perf_counter()
         image_data, download_seconds = await self._get_spawn_image(message)
         if image_data is None:
-            print("Pokétwo spawn did not contain a readable image.")
             return
 
         try:
