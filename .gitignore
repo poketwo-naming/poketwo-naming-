@@ -47,3 +47,6 @@ Thumbs.db
 
 # Pokémon image training data (the compact generated index is tracked separately)
 pokemon_images/
+
+# Runtime guild permissions and paused-channel state
+bot_state.json

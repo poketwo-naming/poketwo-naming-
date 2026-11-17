@@ -24,6 +24,7 @@ TRAINING_ROOT = "pokemon_images/training_data"
 TRAINING_COLLECTION_FILE = "pokemon_images/new_training_images.json"
 MODEL_READ_VERSION = "V2.0.0"
 TRAINING_REVIEWER_USER_IDS = {217819108329259008}
+BOT_STATE_FILE = "bot_state.json"
 
 
 def normalize_pokemon_name(name: str) -> str:
@@ -163,6 +164,7 @@ class PokéTwoNamingBot(commands.Cog):
         self.active_incenses = {}
         self.class_names = {name.casefold(): name for name in self.recognizer.classes}
         self.reviewed_spawn_count = self.load_collected_training_count()
+        self.bot_state = self.load_bot_state()
         self.load_names()
         self.load_suggestions()
 
@@ -207,6 +209,39 @@ class PokéTwoNamingBot(commands.Cog):
         with open(TRAINING_COLLECTION_FILE, "r", encoding="utf-8") as f:
             collected = json.load(f)
         return len(collected)
+
+    def load_bot_state(self):
+        """Load persistent restricted roles and paused channel overwrites."""
+        if not os.path.exists(BOT_STATE_FILE):
+            return {"restricted_roles": {}, "paused_channels": {}}
+        with open(BOT_STATE_FILE, "r", encoding="utf-8") as f:
+            state = json.load(f)
+        state.setdefault("restricted_roles", {})
+        state.setdefault("paused_channels", {})
+        return state
+
+    def save_bot_state(self):
+        """Persist configuration needed to resume paused channels safely."""
+        with open(BOT_STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(self.bot_state, f, indent=2, ensure_ascii=False)
+
+    @staticmethod
+    def is_administrator(ctx) -> bool:
+        return bool(
+            ctx.guild
+            and (
+                ctx.author.id == ctx.guild.owner_id
+                or ctx.author.guild_permissions.administrator
+                or ctx.author.guild_permissions.manage_guild
+            )
+        )
+
+    def has_restricted_permission(self, ctx) -> bool:
+        """Check whether a member can use commands marked restricted."""
+        if self.is_administrator(ctx):
+            return True
+        role_id = self.bot_state["restricted_roles"].get(str(ctx.guild.id))
+        return bool(role_id and ctx.author.get_role(int(role_id)))
 
     def save_training_image(self, pokemon_name: str, image_data: bytes):
         """Save a reviewed image and track it for a later training export."""
@@ -350,6 +385,10 @@ class PokéTwoNamingBot(commands.Cog):
             print(f"Could not read Pokétwo spawn image: {error}")
             return
 
+        missingno_pause = False
+        if pokemon_name.casefold() == "missingno":
+            missingno_pause = await self.pause_missingno_channel(message.channel)
+
         if message.channel.id == TRAINING_REVIEW_CHANNEL_ID:
             embed = discord.Embed(
                 title="Is this Pokémon correct?",
@@ -377,6 +416,20 @@ class PokéTwoNamingBot(commands.Cog):
             )
         else:
             await message.channel.send(f"{pokemon_name} {confidence:.2f}%")
+
+        if pokemon_name.casefold() == "missingno":
+            guild_id = str(message.guild.id)
+            role_id = self.bot_state["restricted_roles"].get(guild_id)
+            staff_mention = f"<@&{role_id}>" if role_id else "@staff"
+            pause_note = (
+                " The channel is paused for Pokétwo."
+                if missingno_pause
+                else " I could not pause Pokétwo automatically."
+            )
+            await message.channel.send(
+                f"⚠️ Don't catch this Pokémon! Ping a staff member: {staff_mention}."
+                f"{pause_note} Use `v!r` to resume."
+            )
         total_seconds = perf_counter() - started
         self.spawn_response_times.append(total_seconds)
         self.inference_times.append(inference_seconds)
@@ -417,10 +470,96 @@ class PokéTwoNamingBot(commands.Cog):
             print(f"Could not download Pokétwo spawn image: {error}")
             return None, perf_counter() - started
 
+    async def pause_missingno_channel(self, channel):
+        """Deny only Pokétwo permission to send in a MissingNo channel."""
+        if not channel.guild or not channel.permissions_for(channel.guild.me).manage_channels:
+            return False
+        poketwo = channel.guild.get_member(POKETWO_BOT_ID)
+        if poketwo is None:
+            try:
+                poketwo = await channel.guild.fetch_member(POKETWO_BOT_ID)
+            except discord.NotFound:
+                return False
+        channel_key = str(channel.id)
+        if channel_key not in self.bot_state["paused_channels"]:
+            previous = channel.overwrites_for(poketwo)
+            allow, deny = previous.pair()
+            self.bot_state["paused_channels"][channel_key] = {
+                "guild_id": str(channel.guild.id),
+                "existed": poketwo in channel.overwrites,
+                "allow": allow.value,
+                "deny": deny.value,
+            }
+            self.save_bot_state()
+
+        overwrite = channel.overwrites_for(poketwo)
+        overwrite.send_messages = False
+        await channel.set_permissions(
+            poketwo,
+            overwrite=overwrite,
+            reason="MissingNo spawned; waiting for staff to resume",
+        )
+        return True
+
     @commands.command(name="ping")
     async def ping(self, ctx):
         """Check if the bot is responsive"""
         await ctx.send(f"Pong! {self.bot.latency * 1000:.2f}ms")
+
+    @commands.command(name="permission")
+    async def set_restricted_role(self, ctx, role_id: int):
+        """Set the role allowed to use restricted commands."""
+        if not self.is_administrator(ctx):
+            await ctx.send("❌ Only a server administrator can set this role.")
+            return
+        role = ctx.guild.get_role(role_id)
+        if role is None:
+            await ctx.send("❌ That role is not in this server.")
+            return
+        self.bot_state["restricted_roles"][str(ctx.guild.id)] = str(role.id)
+        self.save_bot_state()
+        await ctx.send(f"✅ Restricted commands are now available to {role.mention}.")
+
+    @commands.command(name="r")
+    async def resume_poketwo(self, ctx):
+        """Restore Pokétwo's previous permissions after a MissingNo spawn."""
+        if not self.has_restricted_permission(ctx):
+            await ctx.send("❌ You do not have permission to resume this channel.")
+            return
+        saved = self.bot_state["paused_channels"].get(str(ctx.channel.id))
+        if saved is None:
+            await ctx.send("This channel is not paused for MissingNo.")
+            return
+        if not ctx.channel.permissions_for(ctx.guild.me).manage_channels:
+            await ctx.send("❌ I need **Manage Channels** permission to resume it.")
+            return
+        poketwo = ctx.guild.get_member(POKETWO_BOT_ID)
+        if poketwo is None:
+            try:
+                poketwo = await ctx.guild.fetch_member(POKETWO_BOT_ID)
+            except discord.NotFound:
+                await ctx.send("❌ Pokétwo is no longer in this server.")
+                return
+
+        if saved["existed"]:
+            previous = discord.PermissionOverwrite.from_pair(
+                discord.Permissions(int(saved["allow"])),
+                discord.Permissions(int(saved["deny"])),
+            )
+            await ctx.channel.set_permissions(
+                poketwo,
+                overwrite=previous,
+                reason="Staff resumed Pokétwo after MissingNo",
+            )
+        else:
+            await ctx.channel.set_permissions(
+                poketwo,
+                overwrite=None,
+                reason="Staff resumed Pokétwo after MissingNo",
+            )
+        del self.bot_state["paused_channels"][str(ctx.channel.id)]
+        self.save_bot_state()
+        await ctx.send("✅ Channel resumed. Pokétwo can send messages again.")
 
     @commands.command(name="api")
     async def api_status(self, ctx):
@@ -724,6 +863,16 @@ class PokéTwoNamingBot(commands.Cog):
         embed.add_field(
             name="v!servers",
             value="List every server where the bot is active",
+            inline=False
+        )
+        embed.add_field(
+            name="v!r",
+            value="Resume a channel paused after MissingNo (restricted)",
+            inline=False
+        )
+        embed.add_field(
+            name="v!permission <role_id>",
+            value="Grant a role access to restricted commands (administrator)",
             inline=False
         )
         embed.add_field(

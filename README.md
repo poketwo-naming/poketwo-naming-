@@ -22,6 +22,8 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 | `v!ping` | `v!ping` | Check bot status and latency |
 | `v!api` | `v!api` | Display API and spawn-recognition performance |
 | `v!servers` | `v!servers` | List every connected Discord server and ID |
+| `v!r` | `v!r` | Resume a channel paused after a MissingNo spawn |
+| `v!permission <role_id>` | `v!permission 123456789` | Grant a role restricted-command access |
 | `v!training` | `v!training` | Show reviewed training images in the review channel |
 | `v!export_training` | `v!export_training` | Download reviewed images for retraining |
 | `v!help_naming` | `v!help_naming` | Display this help message |
@@ -30,6 +32,12 @@ In channel `1531476097970212915`, spawn guesses include **Yes/No** review
 buttons. Yes saves the image under the predicted Pokémon folder. No opens a
 modal for the correct Pokémon name, creating that folder when necessary.
 Reviewed images can be downloaded with `v!export_training` before retraining.
+
+MissingNo detection immediately denies Pokétwo's Send Messages permission in
+the current channel and asks staff not to catch it. Administrators configure a
+restricted staff role with `v!permission <role_id>`; that role can use `v!r`
+to restore Pokétwo's previous permissions. The bot requires **Manage
+Channels** permission for this pause/resume feature.
 
 The bot uses the Pokémon-named folders in `pokemon_images/training_data` to build
 the recognition model. Rebuild it after changing the training images:
