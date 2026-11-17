@@ -1,0 +1,18 @@
+{
+  "pikachu": ["Sparky", "Thunder", "Bolt", "Zappy", "Chu", "Volt", "Electro"],
+  "charizard": ["Blaze", "Inferno", "Dragon", "Flame", "Char", "FireDrake", "Infernal"],
+  "blastoise": ["Tsunami", "Aqua", "Wave", "Splash", "Hydro", "Torrent", "Neptune"],
+  "venusaur": ["Leafy", "Thorns", "Veggie", "Garden", "Sprout", "Seed", "Bloom"],
+  "dragonite": ["Sky", "Comet", "Drake", "Storm", "Wings", "Mystic", "Celestial"],
+  "alakazam": ["Genius", "Smart", "Psyche", "Mind", "Brain", "Oracle", "Sage"],
+  "machamp": ["Crusher", "Brute", "Fist", "Power", "Mighty", "Titan", "Hercules"],
+  "gyarados": ["Rage", "Terror", "Leviathan", "Monster", "King", "Tyrant", "Behemoth"],
+  "arcanine": ["Inferno", "Blaze", "Hound", "Wildfire", "Striker", "Hunter"],
+  "lapras": ["Aegis", "Glacier", "Frost", "Iceberg", "Shellguard", "Protector"],
+  "snorlax": ["Snooze", "Slumber", "Titan", "Bulk", "Heavyweight", "Sleepwalker"],
+  "articuno": ["Frost", "Blizzard", "Snowqueen", "Arctic", "Winter", "Icewind"],
+  "zapdos": ["Storm", "Thunder", "Zap", "Lightning", "Stormborn", "Volt"],
+  "moltres": ["Inferno", "Phoenix", "Flame", "Infernal", "Heatwave", "Firewing"],
+  "mewtwo": ["Prime", "Genesis", "Apex", "Psychic", "Perfect", "Titan"],
+  "mew": ["Wonder", "Mystic", "Ancient", "Spirit", "Mythical", "Ethereal"]
+}
