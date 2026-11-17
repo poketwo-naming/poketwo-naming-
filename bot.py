@@ -820,6 +820,11 @@ class PokéTwoNamingBot(commands.Cog):
         user_id = int(match.group(1))
         member = ctx.guild.get_member(user_id)
         if member is None:
+            try:
+                member = await ctx.guild.fetch_member(user_id)
+            except (discord.NotFound, discord.Forbidden):
+                member = None
+        if member is None:
             await ctx.send("❌ That user is not in this server.")
             return
         pokemon_name = self.class_names.get(pokemon_input.casefold())
@@ -831,7 +836,7 @@ class PokéTwoNamingBot(commands.Cog):
             str(ctx.guild.id),
             {},
         )
-        guild_reserves[pokemon_name] = str(member.id)
+        guild_reserves[str(pokemon_name)] = str(member.id)
         self.save_bot_state()
         await ctx.send(
             f"✅ Reserved **{pokemon_name}** for {member.mention}."
