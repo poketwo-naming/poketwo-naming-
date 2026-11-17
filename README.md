@@ -22,7 +22,7 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 | `v!ping` | `v!ping` | Check bot status and latency |
 | `v!api` | `v!api` | Display API and spawn-recognition performance |
 | `v!servers` | `v!servers` | List every connected Discord server and ID |
-| `v!premium` | `v!premium` | Show Bronze, Silver, and Gold incense capacities |
+| `v!premium` | `v!premium` | Show the current server's premium tier |
 | `v!premium add <tier> <server_id>` | `v!premium add gold 123456789` | Owner-only tier grant from the main server |
 | `v!r` | `v!r` | Resume a channel paused after a MissingNo spawn |
 | `v!permission <role_id>` | `v!permission 123456789` | Grant a role restricted-command access |

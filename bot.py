@@ -592,32 +592,35 @@ class PokéTwoNamingBot(commands.Cog):
 
     @commands.group(name="premium", invoke_without_command=True)
     async def premium(self, ctx):
-        """Display Bronze, Silver, and Gold server capacity tiers."""
+        """Display this server's premium tier."""
         if ctx.invoked_subcommand is not None:
             return
-        active_tier = (
+        tier = (
             self.premium_tier(ctx.guild.id)
             if ctx.guild
             else None
         )
-        embed = discord.Embed(
-            title="Premium Naming Tiers",
-            description=(
-                "Each tier increases how many incense spawn channels this server "
-                "can have named simultaneously."
-            ),
-            color=discord.Color.gold(),
-        )
-        colors = {"bronze": "🥉", "silver": "🥈", "gold": "🥇"}
-        for tier, capacity in PREMIUM_CAPACITIES.items():
-            active = tier == active_tier
-            embed.add_field(
-                name=f"{colors[tier]} {tier.title()} {'— Active' if active else ''}",
-                value=f"Up to **{capacity}** incense channels at the same time.",
-                inline=False,
+        tier_icons = {"bronze": "🥉", "silver": "🥈", "gold": "🥇"}
+        tier_colors = {
+            "bronze": 0xCD7F32,
+            "silver": 0xC0C0C0,
+            "gold": 0xFFD700,
+        }
+        if tier:
+            embed = discord.Embed(
+                title=f"{tier_icons[tier]} {tier.title()} Premium",
+                description=(
+                    f"This server has **{tier.title()}** access and can name "
+                    f"**{PREMIUM_CAPACITIES[tier]} simultaneous incense channels**."
+                ),
+                color=tier_colors[tier],
             )
-        current = active_tier.title() if active_tier else "No premium tier"
-        embed.set_footer(text=f"Current server: {current}")
+        else:
+            embed = discord.Embed(
+                title="Standard Tier",
+                description="This server does not currently have a premium tier.",
+                color=discord.Color.dark_gray(),
+            )
         await ctx.send(embed=embed)
 
     @premium.command(name="add")
@@ -742,12 +745,7 @@ class PokéTwoNamingBot(commands.Cog):
             ),
             (
                 "Active Incense",
-                (
-                    f"{self.active_incense_count(ctx.guild.id if ctx.guild else None)}"
-                    f"/{self.premium_capacity(ctx.guild.id)}"
-                    if ctx.guild and self.premium_capacity(ctx.guild.id)
-                    else str(self.active_incense_count())
-                ),
+                str(self.active_incense_count()),
             ),
             (
                 "Store (latest)",
