@@ -21,7 +21,14 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 | `v!deletename <id>` | `v!deletename 12345` | Delete a saved Pokémon name |
 | `v!ping` | `v!ping` | Check bot status and latency |
 | `v!api` | `v!api` | Display API and spawn-recognition performance |
+| `v!training` | `v!training` | Show reviewed training images in the review channel |
+| `v!export_training` | `v!export_training` | Download reviewed images for retraining |
 | `v!help_naming` | `v!help_naming` | Display this help message |
+
+In channel `1531476097970212915`, spawn guesses include **Yes/No** review
+buttons. Yes saves the image under the predicted Pokémon folder. No opens a
+modal for the correct Pokémon name, creating that folder when necessary.
+Reviewed images can be downloaded with `v!export_training` before retraining.
 
 The bot uses the Pokémon-named folders in `pokemon_images/training_data` to build
 the recognition model. Rebuild it after changing the training images:

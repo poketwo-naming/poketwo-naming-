@@ -2,20 +2,114 @@
 Pokétwo Naming Bot - Core bot functionality for naming Pokémon
 """
 from collections import deque
+from hashlib import sha256
 from io import BytesIO
+import json
+import os
 from time import perf_counter
+from zipfile import ZIP_DEFLATED, ZipFile
 
 import aiohttp
 import discord
 from discord.ext import commands
-import json
-import os
 from PIL import Image, UnidentifiedImageError
 
 from pokemon_recognition import PokemonImageRecognizer
 
 
 POKETWO_BOT_ID = 716390085896962058
+TRAINING_REVIEW_CHANNEL_ID = 1531476097970212915
+TRAINING_ROOT = "pokemon_images/training_data"
+TRAINING_COLLECTION_FILE = "pokemon_images/new_training_images.json"
+
+
+def normalize_pokemon_name(name: str) -> str:
+    """Validate a Pokémon name before using it as a training folder."""
+    normalized = name.strip()
+    if not normalized or normalized in {".", ".."}:
+        raise ValueError("Enter a Pokémon name.")
+    if "/" in normalized or "\\" in normalized or "\x00" in normalized:
+        raise ValueError("Pokémon names cannot contain path separators.")
+    if len(normalized) > 100:
+        raise ValueError("Pokémon names must be 100 characters or fewer.")
+    return normalized
+
+
+class CorrectPokemonModal(discord.ui.Modal, title="Correct Pokémon Name"):
+    """Collect the correct label after a rejected prediction."""
+
+    pokemon_name = discord.ui.TextInput(
+        label="Correct Pokémon name",
+        placeholder="For example: Eevee",
+        max_length=100,
+    )
+
+    def __init__(self, review):
+        super().__init__()
+        self.review = review
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            await self.review.confirm(interaction, self.pokemon_name.value)
+        except ValueError as error:
+            await interaction.response.send_message(str(error), ephemeral=True)
+
+
+class SpawnReviewView(discord.ui.View):
+    """Yes/No controls for reviewing a predicted Pokétwo spawn."""
+
+    def __init__(self, cog, pokemon_name: str, image_data: bytes):
+        super().__init__(timeout=None)
+        self.cog = cog
+        self.pokemon_name = pokemon_name
+        self.image_data = image_data
+        self.completed = False
+
+    async def confirm(self, interaction: discord.Interaction, pokemon_name: str):
+        if self.completed:
+            await interaction.response.send_message(
+                "This spawn has already been reviewed.",
+                ephemeral=True,
+            )
+            return
+
+        saved_name, saved_path = self.cog.save_training_image(
+            pokemon_name,
+            self.image_data,
+        )
+        self.completed = True
+        self.stop()
+        for child in self.children:
+            if isinstance(child, discord.ui.Button):
+                child.disabled = True
+        await interaction.response.edit_message(
+            content=f"✅ Saved as **{saved_name}** for future recognition.\n`{saved_path}`",
+            view=self,
+        )
+
+    @discord.ui.button(label="Yes", style=discord.ButtonStyle.success)
+    async def confirm_prediction(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ):
+        del button
+        await self.confirm(interaction, self.pokemon_name)
+
+    @discord.ui.button(label="No", style=discord.ButtonStyle.danger)
+    async def correct_prediction(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ):
+        del button
+        if self.completed:
+            await interaction.response.send_message(
+                "This spawn has already been reviewed.",
+                ephemeral=True,
+            )
+            return
+        await interaction.response.send_modal(CorrectPokemonModal(self))
 
 
 class PokéTwoNamingBot(commands.Cog):
@@ -30,6 +124,8 @@ class PokéTwoNamingBot(commands.Cog):
         self.spawn_response_times = deque(maxlen=100)
         self.last_spawn_metrics = None
         self.recognized_spawn_count = 0
+        self.class_names = {name.casefold(): name for name in self.recognizer.classes}
+        self.reviewed_spawn_count = self.load_collected_training_count()
         self.load_names()
         self.load_suggestions()
 
@@ -65,6 +161,59 @@ class PokéTwoNamingBot(commands.Cog):
         else:
             self.suggestions = {}
 
+    def load_collected_training_count(self):
+        """Return the number of feedback images collected for retraining."""
+        if not os.path.exists(TRAINING_COLLECTION_FILE):
+            return 0
+        with open(TRAINING_COLLECTION_FILE, "r", encoding="utf-8") as f:
+            collected = json.load(f)
+        return len(collected)
+
+    def save_training_image(self, pokemon_name: str, image_data: bytes):
+        """Save a reviewed image and track it for a later training export."""
+        requested_name = normalize_pokemon_name(pokemon_name)
+        pokemon_name = self.class_names.setdefault(
+            requested_name.casefold(),
+            requested_name,
+        )
+        pokemon_directory = os.path.join(TRAINING_ROOT, pokemon_name)
+        os.makedirs(pokemon_directory, exist_ok=True)
+
+        digest = sha256(image_data).hexdigest()
+        try:
+            with Image.open(BytesIO(image_data)) as image:
+                image_format = (image.format or "JPEG").casefold()
+                extension = {
+                    "jpeg": ".jpg",
+                    "jpg": ".jpg",
+                    "png": ".png",
+                    "webp": ".webp",
+                }.get(image_format, ".jpg")
+        except (UnidentifiedImageError, OSError):
+            extension = ".jpg"
+
+        saved_path = os.path.join(pokemon_directory, f"feedback-{digest}{extension}")
+        if not os.path.exists(saved_path):
+            with open(saved_path, "wb") as image_file:
+                image_file.write(image_data)
+
+            os.makedirs(os.path.dirname(TRAINING_COLLECTION_FILE), exist_ok=True)
+            collected = []
+            if os.path.exists(TRAINING_COLLECTION_FILE):
+                with open(TRAINING_COLLECTION_FILE, "r", encoding="utf-8") as f:
+                    collected = json.load(f)
+            if saved_path not in collected:
+                collected.append(saved_path)
+                with open(
+                    TRAINING_COLLECTION_FILE,
+                    "w",
+                    encoding="utf-8",
+                ) as f:
+                    json.dump(collected, f, indent=2, ensure_ascii=False)
+                self.reviewed_spawn_count += 1
+
+        return pokemon_name, saved_path
+
     @commands.Cog.listener()
     async def on_message(self, message):
         """Listen for Pokétwo spawn messages"""
@@ -93,7 +242,33 @@ class PokéTwoNamingBot(commands.Cog):
             print(f"Could not read Pokétwo spawn image: {error}")
             return
 
-        await message.channel.send(f"{pokemon_name} {confidence:.2f}%")
+        if message.channel.id == TRAINING_REVIEW_CHANNEL_ID:
+            embed = discord.Embed(
+                title="Is this Pokémon correct?",
+                color=discord.Color.blurple(),
+            )
+            embed.add_field(name="Guess", value=pokemon_name, inline=True)
+            embed.add_field(
+                name="Confidence",
+                value=f"{confidence:.2f}%",
+                inline=True,
+            )
+            embed.set_image(url="attachment://spawn-review.webp")
+            with Image.open(BytesIO(image_data)) as image:
+                review_buffer = BytesIO()
+                image.convert("RGB").save(
+                    review_buffer,
+                    format="WEBP",
+                    quality=85,
+                )
+            review_buffer.seek(0)
+            await message.channel.send(
+                embed=embed,
+                file=discord.File(review_buffer, filename="spawn-review.webp"),
+                view=SpawnReviewView(self, pokemon_name, image_data),
+            )
+        else:
+            await message.channel.send(f"{pokemon_name} {confidence:.2f}%")
         total_seconds = perf_counter() - started
         self.spawn_response_times.append(total_seconds)
         self.last_spawn_metrics = {
@@ -190,6 +365,54 @@ class PokéTwoNamingBot(commands.Cog):
             inline=True,
         )
         await ctx.send(embed=embed)
+
+    @commands.command(name="training")
+    async def training_status(self, ctx):
+        """Show how many reviewed images are waiting to be trained."""
+        if ctx.channel.id != TRAINING_REVIEW_CHANNEL_ID:
+            await ctx.send(
+                f"Training review is only available in <#{TRAINING_REVIEW_CHANNEL_ID}>."
+            )
+            return
+        await ctx.send(
+            f"📚 **{self.reviewed_spawn_count}** reviewed image(s) collected. "
+            "Use `v!export_training` to download them before retraining."
+        )
+
+    @commands.command(name="export_training")
+    async def export_training(self, ctx):
+        """Export only newly reviewed images for local retraining."""
+        if ctx.channel.id != TRAINING_REVIEW_CHANNEL_ID:
+            await ctx.send(
+                f"Training export is only available in <#{TRAINING_REVIEW_CHANNEL_ID}>."
+            )
+            return
+        if not os.path.exists(TRAINING_COLLECTION_FILE):
+            await ctx.send("No reviewed training images have been collected yet.")
+            return
+
+        with open(TRAINING_COLLECTION_FILE, "r", encoding="utf-8") as f:
+            collected = json.load(f)
+        existing = [path for path in collected if os.path.exists(path)]
+        if not existing:
+            await ctx.send("The collected training images are no longer available.")
+            return
+
+        archive = BytesIO()
+        with ZipFile(archive, "w", ZIP_DEFLATED) as zip_file:
+            for path in existing:
+                zip_file.write(path, os.path.relpath(path, "pokemon_images"))
+        if archive.tell() > 25 * 1024 * 1024:
+            await ctx.send(
+                "The training export exceeds Discord's 25 MB attachment limit. "
+                "Export a smaller batch from the host."
+            )
+            return
+        archive.seek(0)
+        await ctx.send(
+            content=f"📦 {len(existing)} reviewed image(s) ready for retraining.",
+            file=discord.File(archive, filename="new_training_images.zip"),
+        )
 
     @commands.command(name="suggestname")
     async def suggest_name(self, ctx, pokemon_name: str):
@@ -316,6 +539,16 @@ class PokéTwoNamingBot(commands.Cog):
         embed.add_field(
             name="v!api",
             value="View Pokémon recognition and response timings",
+            inline=False
+        )
+        embed.add_field(
+            name="v!training",
+            value="Show reviewed image count in the training channel",
+            inline=False
+        )
+        embed.add_field(
+            name="v!export_training",
+            value="Download reviewed images for retraining",
             inline=False
         )
         embed.add_field(
