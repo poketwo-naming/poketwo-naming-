@@ -4,6 +4,7 @@ Pokétwo Naming Bot - Core bot functionality for naming Pokémon
 from collections import deque
 from hashlib import sha256
 from io import BytesIO
+import asyncio
 import json
 import os
 import re
@@ -25,6 +26,12 @@ TRAINING_COLLECTION_FILE = "pokemon_images/new_training_images.json"
 MODEL_READ_VERSION = "V2.0.0"
 TRAINING_REVIEWER_USER_IDS = {217819108329259008}
 BOT_STATE_FILE = "bot_state.json"
+PREMIUM_MAIN_GUILD_ID = 1530949341013868635
+PREMIUM_CAPACITIES = {
+    "bronze": 100,
+    "silver": 200,
+    "gold": 300,
+}
 
 
 def normalize_pokemon_name(name: str) -> str:
@@ -165,6 +172,11 @@ class PokéTwoNamingBot(commands.Cog):
         self.class_names = {name.casefold(): name for name in self.recognizer.classes}
         self.reviewed_spawn_count = self.load_collected_training_count()
         self.bot_state = self.load_bot_state()
+        self.premium_servers_file = os.getenv(
+            "PREMIUM_SERVERS_FILE",
+            "data/premium_servers.json",
+        )
+        self.premium_servers = self.load_premium_servers()
         self.load_names()
         self.load_suggestions()
 
@@ -224,6 +236,70 @@ class PokéTwoNamingBot(commands.Cog):
         """Persist configuration needed to resume paused channels safely."""
         with open(BOT_STATE_FILE, "w", encoding="utf-8") as f:
             json.dump(self.bot_state, f, indent=2, ensure_ascii=False)
+
+    def load_premium_servers(self):
+        """Load persistent server tier assignments."""
+        if not os.path.exists(self.premium_servers_file):
+            return {}
+        with open(self.premium_servers_file, "r", encoding="utf-8") as f:
+            assignments = json.load(f)
+        invalid = {
+            guild_id: tier
+            for guild_id, tier in assignments.items()
+            if tier not in PREMIUM_CAPACITIES
+        }
+        if invalid:
+            raise ValueError(
+                f"Invalid premium tiers in {self.premium_servers_file}: {invalid}"
+            )
+        return assignments
+
+    def save_premium_servers(self):
+        """Atomically persist premium assignments."""
+        directory = os.path.dirname(self.premium_servers_file)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        temporary_file = f"{self.premium_servers_file}.tmp"
+        with open(temporary_file, "w", encoding="utf-8") as f:
+            json.dump(
+                self.premium_servers,
+                f,
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        os.replace(temporary_file, self.premium_servers_file)
+
+    def premium_tier(self, guild_id: int) -> str | None:
+        """Return a server's configured premium tier."""
+        return self.premium_servers.get(str(guild_id))
+
+    def premium_capacity(self, guild_id: int) -> int | None:
+        """Return a server's simultaneous incense naming capacity."""
+        tier = self.premium_tier(guild_id)
+        return PREMIUM_CAPACITIES[tier] if tier else None
+
+    def channel_within_incense_capacity(self, message) -> bool:
+        """Check whether a spawn channel is within its server's tier capacity."""
+        guild = message.guild
+        if guild is None:
+            return True
+        capacity = self.premium_capacity(guild.id)
+        if capacity is None:
+            return True
+
+        now = monotonic()
+        active_channel_ids = sorted(
+            channel_id
+            for channel_id, expires_at in self.active_incenses.items()
+            if expires_at > now
+            and self.bot.get_channel(channel_id)
+            and self.bot.get_channel(channel_id).guild
+            and self.bot.get_channel(channel_id).guild.id == guild.id
+        )
+        if message.channel.id not in active_channel_ids:
+            return True
+        return active_channel_ids.index(message.channel.id) < capacity
 
     @staticmethod
     def is_administrator(ctx) -> bool:
@@ -315,14 +391,15 @@ class PokéTwoNamingBot(commands.Cog):
             if re.search(r"\b(active|activated|started|remaining)\w*\b", text):
                 self.active_incenses[channel_id] = now + 60 * 60
 
-        recent = self.recent_spawn_times.setdefault(
-            channel_id,
-            deque(maxlen=20),
-        )
-        recent.append(now)
-        recent_count = sum(now - spawned < 90 for spawned in recent)
-        if recent_count >= 3:
-            self.active_incenses[channel_id] = now + 20 * 60
+        if self.is_spawn_message(message):
+            recent = self.recent_spawn_times.setdefault(
+                channel_id,
+                deque(maxlen=20),
+            )
+            recent.append(now)
+            recent_count = sum(now - spawned < 90 for spawned in recent)
+            if recent_count >= 3:
+                self.active_incenses[channel_id] = now + 20 * 60
 
     def active_incense_count(self, guild_id: int | None = None) -> int:
         """Count unexpired incense channels, optionally within one guild."""
@@ -348,7 +425,9 @@ class PokéTwoNamingBot(commands.Cog):
         # Check if message is from Pokétwo bot
         if message.author.id == POKETWO_BOT_ID:
             self.track_incense(message)
-            if self.is_spawn_message(message):
+            if self.is_spawn_message(message) and self.channel_within_incense_capacity(
+                message
+            ):
                 await self.handle_poketwo_spawn(message)
 
     @staticmethod
@@ -377,10 +456,10 @@ class PokéTwoNamingBot(commands.Cog):
             return
 
         try:
-            with Image.open(BytesIO(image_data)) as image:
-                pokemon_name, confidence, inference_seconds = (
-                    self.recognizer.recognize(image)
-                )
+            pokemon_name, confidence, inference_seconds = await asyncio.to_thread(
+                self.recognize_spawn_image,
+                image_data,
+            )
         except (UnidentifiedImageError, OSError) as error:
             print(f"Could not read Pokétwo spawn image: {error}")
             return
@@ -439,6 +518,11 @@ class PokéTwoNamingBot(commands.Cog):
             "total": total_seconds,
         }
         self.recognized_spawn_count += 1
+
+    def recognize_spawn_image(self, image_data: bytes):
+        """Recognize an image without blocking the Discord event loop."""
+        with Image.open(BytesIO(image_data)) as image:
+            return self.recognizer.recognize(image)
 
     async def _get_spawn_image(self, message):
         """Return the spawn image bytes and download duration."""
@@ -505,6 +589,64 @@ class PokéTwoNamingBot(commands.Cog):
     async def ping(self, ctx):
         """Check if the bot is responsive"""
         await ctx.send(f"Pong! {self.bot.latency * 1000:.2f}ms")
+
+    @commands.group(name="premium", invoke_without_command=True)
+    async def premium(self, ctx):
+        """Display Bronze, Silver, and Gold server capacity tiers."""
+        if ctx.invoked_subcommand is not None:
+            return
+        active_tier = (
+            self.premium_tier(ctx.guild.id)
+            if ctx.guild
+            else None
+        )
+        embed = discord.Embed(
+            title="Premium Naming Tiers",
+            description=(
+                "Each tier increases how many incense spawn channels this server "
+                "can have named simultaneously."
+            ),
+            color=discord.Color.gold(),
+        )
+        colors = {"bronze": "🥉", "silver": "🥈", "gold": "🥇"}
+        for tier, capacity in PREMIUM_CAPACITIES.items():
+            active = tier == active_tier
+            embed.add_field(
+                name=f"{colors[tier]} {tier.title()} {'— Active' if active else ''}",
+                value=f"Up to **{capacity}** incense channels at the same time.",
+                inline=False,
+            )
+        current = active_tier.title() if active_tier else "No premium tier"
+        embed.set_footer(text=f"Current server: {current}")
+        await ctx.send(embed=embed)
+
+    @premium.command(name="add")
+    async def add_premium(self, ctx, tier: str, server_id: int):
+        """Grant a premium tier to a server from the main server."""
+        if ctx.guild is None or ctx.guild.id != PREMIUM_MAIN_GUILD_ID:
+            await ctx.send(
+                f"❌ Premium grants can only be issued in the main server "
+                f"(`{PREMIUM_MAIN_GUILD_ID}`)."
+            )
+            return
+        if not await self.bot.is_owner(ctx.author):
+            await ctx.send("❌ Only the bot owner can grant premium access.")
+            return
+
+        normalized_tier = tier.casefold()
+        if normalized_tier not in PREMIUM_CAPACITIES:
+            await ctx.send("❌ Tier must be `bronze`, `silver`, or `gold`.")
+            return
+        if server_id <= 0:
+            await ctx.send("❌ Enter a valid server ID.")
+            return
+
+        self.premium_servers[str(server_id)] = normalized_tier
+        self.save_premium_servers()
+        await ctx.send(
+            f"✅ Server `{server_id}` is now on **{normalized_tier.title()}** "
+            f"({PREMIUM_CAPACITIES[normalized_tier]} simultaneous incense channels)."
+        )
 
     @commands.command(name="permission")
     async def set_restricted_role(self, ctx, role_id: int):
@@ -600,7 +742,12 @@ class PokéTwoNamingBot(commands.Cog):
             ),
             (
                 "Active Incense",
-                str(self.active_incense_count()),
+                (
+                    f"{self.active_incense_count(ctx.guild.id if ctx.guild else None)}"
+                    f"/{self.premium_capacity(ctx.guild.id)}"
+                    if ctx.guild and self.premium_capacity(ctx.guild.id)
+                    else str(self.active_incense_count())
+                ),
             ),
             (
                 "Store (latest)",
@@ -863,6 +1010,11 @@ class PokéTwoNamingBot(commands.Cog):
         embed.add_field(
             name="v!servers",
             value="List every server where the bot is active",
+            inline=False
+        )
+        embed.add_field(
+            name="v!premium",
+            value="View Bronze, Silver, and Gold incense naming capacities",
             inline=False
         )
         embed.add_field(

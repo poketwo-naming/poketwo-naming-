@@ -50,3 +50,4 @@ pokemon_images/
 
 # Runtime guild permissions and paused-channel state
 bot_state.json
+data/premium_servers.json
