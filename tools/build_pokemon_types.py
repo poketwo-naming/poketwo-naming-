@@ -65,6 +65,7 @@ CANONICAL_OVERRIDES = {
     "Pumpkaboo": "pumpkaboo-average",
     "Pyroar": "pyroar-male",
     "Rapid Strike Urshifu": "urshifu-rapid-strike",
+    "Roaming Gimmighoul": "gimmighoul-roaming",
     "Sandy Wormadam": "wormadam-sandy",
     "School Wishiwashi": "wishiwashi-school",
     "Sensu Oricorio": "oricorio-sensu",

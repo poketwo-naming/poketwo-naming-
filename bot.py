@@ -1241,8 +1241,7 @@ class PokéTwoNamingBot(commands.Cog):
                 )
                 if shiny_hunters:
                     mentions = ", ".join(
-                        f"<@{user_id}> - {pokemon_name.casefold()}"
-                        for user_id in shiny_hunters
+                        f"<@{user_id}>" for user_id in shiny_hunters
                     )
                     content.append(f"Shiny hunt pings: {mentions}")
                 collection_owners = self.collection_owners_for_spawn(
