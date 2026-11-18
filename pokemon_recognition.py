@@ -62,6 +62,9 @@ class PokemonImageRecognizer:
             )
             self.refinement_labels = refinements["labels"]
             self.refinement_classes = refinements["classes"]
+        self.refinement_class_ids = {
+            int(label) for label in np.unique(self.refinement_labels)
+        }
 
     def recognize(self, image: Image.Image) -> tuple[str, float, float]:
         """Return the Pokémon class, calibrated confidence, and elapsed seconds."""
@@ -74,11 +77,7 @@ class PokemonImageRecognizer:
         top_two = np.argpartition(scores, -2)[-2:]
         second_best, best = top_two[np.argsort(scores[top_two])]
         predicted_name = str(self.classes[best])
-        refinement_class_ids = {
-            int(np.flatnonzero(self.refinement_classes == name)[0])
-            for name in ("Blipbug", "Alolan Meowth")
-        }
-        if best in refinement_class_ids:
+        if best in self.refinement_class_ids:
             refinement_scores = self.refinement_embeddings @ embedding
             sorted_indexes = np.argsort(refinement_scores)[::-1]
             refined_label = int(self.refinement_labels[sorted_indexes[0]])

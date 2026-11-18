@@ -81,6 +81,16 @@ The source images are ignored by Git. Commit and deploy the generated model,
 encoder, `pokemon_types.json`, `pokemon_best_names.json`, and
 `pokemon_aliases.json` files.
 
+To teach the bot commonly confused Pokémon (Alolan Meowth/Rattata, Blipbug,
+Luxray, Pikipek) after adding images to their folders, rebuild the lightweight
+refinement file without retraining. Pass extra folder names to add more classes:
+
+```bash
+python tools/build_pokemon_refinements.py
+```
+
+Commit `pokemon_image_refinements.npz` afterwards.
+
 ## Installation
 
 1. **Clone the repository**
