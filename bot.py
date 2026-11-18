@@ -52,7 +52,7 @@ COMMAND_CATALOG = (
     ("Recognition", "v!servers", "Lists every server where the bot is connected."),
     (
         "Reservations",
-        "v!r",
+        "v!resume",
         "Resumes Pokétwo in a channel paused after MissingNo. Restricted.",
     ),
     (
@@ -1567,7 +1567,7 @@ class PokéTwoNamingBot(commands.Cog):
             )
             await message.channel.send(
                 f"⚠️ Don't catch this Pokémon! Ping a staff member: {staff_mention}."
-                f"{pause_note} Use `v!r` to resume."
+                f"{pause_note} Use `v!resume` to resume."
             )
         total_seconds = perf_counter() - started
         self.spawn_response_times.append(total_seconds)
@@ -1805,20 +1805,9 @@ class PokéTwoNamingBot(commands.Cog):
             f"✅ Cleared your **{hunt.get('pokemon')}** shiny hunt."
         )
 
-    @commands.group(name="r", invoke_without_command=True)
-    async def resume_or_reserve(self, ctx):
+    @commands.command(name="resume")
+    async def resume_poketwo_channel(self, ctx):
         """Restore Pokétwo's previous permissions after a MissingNo spawn."""
-        raw_invocation = ctx.message.content.split()
-        raw_subcommand = (
-            raw_invocation[1].casefold()
-            if len(raw_invocation) > 1
-            else None
-        )
-        if (
-            ctx.invoked_subcommand is not None
-            or raw_subcommand in {"add", "remove", "list", "clear"}
-        ):
-            return
         if not self.has_restricted_permission(ctx):
             await ctx.send("❌ You do not have permission to resume this channel.")
             return
@@ -1857,7 +1846,17 @@ class PokéTwoNamingBot(commands.Cog):
         self.save_bot_state()
         await ctx.send("✅ Channel resumed. Pokétwo can send messages again.")
 
-    @resume_or_reserve.command(name="add")
+    @commands.group(name="r", invoke_without_command=True)
+    async def reservations(self, ctx):
+        """Show reservation command usage."""
+        if ctx.invoked_subcommand is not None:
+            return
+        await ctx.send(
+            "Use `v!r list [@user]`, `v!r add <pokemon,...> <@user>`, "
+            "`v!r remove <pokemon,...> [@user]`, or `v!r clear`."
+        )
+
+    @reservations.command(name="add")
     async def add_reserve(self, ctx, *, entry: str):
         """Reserve a Pokémon for a member. Restricted command."""
         if ctx.guild is None:
@@ -1911,7 +1910,7 @@ class PokéTwoNamingBot(commands.Cog):
                 + f"\n\n✅ Added **{len(pokemon_names)} Pokémon** successfully."
             )
 
-    @resume_or_reserve.command(name="remove")
+    @reservations.command(name="remove")
     async def remove_reserve(self, ctx, *, entry: str):
         """Remove a server Pokémon reservation. Restricted command."""
         if ctx.guild is None:
@@ -1968,7 +1967,7 @@ class PokéTwoNamingBot(commands.Cog):
             result += " Skipped: " + "; ".join(skipped)
         await ctx.send(result)
 
-    @resume_or_reserve.command(name="list")
+    @reservations.command(name="list")
     async def list_reserves(self, ctx, member: discord.Member | None = None):
         """List server reserves, optionally only those of one member."""
         if ctx.guild is None:
@@ -2019,7 +2018,7 @@ class PokéTwoNamingBot(commands.Cog):
         for embed_chunk in range(0, len(embeds), 10):
             await ctx.send(embeds=embeds[embed_chunk : embed_chunk + 10])
 
-    @resume_or_reserve.command(name="clear")
+    @reservations.command(name="clear")
     async def clear_reserves(self, ctx):
         """Clear every reservation in the current server after confirmation."""
         if ctx.guild is None:

@@ -18,7 +18,7 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 | `v!servers` | `v!servers` | List every connected Discord server and ID |
 | `v!premium` | `v!premium` | Show the current server's premium tier |
 | `v!premium add <tier> <server_id>` | `v!premium add gold 123456789` | Owner-only tier grant from the main server |
-| `v!r` | `v!r` | Resume a channel paused after a MissingNo spawn |
+| `v!resume` | `v!resume` | Resume a channel paused after a MissingNo spawn |
 | `v!r add <pokemon,...> <@user>` | `v!r add Pikachu, Eevee @user` | Reserve multiple Pokémon for a member |
 | `v!r add all <pokemon,...> <@user>` | `v!r add all Arceus, Eevee @user` | Reserve all matching forms |
 | `v!r remove <pokemon,...> [@user]` | `v!r remove Pikachu, Eevee @user` | Remove multiple Pokémon reserves |
@@ -47,7 +47,7 @@ threshold can be changed with `REVIEW_CONFIDENCE_THRESHOLD`.
 
 MissingNo detection immediately denies Pokétwo's Send Messages permission in
 the current channel and asks staff not to catch it. Administrators configure a
-restricted staff role with `v!permission <role_id>`; that role can use `v!r`
+restricted staff role with `v!permission <role_id>`; that role can use `v!resume`
 to restore Pokétwo's previous permissions. The bot requires **Manage
 Channels** permission for this pause/resume feature.
 
