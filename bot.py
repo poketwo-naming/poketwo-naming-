@@ -57,13 +57,13 @@ COMMAND_CATALOG = (
     ),
     (
         "Reservations",
-        "v!r add [all] <pokemon> <@user>",
-        "Reserves one Pokémon, or all matching forms, for a member. Restricted.",
+        "v!r add [all] <pokemon,...> <@user>",
+        "Reserves comma-separated Pokémon/forms for a member. Restricted.",
     ),
     (
         "Reservations",
-        "v!r remove <pokemon> [@user]",
-        "Removes a Pokémon reservation. Restricted.",
+        "v!r remove <pokemon,...> [@user]",
+        "Removes comma-separated Pokémon reservations. Restricted.",
     ),
     (
         "Reservations",
@@ -93,13 +93,13 @@ COMMAND_CATALOG = (
     ("Shiny Hunts", "v!sh clear", "Clears your current shiny hunt."),
     (
         "Collections",
-        "v!cl add [all] <pokemon>",
-        "Adds one Pokémon or all matching forms to your collection.",
+        "v!cl add [all] <pokemon,...>",
+        "Adds comma-separated Pokémon/forms to your collection.",
     ),
     (
         "Collections",
-        "v!cl remove <pokemon>",
-        "Removes one Pokémon from your collection.",
+        "v!cl remove <pokemon,...>",
+        "Removes comma-separated Pokémon from your collection.",
     ),
     ("Collections", "v!cl list", "Lists your own collection."),
     ("Collections", "v!cl clear", "Clears your own collection."),
@@ -840,6 +840,34 @@ class PokéTwoNamingBot(commands.Cog):
             ):
                 family_matches.append(class_name)
         return sorted(set(family_matches), key=str.casefold)
+
+    def resolve_pokemon_list(
+        self,
+        entry: str,
+        include_all_regionals: bool = True,
+    ) -> tuple[list[str], list[str]]:
+        """Resolve a comma-separated list, with optional all-family terms."""
+        pokemon_names = []
+        unknown = []
+        for raw_term in entry.split(","):
+            term = raw_term.strip()
+            if not term:
+                continue
+            add_all = term.casefold().startswith("all ")
+            pokemon_input = term[4:].strip() if add_all else term
+            if add_all:
+                resolved = self.resolve_pokemon_family(
+                    pokemon_input,
+                    include_regionals=include_all_regionals,
+                )
+            else:
+                pokemon_name = self.resolve_pokemon_name(pokemon_input)
+                resolved = [pokemon_name] if pokemon_name else []
+            if resolved:
+                pokemon_names.extend(str(name) for name in resolved)
+            else:
+                unknown.append(pokemon_input)
+        return list(dict.fromkeys(pokemon_names)), unknown
 
     def format_spawn_prediction(
         self,
@@ -1785,9 +1813,6 @@ class PokéTwoNamingBot(commands.Cog):
             await ctx.send("Usage: `v!r add <pokémon name> <@user>`")
             return
         pokemon_input = entry[: match.start()].strip()
-        reserve_all = pokemon_input.casefold().startswith("all ")
-        if reserve_all:
-            pokemon_input = pokemon_input[4:].strip()
         user_id = int(match.group(1))
         member = ctx.guild.get_member(user_id)
         if member is None:
@@ -1798,13 +1823,12 @@ class PokéTwoNamingBot(commands.Cog):
         if member is None:
             await ctx.send("❌ That user is not in this server.")
             return
-        if reserve_all:
-            pokemon_names = self.resolve_pokemon_family(pokemon_input)
-        else:
-            pokemon_name = self.resolve_pokemon_name(pokemon_input)
-            pokemon_names = [pokemon_name] if pokemon_name else []
-        if not pokemon_names:
-            await ctx.send(f"❌ Unknown Pokémon: `{pokemon_input}`")
+        pokemon_names, unknown = self.resolve_pokemon_list(pokemon_input)
+        if unknown:
+            await ctx.send(
+                "❌ Unknown Pokémon: "
+                + ", ".join(f"`{name}`" for name in unknown)
+            )
             return
 
         guild_reserves = self.bot_state["reserves"].setdefault(
@@ -1814,15 +1838,10 @@ class PokéTwoNamingBot(commands.Cog):
         for pokemon_name in pokemon_names:
             guild_reserves[str(pokemon_name)] = str(member.id)
         self.save_bot_state()
-        if reserve_all:
-            await ctx.send(
-                f"✅ Reserved all **{len(pokemon_names)} {pokemon_input} forms** "
-                f"for {member.mention}."
-            )
-        else:
-            await ctx.send(
-                f"✅ Reserved **{pokemon_names[0]}** for {member.mention}."
-            )
+        await ctx.send(
+            f"✅ Reserved **{len(pokemon_names)} Pokémon** "
+            f"for {member.mention}: " + ", ".join(pokemon_names)
+        )
 
     @resume_or_reserve.command(name="remove")
     async def remove_reserve(self, ctx, *, entry: str):
@@ -1851,30 +1870,35 @@ class PokéTwoNamingBot(commands.Cog):
                 await ctx.send("❌ That user is not in this server.")
                 return
 
-        pokemon_name = self.resolve_pokemon_name(pokemon_input)
-        if pokemon_name is None:
-            await ctx.send(f"❌ Unknown Pokémon: `{pokemon_input}`")
+        pokemon_names, unknown = self.resolve_pokemon_list(pokemon_input)
+        if unknown:
+            await ctx.send(
+                "❌ Unknown Pokémon: "
+                + ", ".join(f"`{name}`" for name in unknown)
+            )
             return
 
         guild_reserves = self.bot_state["reserves"].get(str(ctx.guild.id), {})
-        reserved_user_id = guild_reserves.get(str(pokemon_name))
-        if reserved_user_id is None:
-            await ctx.send(f"❌ **{pokemon_name}** is not reserved.")
+        removed = []
+        skipped = []
+        for pokemon_name in pokemon_names:
+            reserved_user_id = guild_reserves.get(pokemon_name)
+            if reserved_user_id is None:
+                skipped.append(f"{pokemon_name} is not reserved")
+                continue
+            if member is not None and reserved_user_id != str(member.id):
+                skipped.append(f"{pokemon_name} belongs to another user")
+                continue
+            del guild_reserves[pokemon_name]
+            removed.append(pokemon_name)
+        if not removed:
+            await ctx.send("❌ " + "; ".join(skipped))
             return
-        if member is not None and reserved_user_id != str(member.id):
-            await ctx.send(
-                f"❌ **{pokemon_name}** is not reserved for {member.mention}."
-            )
-            return
-
-        del guild_reserves[str(pokemon_name)]
         self.save_bot_state()
-        if member is None:
-            await ctx.send(f"✅ Removed the reserve for **{pokemon_name}**.")
-        else:
-            await ctx.send(
-                f"✅ Removed **{pokemon_name}** from {member.mention}'s reserves."
-            )
+        result = f"✅ Removed **{len(removed)} reserve(s)**: {', '.join(removed)}."
+        if skipped:
+            result += " Skipped: " + "; ".join(skipped)
+        await ctx.send(result)
 
     @resume_or_reserve.command(name="list")
     async def list_reserves(self, ctx, member: discord.Member | None = None):
@@ -1975,15 +1999,12 @@ class PokéTwoNamingBot(commands.Cog):
         if ctx.guild is None:
             await ctx.send("Collections can only be managed inside a server.")
             return
-        add_all = pokemon_input.casefold().startswith("all ")
-        family_input = pokemon_input[4:].strip() if add_all else pokemon_input.strip()
-        if add_all:
-            pokemon_names = self.resolve_pokemon_family(family_input)
-        else:
-            pokemon_name = self.resolve_pokemon_name(family_input)
-            pokemon_names = [pokemon_name] if pokemon_name else []
-        if not pokemon_names:
-            await ctx.send(f"❌ Unknown Pokémon: `{family_input}`")
+        pokemon_names, unknown = self.resolve_pokemon_list(pokemon_input)
+        if unknown:
+            await ctx.send(
+                "❌ Unknown Pokémon: "
+                + ", ".join(f"`{name}`" for name in unknown)
+            )
             return
 
         guild_collections = self.bot_state["collections"].setdefault(
@@ -1999,9 +2020,8 @@ class PokéTwoNamingBot(commands.Cog):
         collection.extend(added)
         self.save_bot_state()
         await ctx.send(
-            f"✅ Added **{len(added)}** Pokémon to your collection."
-            if add_all
-            else f"✅ Added **{pokemon_names[0]}** to your collection."
+            f"✅ Added **{len(added)}** Pokémon to your collection: "
+            + ", ".join(added)
         )
 
     @collection.command(name="remove")
@@ -2010,20 +2030,35 @@ class PokéTwoNamingBot(commands.Cog):
         if ctx.guild is None:
             await ctx.send("Collections can only be managed inside a server.")
             return
-        pokemon_name = self.resolve_pokemon_name(pokemon_input)
-        if pokemon_name is None:
-            await ctx.send(f"❌ Unknown Pokémon: `{pokemon_input}`")
+        pokemon_names, unknown = self.resolve_pokemon_list(pokemon_input)
+        if unknown:
+            await ctx.send(
+                "❌ Unknown Pokémon: "
+                + ", ".join(f"`{name}`" for name in unknown)
+            )
             return
         collection = self.bot_state["collections"].get(
             str(ctx.guild.id),
             {},
         ).get(str(ctx.author.id), [])
-        if str(pokemon_name) not in collection:
-            await ctx.send(f"❌ **{pokemon_name}** is not in your collection.")
+        removed = [name for name in pokemon_names if name in collection]
+        skipped = [name for name in pokemon_names if name not in collection]
+        if not removed:
+            await ctx.send(
+                "❌ None of those Pokémon are in your collection: "
+                + ", ".join(skipped)
+            )
             return
-        collection.remove(str(pokemon_name))
+        for pokemon_name in removed:
+            collection.remove(pokemon_name)
         self.save_bot_state()
-        await ctx.send(f"✅ Removed **{pokemon_name}** from your collection.")
+        result = (
+            f"✅ Removed **{len(removed)}** from your collection: "
+            + ", ".join(removed)
+        )
+        if skipped:
+            result += ". Skipped: " + ", ".join(skipped)
+        await ctx.send(result)
 
     @collection.command(name="list")
     async def list_collection(self, ctx):
