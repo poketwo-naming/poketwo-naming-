@@ -698,7 +698,7 @@ class ExchangeReservesView(discord.ui.View):
         )
 
 
-class ServerSettingsView(discord.ui.View):
+class ServerSettingsView(discord.ui.LayoutView):
     """Settings menu; the Open buttons are placeholders for now."""
 
     SECTIONS = (
@@ -716,26 +716,33 @@ class ServerSettingsView(discord.ui.View):
     def __init__(self, user_id: int):
         super().__init__(timeout=300)
         self.user_id = user_id
-        for _ in self.SECTIONS:
+        container = discord.ui.Container()
+        container.add_item(
+            discord.ui.TextDisplay(
+                "## Server Settings\n"
+                "Pick a section to configure. Changes inside each section save immediately."
+            )
+        )
+        container.add_item(discord.ui.Separator())
+        for name, description in self.SECTIONS:
             button = discord.ui.Button(label="Open", style=discord.ButtonStyle.primary)
             button.callback = self.placeholder
-            self.add_item(button)
+            container.add_item(
+                discord.ui.Section(
+                    f"**{name}**\n{description}",
+                    accessory=button,
+                )
+            )
+        container.add_item(discord.ui.Separator())
+        container.add_item(
+            discord.ui.TextDisplay(
+                "Server settings are kept for this server's setup."
+            )
+        )
+        self.add_item(container)
 
     async def placeholder(self, interaction: discord.Interaction):
         await interaction.response.defer()
-
-    @staticmethod
-    def build_embed() -> discord.Embed:
-        embed = discord.Embed(
-            title="Server Settings",
-            description=(
-                "Pick a section to configure. Changes inside each section "
-                "save immediately.\n\n"
-                + "\n".join(f"**{name}**\n{text}\n" for name, text in ServerSettingsView.SECTIONS)
-            ),
-        )
-        embed.set_footer(text="Server settings are kept for this server's setup.")
-        return embed
 
 
 class GrabReservesView(discord.ui.View):
@@ -1982,10 +1989,7 @@ class PokéTwoNamingBot(commands.Cog):
     @commands.command(name="settings")
     async def settings(self, ctx):
         """Show the server settings menu."""
-        await ctx.send(
-            embed=ServerSettingsView.build_embed(),
-            view=ServerSettingsView(ctx.author.id),
-        )
+        await ctx.send(view=ServerSettingsView(ctx.author.id))
 
     def guild_categories(self, guild_id) -> dict:
         """Get categories for a guild."""
