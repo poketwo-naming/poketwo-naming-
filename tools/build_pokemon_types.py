@@ -59,7 +59,7 @@ CANONICAL_OVERRIDES = {
     "Oinkologne": "oinkologne-male",
     "Oricorio": "oricorio-baile",
     "Pa'u Oricorio": "oricorio-pau",
-    "Palafin": "palafin-zero",
+    "Palafin": "palafin-hero",
     "Pirouette Meloetta": "meloetta-pirouette",
     "Pom-pom Oricorio": "oricorio-pom-pom",
     "Pumpkaboo": "pumpkaboo-average",
