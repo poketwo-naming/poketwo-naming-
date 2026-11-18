@@ -413,6 +413,60 @@ class HelpPagesView(discord.ui.View):
         )
 
 
+class ReserveListView(discord.ui.View):
+    """Paginate a server or member reserve list."""
+
+    def __init__(self, author_id: int, pages: list[discord.Embed]):
+        super().__init__(timeout=180)
+        self.author_id = author_id
+        self.pages = pages
+        self.page = 0
+        self.refresh_buttons()
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id == self.author_id:
+            return True
+        await interaction.response.send_message(
+            "Only the person who opened this reserve list can change pages.",
+            ephemeral=True,
+        )
+        return False
+
+    def refresh_buttons(self):
+        self.previous_button.disabled = len(self.pages) < 2 or self.page == 0
+        self.next_button.disabled = (
+            len(self.pages) < 2 or self.page == len(self.pages) - 1
+        )
+
+    @discord.ui.button(label="Previous", style=discord.ButtonStyle.secondary)
+    async def previous_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ):
+        del button
+        self.page = max(0, self.page - 1)
+        self.refresh_buttons()
+        await interaction.response.edit_message(
+            embed=self.pages[self.page],
+            view=self,
+        )
+
+    @discord.ui.button(label="Next", style=discord.ButtonStyle.primary)
+    async def next_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ):
+        del button
+        self.page = min(len(self.pages) - 1, self.page + 1)
+        self.refresh_buttons()
+        await interaction.response.edit_message(
+            embed=self.pages[self.page],
+            view=self,
+        )
+
+
 class ClearReservesView(discord.ui.View):
     """Confirm clearing every reservation in one server."""
 
@@ -2074,7 +2128,7 @@ class PokéTwoNamingBot(commands.Cog):
             else f"{ctx.guild.name} Pokémon Reserves"
         )
         embeds = []
-        chunk_size = 45
+        chunk_size = 20
         for start in range(0, len(lines), chunk_size):
             description = "\n".join(lines[start : start + chunk_size])
             embeds.append(
@@ -2089,8 +2143,10 @@ class PokéTwoNamingBot(commands.Cog):
                     )
                 )
             )
-        for embed_chunk in range(0, len(embeds), 10):
-            await ctx.send(embeds=embeds[embed_chunk : embed_chunk + 10])
+        await ctx.send(
+            embed=embeds[0],
+            view=ReserveListView(ctx.author.id, embeds),
+        )
 
     async def clear_reserves(self, ctx):
         """Clear every reservation in the current server after confirmation."""
