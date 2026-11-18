@@ -1091,17 +1091,36 @@ class PokéTwoNamingBot(commands.Cog):
 
     def load_bot_state(self):
         """Load persistent restricted roles and paused channel overwrites."""
+        default_state = {
+            "restricted_roles": {},
+            "paused_channels": {},
+            "reserves": {},
+            "active_incenses": {},
+            "shiny_hunts": {},
+            "collections": {},
+        }
         if not os.path.exists(BOT_STATE_FILE):
-            return {
-                "restricted_roles": {},
-                "paused_channels": {},
-                "reserves": {},
-                "active_incenses": {},
-                "shiny_hunts": {},
-                "collections": {},
-            }
-        with open(BOT_STATE_FILE, "r", encoding="utf-8") as f:
-            state = json.load(f)
+            return default_state
+        try:
+            with open(BOT_STATE_FILE, "r", encoding="utf-8") as f:
+                state = json.load(f)
+            if not isinstance(state, dict):
+                raise ValueError("bot state must be a JSON object")
+        except (json.JSONDecodeError, OSError, ValueError) as error:
+            backup_path = f"{BOT_STATE_FILE}.corrupt"
+            try:
+                with open(BOT_STATE_FILE, "rb") as source, open(
+                    backup_path,
+                    "wb",
+                ) as backup:
+                    backup.write(source.read())
+            except OSError as backup_error:
+                print(f"Could not back up corrupt bot state: {backup_error}")
+            print(
+                f"Recovered corrupt bot state file ({error}); "
+                f"backup: {backup_path}"
+            )
+            state = default_state
         state.setdefault("restricted_roles", {})
         state.setdefault("paused_channels", {})
         state.setdefault("reserves", {})
@@ -1111,9 +1130,16 @@ class PokéTwoNamingBot(commands.Cog):
         return state
 
     def save_bot_state(self):
-        """Persist configuration needed to resume paused channels safely."""
-        with open(BOT_STATE_FILE, "w", encoding="utf-8") as f:
+        """Persist state atomically so interruptions cannot leave empty JSON."""
+        directory = os.path.dirname(BOT_STATE_FILE)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        temporary_file = f"{BOT_STATE_FILE}.tmp"
+        with open(temporary_file, "w", encoding="utf-8") as f:
             json.dump(self.bot_state, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary_file, BOT_STATE_FILE)
 
     def load_premium_servers(self):
         """Load persistent server tier assignments."""
