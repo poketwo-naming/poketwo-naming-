@@ -2,6 +2,7 @@
 Pokétwo Naming Bot - Main entry point
 """
 import os
+import re
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -45,6 +46,27 @@ async def on_ready():
 async def on_message(message):
     """Handle incoming messages"""
     if message.author == bot.user:
+        return
+    reserve_list_match = re.fullmatch(
+        r"\s*[vV]!(?:r|reserve)\s+list(?:\s+(.+?))?\s*",
+        message.content,
+    )
+    if reserve_list_match:
+        ctx = await bot.get_context(message)
+        cog = bot.get_cog("PokéTwoNamingBot")
+        if cog is None:
+            await message.channel.send(
+                "❌ Reserve list handler is not loaded. Restart the bot."
+            )
+            return
+        print(
+            "Direct reserve-list route: "
+            f"content={message.content!r} user={reserve_list_match.group(1)!r}"
+        )
+        await cog.show_reserve_list(
+            ctx,
+            reserve_list_match.group(1) or "",
+        )
         return
     await bot.process_commands(message)
 

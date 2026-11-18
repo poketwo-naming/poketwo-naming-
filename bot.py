@@ -2051,8 +2051,17 @@ class PokéTwoNamingBot(commands.Cog):
             key=lambda reserve: reserve[0].casefold(),
         )
         if not filtered:
-            target = f" for {member.mention}" if member else ""
-            await ctx.send(f"No Pokémon are currently reserved{target}.")
+            target = f" for {member.display_name}" if member else ""
+            empty_embed = discord.Embed(
+                title=(
+                    f"{member.display_name}'s Pokémon Reserves"
+                    if member
+                    else f"{ctx.guild.name} Pokémon Reserves"
+                ),
+                description=f"No Pokémon are currently reserved{target}.",
+                color=discord.Color.purple(),
+            )
+            await ctx.send(embed=empty_embed)
             return
 
         lines = [
