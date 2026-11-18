@@ -559,6 +559,28 @@ class PokéTwoNamingBot(commands.Cog):
             return str(referenced.author.id)
         return None
 
+    def remember_poketwo_shiny_request(self, message) -> bool:
+        """Remember who requested a Pokétwo shiny-hunt status in this channel."""
+        normalized = (message.content or "").casefold()
+        commands = (
+            r"\bsh\b",
+            r"\bshinyhunt\b",
+            r"\bshiny[\s-]?hunt\b",
+            r"<@!?" + str(POKETWO_BOT_ID) + r">\s*(?:sh|shinyhunt)\b",
+            r"\bcatch\b",
+        )
+        if not any(re.search(pattern, normalized) for pattern in commands):
+            return False
+        self.pending_shiny_status_requests[int(message.channel.id)] = (
+            int(message.author.id),
+            time(),
+        )
+        print(
+            "Pokétwo shiny-chain request recorded: "
+            f"channel={message.channel.id} user={message.author.id}"
+        )
+        return True
+
     def track_poketwo_catch(self, message) -> None:
         """Update shiny-hunt chains from a Pokétwo catch result."""
         if not message.guild:
@@ -684,9 +706,17 @@ class PokéTwoNamingBot(commands.Cog):
 
         pokemon_name = self.resolve_pokemon_name(pokemon_input)
         if pokemon_name is None:
+            print(
+                "Could not resolve Pokémon from Pokétwo shiny-hunt status: "
+                f"{pokemon_input!r}"
+            )
             return
         user_id = self.command_user_id(message)
         if user_id is None:
+            print(
+                "Could not associate Pokétwo shiny-hunt status with a user: "
+                f"channel={message.channel.id}"
+            )
             return
 
         guild_hunts = self.bot_state["shiny_hunts"].setdefault(
@@ -699,6 +729,10 @@ class PokéTwoNamingBot(commands.Cog):
         }
         self.save_bot_state()
         self.pending_shiny_status_requests.pop(int(message.channel.id), None)
+        print(
+            "Pokétwo shiny chain synchronized: "
+            f"user={user_id} pokemon={pokemon_name} chain={chain}"
+        )
 
     def load_pokemon_best_names(self):
         """Load and validate the shortest localized name for each model class."""
@@ -991,18 +1025,8 @@ class PokéTwoNamingBot(commands.Cog):
         # Ignore bot's own messages
         if message.author.id == self.bot.user.id:
             return
-        if (
-            message.guild
-            and re.search(
-                r"(?:^|\s)(?:<@!?716390085896962058>\s*)?(?:sh|shinyhunt|catch)(?:\s|$)",
-                message.content.lower(),
-                re.IGNORECASE,
-            )
-        ):
-            self.pending_shiny_status_requests[int(message.channel.id)] = (
-                int(message.author.id),
-                time(),
-            )
+        if message.guild and message.author.id != POKETWO_BOT_ID:
+            self.remember_poketwo_shiny_request(message)
 
         # Check if message is from Pokétwo bot
         if message.author.id == POKETWO_BOT_ID:
