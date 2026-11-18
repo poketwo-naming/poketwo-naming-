@@ -411,6 +411,7 @@ class PokéTwoNamingBot(commands.Cog):
         self.recognized_spawn_count = 0
         self.recent_spawn_times = {}
         self.pending_shiny_status_requests = {}
+        self.processed_shiny_catches = deque(maxlen=1000)
         self.class_names = {name.casefold(): name for name in self.recognizer.classes}
         self.pokemon_types = self.load_pokemon_types()
         self.pokemon_best_names = self.load_pokemon_best_names()
@@ -519,6 +520,29 @@ class PokéTwoNamingBot(commands.Cog):
             if hunt.get("pokemon") == pokemon_name
         ]
 
+    def command_user_id(self, message) -> str | None:
+        """Resolve the user who invoked a Pokétwo command response."""
+        interaction = getattr(message, "interaction_metadata", None) or getattr(
+            message,
+            "interaction",
+            None,
+        )
+        interaction_user = getattr(interaction, "user", None)
+        if interaction_user is not None:
+            return str(interaction_user.id)
+
+        pending = self.pending_shiny_status_requests.get(int(message.channel.id))
+        if pending and pending[1] >= time() - 30:
+            return str(pending[0])
+
+        if len(message.mentions) == 1:
+            return str(message.mentions[0].id)
+        reference = getattr(message, "reference", None)
+        referenced = reference.resolved if reference else None
+        if referenced and referenced.author.id != POKETWO_BOT_ID:
+            return str(referenced.author.id)
+        return None
+
     def track_poketwo_catch(self, message) -> None:
         """Update shiny-hunt chains from a Pokétwo catch result."""
         if not message.guild:
@@ -542,41 +566,45 @@ class PokéTwoNamingBot(commands.Cog):
             re.IGNORECASE,
         ):
             return
-
-        mentioned_user_ids = {str(user.id) for user in message.mentions}
-        if not mentioned_user_ids:
-            mentioned_user_ids = {
+        message_id = int(message.id)
+        if message_id in self.processed_shiny_catches:
+            return
+        user_id = self.command_user_id(message)
+        if user_id is None:
+            mention_ids = {
                 str(match)
                 for match in re.findall(r"<@!?(\d+)>", text)
             }
+            if len(mention_ids) == 1:
+                user_id = next(iter(mention_ids))
+        if user_id is None:
+            return
+        self.processed_shiny_catches.append(message_id)
+        self.pending_shiny_status_requests.pop(int(message.channel.id), None)
         guild_hunts = self.bot_state["shiny_hunts"].get(
             str(message.guild.id),
             {},
         )
-        changed = False
-        for user_id in mentioned_user_ids:
-            hunt = guild_hunts.get(user_id)
-            if not hunt:
-                continue
-            hunted_name = str(hunt.get("pokemon", ""))
-            reported_chain = re.search(
-                r"\b(?:shiny\s+)?chain\s*(?:[:=]|is|to)?\s*(\d+)\b",
-                text,
-                re.IGNORECASE,
-            )
-            if reported_chain:
-                hunt["chain"] = int(reported_chain.group(1))
-            elif re.search(
-                rf"(?<![\w'-]){re.escape(hunted_name)}(?![\w'-])",
-                text,
-                re.IGNORECASE,
-            ):
-                hunt["chain"] = int(hunt.get("chain", 0)) + 1
-            else:
-                hunt["chain"] = 0
-            changed = True
-        if changed:
-            self.save_bot_state()
+        hunt = guild_hunts.get(user_id)
+        if not hunt:
+            return
+        hunted_name = str(hunt.get("pokemon", ""))
+        reported_chain = re.search(
+            r"\b(?:shiny\s+)?chain\s*(?:[:=]|is|to)?\s*(\d+)\b",
+            text,
+            re.IGNORECASE,
+        )
+        if reported_chain:
+            hunt["chain"] = int(reported_chain.group(1))
+        elif re.search(
+            rf"(?<![\w'-]){re.escape(hunted_name)}(?![\w'-])",
+            text,
+            re.IGNORECASE,
+        ):
+            hunt["chain"] = int(hunt.get("chain", 0)) + 1
+        else:
+            hunt["chain"] = 0
+        self.save_bot_state()
 
     def track_poketwo_shiny_hunt(self, message) -> None:
         """Sync a member's hunt from Pokétwo's shiny-hunt status embed."""
@@ -615,27 +643,7 @@ class PokéTwoNamingBot(commands.Cog):
         pokemon_name = self.resolve_pokemon_name(pokemon_input)
         if pokemon_name is None:
             return
-        user_id = None
-        interaction = getattr(message, "interaction_metadata", None) or getattr(
-            message,
-            "interaction",
-            None,
-        )
-        interaction_user = getattr(interaction, "user", None)
-        if interaction_user is not None:
-            user_id = str(interaction_user.id)
-        pending = self.pending_shiny_status_requests.pop(
-            int(message.channel.id),
-            None,
-        )
-        if pending and pending[1] >= time() - 30:
-            user_id = str(pending[0])
-        if user_id is None and len(message.mentions) == 1:
-            user_id = str(message.mentions[0].id)
-        if user_id is None and message.reference:
-            referenced = message.reference.resolved
-            if referenced and referenced.author.id != POKETWO_BOT_ID:
-                user_id = str(referenced.author.id)
+        user_id = self.command_user_id(message)
         if user_id is None:
             return
 
@@ -648,6 +656,7 @@ class PokéTwoNamingBot(commands.Cog):
             "chain": chain,
         }
         self.save_bot_state()
+        self.pending_shiny_status_requests.pop(int(message.channel.id), None)
 
     def load_pokemon_best_names(self):
         """Load and validate the shortest localized name for each model class."""
@@ -943,7 +952,11 @@ class PokéTwoNamingBot(commands.Cog):
         if (
             message.guild
             and any(user.id == POKETWO_BOT_ID for user in message.mentions)
-            and re.search(r"\b(?:sh|shinyhunt)\b", message.content, re.IGNORECASE)
+            and re.search(
+                r"\b(?:sh|shinyhunt|catch)\b",
+                message.content,
+                re.IGNORECASE,
+            )
         ):
             self.pending_shiny_status_requests[int(message.channel.id)] = (
                 int(message.author.id),
@@ -952,11 +965,11 @@ class PokéTwoNamingBot(commands.Cog):
 
         # Check if message is from Pokétwo bot
         if message.author.id == POKETWO_BOT_ID:
-            if message.guild and self.premium_tier(message.guild.id) is None:
-                return
             self.track_incense(message)
             self.track_poketwo_shiny_hunt(message)
             self.track_poketwo_catch(message)
+            if message.guild and self.premium_tier(message.guild.id) is None:
+                return
             if self.is_spawn_message(message) and self.channel_within_incense_capacity(
                 message
             ):
@@ -971,7 +984,6 @@ class PokéTwoNamingBot(commands.Cog):
         if after.author.id == POKETWO_BOT_ID:
             self.track_incense(after)
             self.track_poketwo_shiny_hunt(after)
-            self.track_poketwo_catch(after)
 
     @staticmethod
     def is_spawn_message(message) -> bool:
