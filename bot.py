@@ -69,8 +69,8 @@ COMMAND_CATALOG = (
     ),
     (
         "Reservations",
-        "v!r add <pokemon> <@user>",
-        "Reserves a Pokémon for a member. Restricted.",
+        "v!r add [all] <pokemon> <@user>",
+        "Reserves one Pokémon, or all matching forms, for a member. Restricted.",
     ),
     (
         "Reservations",
@@ -453,6 +453,22 @@ class PokéTwoNamingBot(commands.Cog):
         if canonical is not None:
             return canonical
         return self.pokemon_aliases.get(normalize_pokemon_alias(stripped))
+
+    def resolve_pokemon_family(self, name: str) -> list[str]:
+        """Resolve every trained class belonging to a Pokémon family."""
+        canonical = self.resolve_pokemon_name(name)
+        if canonical is None:
+            return []
+        family_matches = []
+        canonical_normalized = normalize_pokemon_alias(canonical)
+        for class_name in self.class_names.values():
+            class_normalized = normalize_pokemon_alias(class_name)
+            if (
+                canonical_normalized in class_normalized
+                or class_name == canonical
+            ):
+                family_matches.append(class_name)
+        return sorted(set(family_matches), key=str.casefold)
 
     def format_spawn_prediction(
         self,
@@ -1239,6 +1255,9 @@ class PokéTwoNamingBot(commands.Cog):
             await ctx.send("Usage: `v!r add <pokémon name> <@user>`")
             return
         pokemon_input = entry[: match.start()].strip()
+        reserve_all = pokemon_input.casefold().startswith("all ")
+        if reserve_all:
+            pokemon_input = pokemon_input[4:].strip()
         user_id = int(match.group(1))
         member = ctx.guild.get_member(user_id)
         if member is None:
@@ -1249,8 +1268,12 @@ class PokéTwoNamingBot(commands.Cog):
         if member is None:
             await ctx.send("❌ That user is not in this server.")
             return
-        pokemon_name = self.resolve_pokemon_name(pokemon_input)
-        if pokemon_name is None:
+        if reserve_all:
+            pokemon_names = self.resolve_pokemon_family(pokemon_input)
+        else:
+            pokemon_name = self.resolve_pokemon_name(pokemon_input)
+            pokemon_names = [pokemon_name] if pokemon_name else []
+        if not pokemon_names:
             await ctx.send(f"❌ Unknown Pokémon: `{pokemon_input}`")
             return
 
@@ -1258,11 +1281,18 @@ class PokéTwoNamingBot(commands.Cog):
             str(ctx.guild.id),
             {},
         )
-        guild_reserves[str(pokemon_name)] = str(member.id)
+        for pokemon_name in pokemon_names:
+            guild_reserves[str(pokemon_name)] = str(member.id)
         self.save_bot_state()
-        await ctx.send(
-            f"✅ Reserved **{pokemon_name}** for {member.mention}."
-        )
+        if reserve_all:
+            await ctx.send(
+                f"✅ Reserved all **{len(pokemon_names)} {pokemon_input} forms** "
+                f"for {member.mention}."
+            )
+        else:
+            await ctx.send(
+                f"✅ Reserved **{pokemon_names[0]}** for {member.mention}."
+            )
 
     @resume_or_reserve.command(name="remove")
     async def remove_reserve(self, ctx, *, entry: str):
