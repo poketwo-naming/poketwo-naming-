@@ -9,6 +9,7 @@ import json
 import os
 import re
 from time import perf_counter, time
+from typing import cast
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import aiohttp
@@ -2267,7 +2268,7 @@ class PokéTwoNamingBot(commands.Cog):
             f"✨ Added to your shinyhunt: **{resolved_name}**."
         )
 
-    @shiny_hunt.command(name="clear")
+    @cast(commands.Group, shiny_hunt).command(name="clear")
     async def clear_shiny_hunt(self, ctx):
         """Clear the caller's current shiny hunt."""
         if ctx.guild is None:
