@@ -1826,7 +1826,7 @@ class PokéTwoNamingBot(commands.Cog):
             ).get(str(ctx.author.id))
             if hunt:
                 await ctx.send(
-                    f"✨ Shiny hunting **{hunt.get('pokemon')}**."
+                    f"✨ Added to your shinyhunt: **{hunt.get('pokemon')}**."
                 )
             else:
                 await ctx.send("You are not currently shiny hunting a Pokémon.")
@@ -1842,7 +1842,7 @@ class PokéTwoNamingBot(commands.Cog):
         ).get(str(ctx.author.id))
         if hunt and hunt.get("pokemon") == resolved_name:
             await ctx.send(
-                f"You are already shiny hunting **{resolved_name}**."
+                f"Already in your shinyhunt: **{resolved_name}**."
             )
             return
         if hunt:
@@ -1868,7 +1868,7 @@ class PokéTwoNamingBot(commands.Cog):
             str(resolved_name),
         )
         await ctx.send(
-            f"✨ Shiny hunting **{resolved_name}**."
+            f"✨ Added to your shinyhunt: **{resolved_name}**."
         )
 
     @shiny_hunt.command(name="clear")
@@ -2017,16 +2017,16 @@ class PokéTwoNamingBot(commands.Cog):
         self.save_bot_state()
         if len(pokemon_names) == 1:
             await ctx.send(
-                f"✅ Reserved **{pokemon_names[0]}** for {member.mention}."
+                f"✅ Added to reserve: **{pokemon_names[0]}** for {member.mention}."
             )
         else:
             added_lines = "\n".join(
-                f"✅ Reserved **{pokemon_name}** for {member.mention}."
+                f"✅ Added to reserve: **{pokemon_name}** for {member.mention}."
                 for pokemon_name in pokemon_names
             )
             await ctx.send(
                 added_lines
-                + f"\n\n✅ Added **{len(pokemon_names)} Pokémon** successfully."
+                + f"\n\n✅ Added **{len(pokemon_names)} Pokémon** to reserve."
             )
 
     async def remove_reserve(self, ctx, *, entry: str):
@@ -2242,8 +2242,7 @@ class PokéTwoNamingBot(commands.Cog):
         collection.extend(added)
         self.save_bot_state()
         await ctx.send(
-            f"✅ Added **{len(added)}** Pokémon to your collection: "
-            + ", ".join(added)
+            f"✅ Added to your collection: {', '.join(added)}."
         )
 
     @collection.command(name="remove")
