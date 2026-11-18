@@ -2017,11 +2017,11 @@ class PokéTwoNamingBot(commands.Cog):
         self.save_bot_state()
         if len(pokemon_names) == 1:
             await ctx.send(
-                f"✅ Added to reserve: **{pokemon_names[0]}** for {member.mention}."
+                f"✅ Added to your reserve: **{pokemon_names[0]}** for {member.mention}."
             )
         else:
             added_lines = "\n".join(
-                f"✅ Added to reserve: **{pokemon_name}** for {member.mention}."
+                f"✅ Added to your reserve: **{pokemon_name}** for {member.mention}."
                 for pokemon_name in pokemon_names
             )
             await ctx.send(
@@ -2299,21 +2299,24 @@ class PokéTwoNamingBot(commands.Cog):
             return
         lines = [f"• {pokemon_name}" for pokemon_name in collection]
         embeds = []
-        for start in range(0, len(lines), 45):
+        chunk_size = 20
+        for start in range(0, len(lines), chunk_size):
             embeds.append(
                 discord.Embed(
                     title=f"{ctx.author.display_name}'s Collection",
-                    description="\n".join(lines[start : start + 45]),
+                    description="\n".join(lines[start : start + chunk_size]),
                     color=discord.Color.blue(),
                 ).set_footer(
                     text=(
-                        f"{start + 1}-{min(start + 45, len(lines))} "
+                        f"{start + 1}-{min(start + chunk_size, len(lines))} "
                         f"of {len(lines)} Pokémon"
                     )
                 )
             )
-        for chunk_start in range(0, len(embeds), 10):
-            await ctx.send(embeds=embeds[chunk_start : chunk_start + 10])
+        await ctx.send(
+            embed=embeds[0],
+            view=ReserveListView(ctx.author.id, embeds),
+        )
 
     @collection.command(name="clear")
     async def clear_collection(self, ctx):
