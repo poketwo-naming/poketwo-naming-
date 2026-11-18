@@ -2020,14 +2020,24 @@ class PokéTwoNamingBot(commands.Cog):
                 f"✅ Added to your reserve: **{pokemon_names[0]}** for {member.mention}."
             )
         else:
-            added_lines = "\n".join(
+            added_lines = [
                 f"✅ Added to your reserve: **{pokemon_name}** for {member.mention}."
                 for pokemon_name in pokemon_names
-            )
-            await ctx.send(
-                added_lines
-                + f"\n\n✅ Added **{len(pokemon_names)} Pokémon** to reserve."
-            )
+            ]
+            batch = []
+            batch_length = 0
+            for line in added_lines:
+                if batch and batch_length + len(line) + 1 > 1800:
+                    await ctx.send("\n".join(batch))
+                    batch = []
+                    batch_length = 0
+                batch.append(line)
+                batch_length += len(line) + 1
+            if batch:
+                await ctx.send(
+                    "\n".join(batch)
+                    + f"\n\n✅ Added **{len(pokemon_names)} Pokémon** to reserve."
+                )
 
     async def remove_reserve(self, ctx, *, entry: str):
         """Remove a server Pokémon reservation. Restricted command."""
