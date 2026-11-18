@@ -75,6 +75,16 @@ COMMAND_CATALOG = (
         "Asks for confirmation before clearing every server reservation. Restricted.",
     ),
     (
+        "Reservations",
+        "v!grab",
+        "Replies to a reserve list with sorting, form, copy, and reserve controls.",
+    ),
+    (
+        "Reservations",
+        "h!grab",
+        "Uses the grab UI and delegates each reserve through h!r before v!r.",
+    ),
+    (
         "Shiny Hunts",
         "v!sh [pokemon]",
         "Starts/switches a hunt, or shows your current Pokémon.",
@@ -465,6 +475,268 @@ class ClearReservesView(discord.ui.View):
         )
 
 
+class GrabReservesView(discord.ui.View):
+    """Preview and confirm reservations parsed from a replied list."""
+
+    def __init__(
+        self,
+        cog,
+        author_id: int,
+        channel_id: int,
+        entries: list[tuple[str, str]],
+        h_mode: bool = False,
+    ):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.author_id = author_id
+        self.channel_id = channel_id
+        self.entries = entries
+        self.h_mode = h_mode
+        self.alphabetical = False
+        self.all_forms = False
+        self.custom_emoji = False
+        self.processing = False
+        self.refresh_button_labels()
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id == self.author_id:
+            return True
+        await interaction.response.send_message(
+            "Only the person who ran grab can use these controls.",
+            ephemeral=True,
+        )
+        return False
+
+    def expanded_entries(self) -> list[tuple[str, str]]:
+        entries = []
+        for user_id, pokemon_name in self.entries:
+            names = (
+                self.cog.resolve_pokemon_family(pokemon_name)
+                if self.all_forms
+                else [pokemon_name]
+            )
+            entries.extend((user_id, str(name)) for name in names)
+        if self.alphabetical:
+            entries.sort(key=lambda entry: (entry[1].casefold(), entry[0]))
+        return entries
+
+    def format_line(self, user_id: str, pokemon_name: str) -> str:
+        prefix = ""
+        if self.custom_emoji:
+            prefix = "".join(
+                TYPE_EMOJIS[pokemon_type]
+                for pokemon_type in self.cog.pokemon_types[pokemon_name]
+            )
+        return f"{prefix}{pokemon_name} — <@{user_id}>"
+
+    def copy_text(self) -> str:
+        return "\n".join(
+            self.format_line(user_id, pokemon_name)
+            for user_id, pokemon_name in self.expanded_entries()
+        )
+
+    def build_embed(self) -> discord.Embed:
+        entries = self.expanded_entries()
+        description = "\n".join(
+            self.format_line(user_id, pokemon_name)
+            for user_id, pokemon_name in entries[:50]
+        )
+        if len(entries) > 50:
+            description += f"\n…and {len(entries) - 50} more"
+        return discord.Embed(
+            title="Grabbed Reserve List",
+            description=description or "No valid entries.",
+            color=discord.Color.purple(),
+        ).set_footer(
+            text=(
+                f"{len(entries)} reserve(s) • "
+                f"{'Alphabetical' if self.alphabetical else 'Original order'} • "
+                f"{'All forms on' if self.all_forms else 'All forms off'}"
+            )
+        )
+
+    def refresh_button_labels(self):
+        self.order_button.label = "Original" if self.alphabetical else "Alphabetical"
+        self.forms_button.label = (
+            "All forms on" if self.all_forms else "All forms off"
+        )
+        self.emoji_button.label = (
+            "Hide custom emoji" if self.custom_emoji else "Custom emoji"
+        )
+
+    async def redraw(self, interaction: discord.Interaction):
+        self.refresh_button_labels()
+        await interaction.response.edit_message(
+            embed=self.build_embed(),
+            view=self,
+        )
+
+    @discord.ui.button(label="Order", style=discord.ButtonStyle.secondary)
+    async def order_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ):
+        del button
+        self.alphabetical = not self.alphabetical
+        await self.redraw(interaction)
+
+    @discord.ui.button(label="All forms off", style=discord.ButtonStyle.secondary)
+    async def forms_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ):
+        del button
+        self.all_forms = not self.all_forms
+        await self.redraw(interaction)
+
+    @discord.ui.button(label="Custom emoji", style=discord.ButtonStyle.secondary)
+    async def emoji_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ):
+        del button
+        self.custom_emoji = not self.custom_emoji
+        await self.redraw(interaction)
+
+    @discord.ui.button(label="Copy", style=discord.ButtonStyle.secondary)
+    async def copy_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ):
+        del button
+        text = self.copy_text()
+        await interaction.response.send_message(
+            f"```text\n{text[:1900]}\n```",
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="Add reserves", style=discord.ButtonStyle.primary)
+    async def add_reserves_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ):
+        del button
+        if self.processing:
+            await interaction.response.send_message(
+                "Reservations are already being added.",
+                ephemeral=True,
+            )
+            return
+        if not interaction.guild or not self.cog.has_restricted_interaction_permission(
+            interaction
+        ):
+            await interaction.response.send_message(
+                "You do not have permission to add reserves.",
+                ephemeral=True,
+            )
+            return
+        self.processing = True
+        entries = self.expanded_entries()
+        preview = "\n".join(
+            f"{pokemon_name} — <@{user_id}>"
+            for user_id, pokemon_name in entries[:25]
+        )
+        if len(entries) > 25:
+            preview += f"\n…and {len(entries) - 25} more"
+        await interaction.response.edit_message(
+            embed=discord.Embed(
+                title="Add reserves?",
+                description=preview,
+                color=discord.Color.orange(),
+            ),
+            view=GrabConfirmView(
+                self.cog,
+                self.author_id,
+                self.channel_id,
+                entries,
+                self.h_mode,
+            ),
+        )
+
+
+class GrabConfirmView(discord.ui.View):
+    """Confirm a parsed reserve batch."""
+
+    def __init__(
+        self,
+        cog,
+        author_id: int,
+        channel_id: int,
+        entries: list[tuple[str, str]],
+        h_mode: bool,
+    ):
+        super().__init__(timeout=120)
+        self.cog = cog
+        self.author_id = author_id
+        self.channel_id = channel_id
+        self.entries = entries
+        self.h_mode = h_mode
+        self.completed = False
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id == self.author_id:
+            return True
+        await interaction.response.send_message(
+            "Only the person who opened this confirmation can answer.",
+            ephemeral=True,
+        )
+        return False
+
+    @discord.ui.button(label="Yes", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button):
+        del button
+        if self.completed:
+            return
+        self.completed = True
+        await interaction.response.edit_message(
+            content="Adding reserves…",
+            embed=None,
+            view=None,
+        )
+        channel = interaction.channel
+        for user_id, pokemon_name in self.entries:
+            if self.h_mode:
+                await channel.send(f"h!r add {pokemon_name} <@{user_id}>")
+                try:
+                    await self.cog.bot.wait_for(
+                        "message",
+                        check=lambda response: (
+                            response.channel.id == self.channel_id
+                            and response.author.bot
+                            and response.author.id != self.cog.bot.user.id
+                        ),
+                        timeout=5,
+                    )
+                except TimeoutError:
+                    pass
+            await self.cog.add_reserve_direct(
+                interaction.guild,
+                pokemon_name,
+                user_id,
+            )
+            await channel.send(
+                f"v!r add {pokemon_name} <@{user_id}>"
+                f"\nReserve **{pokemon_name}** added to <@{user_id}>."
+            )
+
+    @discord.ui.button(label="No", style=discord.ButtonStyle.danger)
+    async def cancel(self, interaction: discord.Interaction, button):
+        del button
+        if self.completed:
+            return
+        self.completed = True
+        await interaction.response.edit_message(
+            content="Reserve import cancelled.",
+            embed=None,
+            view=None,
+        )
+
+
 class PokéTwoNamingBot(commands.Cog):
     """Pokétwo naming bot cog with commands for naming Pokémon"""
 
@@ -758,6 +1030,136 @@ class PokéTwoNamingBot(commands.Cog):
         role_id = self.bot_state["restricted_roles"].get(str(ctx.guild.id))
         return bool(role_id and ctx.author.get_role(int(role_id)))
 
+    def has_restricted_interaction_permission(
+        self,
+        interaction: discord.Interaction,
+    ) -> bool:
+        """Check restricted access for a button interaction."""
+        guild = interaction.guild
+        member = interaction.user
+        if guild is None or not isinstance(member, discord.Member):
+            return False
+        if (
+            member.id == guild.owner_id
+            or member.guild_permissions.administrator
+            or member.guild_permissions.manage_guild
+        ):
+            return True
+        role_id = self.bot_state["restricted_roles"].get(str(guild.id))
+        return bool(role_id and member.get_role(int(role_id)))
+
+    def pokemon_from_grab_tail(self, text: str) -> str | None:
+        """Resolve the Pokémon at the end of one user list segment."""
+        cleaned = re.sub(
+            r"<a?:[^:>]+:\d+>",
+            "",
+            text,
+        )
+        chunks = re.split(r"\s*(?:\||—|–|\n|;| - )\s*", cleaned)
+        for chunk in reversed(chunks):
+            value = re.sub(r"^[\s:*\-–—]+|[\s*_.,!]+$", "", chunk).strip()
+            if not value:
+                continue
+            pokemon_name = self.resolve_pokemon_name(value)
+            if pokemon_name:
+                return pokemon_name
+            normalized = normalize_pokemon_alias(value)
+            ending_matches = [
+                (len(alias), class_name)
+                for alias, class_name in self.pokemon_aliases.items()
+                if alias and normalized.endswith(alias)
+            ]
+            if ending_matches:
+                return max(ending_matches, key=lambda item: item[0])[1]
+        return None
+
+    def parse_grab_list(self, message) -> list[tuple[str, str]]:
+        """Parse user mentions and Pokémon names from a reserve-list message."""
+        text = message.content or ""
+        for embed in message.embeds:
+            text += "\n" + (embed.description or "")
+            for field in embed.fields:
+                text += f"\n{field.name}\n{field.value}"
+        mentions = list(re.finditer(r"<@!?(\d+)>", text))
+        entries = []
+        for index, mention in enumerate(mentions):
+            end = mentions[index + 1].start() if index + 1 < len(mentions) else len(text)
+            pokemon_name = self.pokemon_from_grab_tail(
+                text[mention.end() : end]
+            )
+            if pokemon_name:
+                entry = (mention.group(1), str(pokemon_name))
+                if entry not in entries:
+                    entries.append(entry)
+        return entries
+
+    async def referenced_grab_message(self, ctx):
+        """Return the list message referenced by a grab command."""
+        reference = ctx.message.reference
+        if reference is None:
+            return None
+        if reference.resolved is not None:
+            return reference.resolved
+        try:
+            return await ctx.channel.fetch_message(reference.message_id)
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            return None
+
+    async def grab_reserves(self, ctx, h_mode: bool = False):
+        """Show a parsed reserve list and batch reservation controls."""
+        if ctx.guild is None:
+            await ctx.send("This command can only be used inside a server.")
+            return
+        if not self.has_restricted_permission(ctx):
+            await ctx.send("❌ You do not have permission to grab reserves.")
+            return
+        source = await self.referenced_grab_message(ctx)
+        if source is None:
+            await ctx.send(
+                "❌ Reply to the reserve list message when using "
+                f"`{'h!grab' if h_mode else 'v!grab'}`."
+            )
+            return
+        entries = self.parse_grab_list(source)
+        if not entries:
+            await ctx.send(
+                "❌ This list doesn't work. I couldn't find any "
+                "`<@user> Pokémon` pairs."
+            )
+            return
+        view = GrabReservesView(
+            self,
+            ctx.author.id,
+            ctx.channel.id,
+            entries,
+            h_mode=h_mode,
+        )
+        await ctx.send(embed=view.build_embed(), view=view)
+
+    async def add_reserve_direct(
+        self,
+        guild: discord.Guild,
+        pokemon_name: str,
+        user_id: str,
+    ) -> bool:
+        """Add one reserve from a parsed grab entry."""
+        resolved_name = self.resolve_pokemon_name(pokemon_name)
+        if resolved_name is None:
+            return False
+        member = guild.get_member(int(user_id))
+        if member is None:
+            try:
+                member = await guild.fetch_member(int(user_id))
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                return False
+        guild_reserves = self.bot_state["reserves"].setdefault(
+            str(guild.id),
+            {},
+        )
+        guild_reserves[str(resolved_name)] = str(member.id)
+        self.save_bot_state()
+        return True
+
     def save_training_image(self, pokemon_name: str, image_data: bytes):
         """Save a reviewed image and track it for a later training export."""
         started = perf_counter()
@@ -886,6 +1288,10 @@ class PokéTwoNamingBot(commands.Cog):
         """Listen for Pokétwo spawn messages"""
         # Ignore bot's own messages
         if message.author.id == self.bot.user.id:
+            return
+        if re.fullmatch(r"[hH]!grab\s*", message.content):
+            ctx = await self.bot.get_context(message)
+            await self.grab_reserves(ctx, h_mode=True)
             return
         # Check if message is from Pokétwo bot
         if message.author.id == POKETWO_BOT_ID:
@@ -1503,6 +1909,11 @@ class PokéTwoNamingBot(commands.Cog):
                 ctx.author.id,
             ),
         )
+
+    @commands.command(name="grab")
+    async def grab_reserves_command(self, ctx):
+        """Import reservations from the replied-to user/Pokémon list."""
+        await self.grab_reserves(ctx, h_mode=False)
 
     @commands.group(name="cl", invoke_without_command=True)
     async def collection(self, ctx):

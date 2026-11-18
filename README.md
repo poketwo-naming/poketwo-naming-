@@ -24,7 +24,9 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 | `v!r remove <pokemon> [@user]` | `v!r remove Pikachu @user` | Remove a Pokémon reserve (restricted) |
 | `v!r list [@user]` | `v!r list @user` | List all server reserves or one member's reserves |
 | `v!r clear` | `v!r clear` | Confirm and clear all server reserves (restricted) |
-| `v!sh [pokemon]` | `v!sh Pikachu` | Start/switch a hunt, or show your current hunt and chain |
+| `v!grab` | Reply with `v!grab` | Preview and add reserves parsed from a list |
+| `h!grab` | Reply with `h!grab` | Delegate the same list through h!r, then v!r |
+| `v!sh [pokemon]` | `v!sh Pikachu` | Start/switch a hunt, or show your current hunt |
 | `v!sh clear` | `v!sh clear` | Clear your shiny hunt |
 | `v!cl add [all] <pokemon>` | `v!cl add all Arceus` | Add one Pokémon or all forms to your collection |
 | `v!cl remove <pokemon>` | `v!cl remove Fairy Arceus` | Remove one Pokémon from your collection |
