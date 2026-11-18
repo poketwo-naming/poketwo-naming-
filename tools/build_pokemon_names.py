@@ -31,6 +31,10 @@ CUSTOM_SPECIES = {
     "Rotom Pokédex": "rotom",
     "Smearguru": "smeargle",
 }
+CATCH_NAME_OVERRIDES = {
+    "Eevee": "ibui",
+}
+OFFICIAL_CATCH_LANGUAGE_IDS = {2, 5, 6, 7, 8, 9, 14}
 
 
 def romanized_name(name: str) -> str:
@@ -44,8 +48,7 @@ def shortest_name(names: list[str]) -> str:
         cleaned = name.strip()
         if not cleaned:
             continue
-        romanized = romanized_name(cleaned)
-        candidates.add(romanized)
+        candidates.add(cleaned)
     return min(candidates, key=lambda name: (len(name), name.casefold(), name))
 
 
@@ -56,9 +59,14 @@ def build_localized_data() -> tuple[dict[str, str], dict[str, str]]:
         for row in pokemon_rows
     }
     localized_species = {}
+    species_all_names = {}
     for row in download_csv("pokemon_species_names.csv"):
+        species_id = int(row["pokemon_species_id"])
+        species_all_names.setdefault(species_id, []).append(row["name"])
+        if int(row["local_language_id"]) not in OFFICIAL_CATCH_LANGUAGE_IDS:
+            continue
         localized_species.setdefault(
-            int(row["pokemon_species_id"]),
+            species_id,
             [],
         ).append(row["name"])
 
@@ -90,8 +98,11 @@ def build_localized_data() -> tuple[dict[str, str], dict[str, str]]:
         else:
             identifier = resolve_class_identifier(class_name, identifiers)
             species_id = identifier_to_species[identifier]
-            names = localized_species[species_id]
-            best_names[class_name] = best_by_species[species_id]
+            names = species_all_names[species_id]
+            best_names[class_name] = CATCH_NAME_OVERRIDES.get(
+                class_name,
+                best_by_species[species_id],
+            )
 
         names = list(
             dict.fromkeys(
