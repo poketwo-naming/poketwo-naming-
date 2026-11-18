@@ -66,9 +66,6 @@ If the bot responds with latency, you're good to go! 🎉
 
 ```
 v!help                 - Show all commands and explanations
-v!suggestname pikachu  - Get name suggestions
-v!savename 123 Sparky  - Save a name
-v!mynames              - View your saved names
 ```
 
 ## Troubleshooting

@@ -4,10 +4,6 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 
 ## Features
 
-- **Suggest Names** - Get creative name suggestions for any Pokémon
-- **Save Names** - Store nicknames for your Pokémon with IDs
-- **View Saved Names** - Display all your saved Pokémon nicknames
-- **Delete Names** - Remove nicknames from your collection
 - **Recognize Spawns** - Identify every Pokétwo spawn from its image and display confidence
 - **Type Icons** - Prefix each prediction with its primary and secondary type emojis
 - **Best Names** - Show the shortest localized name, romanized for nicknames
@@ -17,10 +13,6 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 
 | Command | Usage | Description |
 |---------|-------|-------------|
-| `v!suggestname <pokemon>` | `v!suggestname pikachu` | Get name suggestions for a Pokémon |
-| `v!savename <id> <nickname>` | `v!savename 12345 Sparky` | Save a nickname for your Pokémon |
-| `v!mynames` | `v!mynames` | View all your saved Pokémon names |
-| `v!deletename <id>` | `v!deletename 12345` | Delete a saved Pokémon name |
 | `v!ping` | `v!ping` | Check bot status and latency |
 | `v!api` | `v!api` | Display API and spawn-recognition performance |
 | `v!servers` | `v!servers` | List every connected Discord server and ID |
@@ -146,15 +138,6 @@ Pokétwo spawn
 Bot:
 Charizard 99.95%
 
-User: v!savename 54321 Inferno
-Bot: ✅ Name Saved!
-Pokémon 54321 is now named Inferno
-
-User: v!mynames
-Bot:
-👤 YourName's Pokémon Names
-ID: 54321
-Inferno
 ```
 
 ## Contributing

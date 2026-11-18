@@ -49,19 +49,6 @@ COMMAND_CATALOG = (
         "Shows global incense, recognition, inference, and response metrics.",
     ),
     ("Recognition", "v!servers", "Lists every server where the bot is connected."),
-    ("Naming", "v!suggestname <pokemon>", "Shows nickname suggestions for a Pokémon."),
-    (
-        "Naming",
-        "v!nameit <pokemon>",
-        "Shows a quick nickname suggestion for a Pokémon.",
-    ),
-    (
-        "Naming",
-        "v!savename <id> <nickname>",
-        "Saves a nickname for a Pokémon to your collection.",
-    ),
-    ("Naming", "v!mynames", "Lists your saved Pokémon nicknames."),
-    ("Naming", "v!deletename <id>", "Deletes a nickname from your collection."),
     (
         "Reservations",
         "v!r",
@@ -471,11 +458,10 @@ class PokéTwoNamingBot(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.names_file = "pokemon_names.json"
-        self.suggestions_file = "pokemon_suggestions.json"
         model_started = perf_counter()
         self.recognizer = PokemonImageRecognizer()
         self.model_load_seconds = perf_counter() - model_started
+        self.json_load_seconds = 0.0
         self.http_session = None
         self.spawn_response_times = deque(maxlen=100)
         self.inference_times = deque(maxlen=100)
@@ -498,8 +484,6 @@ class PokéTwoNamingBot(commands.Cog):
             "data/premium_servers.json",
         )
         self.premium_servers = self.load_premium_servers()
-        self.load_names()
-        self.load_suggestions()
 
     def load_pokemon_types(self):
         """Load and validate the type metadata for every model class."""
@@ -630,29 +614,6 @@ class PokéTwoNamingBot(commands.Cog):
         """Close shared HTTP resources."""
         if self.http_session is not None:
             await self.http_session.close()
-
-    def load_names(self):
-        """Load saved names from file"""
-        if os.path.exists(self.names_file):
-            with open(self.names_file, "r") as f:
-                self.names = json.load(f)
-        else:
-            self.names = {}
-
-    def save_names(self):
-        """Save names to file"""
-        with open(self.names_file, "w") as f:
-            json.dump(self.names, f, indent=2)
-
-    def load_suggestions(self):
-        """Load Pokémon suggestions from file"""
-        started = perf_counter()
-        if os.path.exists(self.suggestions_file):
-            with open(self.suggestions_file, "r") as f:
-                self.suggestions = json.load(f)
-        else:
-            self.suggestions = {}
-        self.json_load_seconds = perf_counter() - started
 
     def load_collected_training_count(self):
         """Return the number of feedback images collected for retraining."""
@@ -1668,90 +1629,6 @@ class PokéTwoNamingBot(commands.Cog):
             content=f"📦 {len(existing)} reviewed image(s) ready for retraining.",
             file=discord.File(archive, filename="new_training_images.zip"),
         )
-
-    @commands.command(name="suggestname")
-    async def suggest_name(self, ctx, pokemon_name: str):
-        """Suggest a name for a Pokémon"""
-        pokemon = pokemon_name.lower()
-        
-        if pokemon in self.suggestions:
-            suggestions = self.suggestions[pokemon]
-            embed = discord.Embed(
-                title=f"Name Suggestions for {pokemon_name}",
-                description="\n".join(f"• {name}" for name in suggestions),
-                color=discord.Color.gold()
-            )
-            await ctx.send(embed=embed)
-        else:
-            await ctx.send(f"❌ No suggestions found for {pokemon_name}. Try another Pokémon!")
-
-    @commands.command(name="savename")
-    async def save_name(self, ctx, pokemon_id: str, *, nickname: str):
-        """Save a nickname for your Pokémon"""
-        user_id = str(ctx.author.id)
-        
-        if user_id not in self.names:
-            self.names[user_id] = {}
-        
-        self.names[user_id][pokemon_id] = nickname
-        self.save_names()
-        
-        embed = discord.Embed(
-            title="✅ Name Saved!",
-            description=f"Pokémon **{pokemon_id}** is now named **{nickname}**",
-            color=discord.Color.green()
-        )
-        await ctx.send(embed=embed)
-
-    @commands.command(name="nameit")
-    async def name_it(self, ctx, *, pokemon_name: str):
-        """Quick name a Pokémon (use with Pokétwo catch)"""
-        pokemon = pokemon_name.lower()
-        
-        if pokemon in self.suggestions:
-            suggestions = self.suggestions[pokemon]
-            embed = discord.Embed(
-                title=f"🎀 Quick Name for {pokemon_name}",
-                description=f"Top suggestion: **{suggestions[0]}**\n\nOther options:\n" + 
-                           "\n".join(f"• {name}" for name in suggestions[1:5]),
-                color=discord.Color.purple()
-            )
-            await ctx.send(embed=embed)
-        else:
-            await ctx.send(f"❌ No suggestions for {pokemon_name}!")
-
-    @commands.command(name="mynames")
-    async def my_names(self, ctx):
-        """View all your saved Pokémon names"""
-        user_id = str(ctx.author.id)
-        
-        if user_id not in self.names or not self.names[user_id]:
-            await ctx.send("❌ You haven't saved any Pokémon names yet!")
-            return
-        
-        embed = discord.Embed(
-            title=f"{ctx.author.name}'s Pokémon Names",
-            color=discord.Color.blue()
-        )
-        
-        for pokemon_id, nickname in self.names[user_id].items():
-            embed.add_field(name=f"ID: {pokemon_id}", value=f"**{nickname}**", inline=False)
-        
-        await ctx.send(embed=embed)
-
-    @commands.command(name="deletename")
-    async def delete_name(self, ctx, pokemon_id: str):
-        """Delete a saved Pokémon name"""
-        user_id = str(ctx.author.id)
-        
-        if user_id not in self.names or pokemon_id not in self.names[user_id]:
-            await ctx.send("❌ That Pokémon name doesn't exist!")
-            return
-        
-        deleted_name = self.names[user_id].pop(pokemon_id)
-        self.save_names()
-        
-        await ctx.send(f"✅ Deleted nickname **{deleted_name}** for Pokémon **{pokemon_id}**")
 
     @staticmethod
     def command_pages(command_only: bool = False) -> list[discord.Embed]:
