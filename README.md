@@ -25,8 +25,8 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 | `v!r list [@user]` | `v!r list @user` | List all server reserves or one member's reserves |
 | `v!reserve list [@user]` | `v!reserve list @user` | Long-form reserve list command |
 | `v!r clear` | `v!r clear` | Confirm and clear all server reserves (restricted) |
-| `v!grab` | Reply with `v!grab` | Preview and add reserves parsed from a list |
-| `h!grab` | Reply with `h!grab` | Delegate the same list through h!r, then v!r |
+| `v!grab` | Reply with `v!grab` | Preview a reserve list; category labels before a mention expand to that category |
+| `h!grab` | Reply with `h!grab` | Same category support, delegated through h!r, then v!r |
 | `v!sh [pokemon]` | `v!sh Pikachu` | Start/switch a hunt, or show your current hunt |
 | `v!sh clear` | `v!sh clear` | Clear your shiny hunt |
 | `v!cl add [all] <pokemon,...>` | `v!cl add Pikachu, Eevee` | Add multiple Pokémon to your collection |
@@ -52,6 +52,11 @@ used for recognition and low-confidence review. The catch command uses the
 configured best name for each recognized Pokémon. A matching image in
 `pokemon_sprites/<Pokémon name>.png` overrides the official artwork for custom
 Pokétwo variants.
+
+For `v!grab` and `h!grab`, a category name before a user mention (for example,
+`rare - @user - Pikachu`) adds every Pokémon in that category to the user. The
+All forms toggle only expands an entry when its original text starts with
+`all <Pokémon name>`.
 
 MissingNo detection immediately denies Pokétwo's Send Messages permission in
 the current channel and asks staff not to catch it. Administrators configure a
