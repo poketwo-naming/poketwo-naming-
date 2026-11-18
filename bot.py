@@ -39,6 +39,7 @@ PREMIUM_CAPACITIES = {
     "silver": 200,
     "gold": 300,
 }
+REGIONAL_PREFIXES = ("Alolan ", "Galarian ", "Hisuian ", "Paldean ")
 COMMAND_CATALOG = (
     ("General", "v!ping", "Shows the bot's gateway latency."),
     ("General", "v!help [page]", "Shows all commands with descriptions, paginated."),
@@ -511,7 +512,10 @@ class GrabReservesView(discord.ui.View):
         entries = []
         for user_id, pokemon_name in self.entries:
             names = (
-                self.cog.resolve_pokemon_family(pokemon_name)
+                self.cog.resolve_pokemon_family(
+                    pokemon_name,
+                    include_regionals=False,
+                )
                 if self.all_forms
                 else [pokemon_name]
             )
@@ -808,18 +812,31 @@ class PokéTwoNamingBot(commands.Cog):
             return canonical
         return self.pokemon_aliases.get(normalize_pokemon_alias(stripped))
 
-    def resolve_pokemon_family(self, name: str) -> list[str]:
+    def resolve_pokemon_family(
+        self,
+        name: str,
+        include_regionals: bool = True,
+    ) -> list[str]:
         """Resolve every trained class belonging to a Pokémon family."""
         canonical = self.resolve_pokemon_name(name)
         if canonical is None:
             return []
+        is_regional = canonical.startswith(REGIONAL_PREFIXES)
         family_matches = []
         canonical_normalized = normalize_pokemon_alias(canonical)
         for class_name in self.class_names.values():
             class_normalized = normalize_pokemon_alias(class_name)
-            if (
+            matches_family = (
                 canonical_normalized in class_normalized
                 or class_name == canonical
+            )
+            if (
+                matches_family
+                and (
+                    include_regionals
+                    or is_regional
+                    or not class_name.startswith(REGIONAL_PREFIXES)
+                )
             ):
                 family_matches.append(class_name)
         return sorted(set(family_matches), key=str.casefold)
