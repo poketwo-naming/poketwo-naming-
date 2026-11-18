@@ -1865,7 +1865,7 @@ class PokéTwoNamingBot(commands.Cog):
         elif action == "remove":
             await self.remove_reserve(ctx, entry=remainder)
         elif action == "list":
-            await self.handle_reserve_list(ctx, remainder)
+            await self.show_reserve_list(ctx, remainder)
         elif action == "clear":
             if remainder:
                 await ctx.send("Usage: `v!r clear`")
@@ -1880,36 +1880,6 @@ class PokéTwoNamingBot(commands.Cog):
             await ctx.send(
                 "Unknown reservation action. Use `add`, `remove`, `list`, or `clear`."
             )
-
-    async def handle_reserve_list(self, ctx, member_input: str = ""):
-        """List all reserves or only those belonging to one server member."""
-        member = None
-        if member_input:
-            remainder = member_input.strip()
-            mention_match = re.search(r"<@!?(\d+)>", remainder)
-            user_id = (
-                int(mention_match.group(1))
-                if mention_match
-                else (int(remainder) if remainder.isdigit() else None)
-            )
-            if user_id is not None:
-                member = ctx.guild.get_member(user_id)
-                if member is None:
-                    try:
-                        member = await ctx.guild.fetch_member(user_id)
-                    except (
-                        discord.NotFound,
-                        discord.Forbidden,
-                        discord.HTTPException,
-                    ):
-                        member = None
-            if member is None:
-                try:
-                    member = await commands.MemberConverter().convert(ctx, remainder)
-                except commands.BadArgument:
-                    await ctx.send("❌ I couldn't find that server member.")
-                    return
-        await self.list_reserves(ctx, member)
 
     async def add_reserve(self, ctx, *, entry: str):
         """Reserve a Pokémon for a member. Restricted command."""
@@ -2020,11 +1990,39 @@ class PokéTwoNamingBot(commands.Cog):
             result += " Skipped: " + "; ".join(skipped)
         await ctx.send(result)
 
-    async def list_reserves(self, ctx, member: discord.Member | None = None):
-        """List server reserves, optionally only those of one member."""
+    async def show_reserve_list(self, ctx, member_input: str = ""):
+        """Fresh server reserve list implementation."""
         if ctx.guild is None:
             await ctx.send("Reservations can only be viewed inside a server.")
             return
+
+        member = None
+        member_id = None
+        member_text = member_input.strip()
+        if member_text:
+            mention_match = re.search(r"<@!?(\d+)>", member_text)
+            if mention_match:
+                member_id = int(mention_match.group(1))
+            elif member_text.isdigit():
+                member_id = int(member_text)
+            elif ctx.message.mentions:
+                member_id = ctx.message.mentions[0].id
+
+            if member_id is not None:
+                member = ctx.guild.get_member(member_id)
+                if member is None:
+                    try:
+                        member = await ctx.guild.fetch_member(member_id)
+                    except (
+                        discord.NotFound,
+                        discord.Forbidden,
+                        discord.HTTPException,
+                    ):
+                        member = None
+            if member is None:
+                await ctx.send("❌ I couldn't find that server member.")
+                return
+
         guild_reserves = self.bot_state["reserves"].get(
             str(ctx.guild.id),
             {},
@@ -2033,7 +2031,7 @@ class PokéTwoNamingBot(commands.Cog):
             (
                 (pokemon_name, user_id)
                 for pokemon_name, user_id in guild_reserves.items()
-                if member is None or user_id == str(member.id)
+                if member is None or str(user_id) == str(member.id)
             ),
             key=lambda reserve: reserve[0].casefold(),
         )
