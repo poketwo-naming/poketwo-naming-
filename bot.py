@@ -1808,7 +1808,16 @@ class PokéTwoNamingBot(commands.Cog):
     @commands.group(name="r", invoke_without_command=True)
     async def resume_or_reserve(self, ctx):
         """Restore Pokétwo's previous permissions after a MissingNo spawn."""
-        if ctx.invoked_subcommand is not None:
+        raw_invocation = ctx.message.content.split()
+        raw_subcommand = (
+            raw_invocation[1].casefold()
+            if len(raw_invocation) > 1
+            else None
+        )
+        if (
+            ctx.invoked_subcommand is not None
+            or raw_subcommand in {"add", "remove", "list", "clear"}
+        ):
             return
         if not self.has_restricted_permission(ctx):
             await ctx.send("❌ You do not have permission to resume this channel.")
@@ -1888,10 +1897,19 @@ class PokéTwoNamingBot(commands.Cog):
         for pokemon_name in pokemon_names:
             guild_reserves[str(pokemon_name)] = str(member.id)
         self.save_bot_state()
-        await ctx.send(
-            f"✅ Reserved **{len(pokemon_names)} Pokémon** "
-            f"for {member.mention}: " + ", ".join(pokemon_names)
-        )
+        if len(pokemon_names) == 1:
+            await ctx.send(
+                f"✅ Reserved **{pokemon_names[0]}** for {member.mention}."
+            )
+        else:
+            added_lines = "\n".join(
+                f"✅ Reserved **{pokemon_name}** for {member.mention}."
+                for pokemon_name in pokemon_names
+            )
+            await ctx.send(
+                added_lines
+                + f"\n\n✅ Added **{len(pokemon_names)} Pokémon** successfully."
+            )
 
     @resume_or_reserve.command(name="remove")
     async def remove_reserve(self, ctx, *, entry: str):
