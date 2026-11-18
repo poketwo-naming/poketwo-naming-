@@ -520,16 +520,54 @@ class GrabReservesView(discord.ui.View):
                 else [pokemon_name]
             )
             entries.extend((user_id, str(name)) for name in names)
+        entries = self.collapse_family_entries(entries)
         if self.alphabetical:
             entries.sort(key=lambda entry: (entry[1].casefold(), entry[0]))
         return entries
 
+    def collapse_family_entries(
+        self,
+        entries: list[tuple[str, str]],
+    ) -> list[tuple[str, str]]:
+        """Collapse complete same-user families into one all-command label."""
+        collapsed = []
+        grouped = {}
+        for user_id, pokemon_name in entries:
+            grouped.setdefault(user_id, []).append(pokemon_name)
+        for user_id, pokemon_names in grouped.items():
+            remaining = set(pokemon_names)
+            candidates = sorted(
+                pokemon_names,
+                key=lambda name: (len(name), name.casefold()),
+            )
+            for candidate in candidates:
+                family = {
+                    str(name)
+                    for name in self.cog.resolve_pokemon_family(
+                        candidate,
+                        include_regionals=False,
+                    )
+                }
+                if len(family) > 1 and family <= remaining:
+                    collapsed.append((user_id, f"all {candidate}"))
+                    remaining -= family
+            collapsed.extend(
+                (user_id, name)
+                for name in pokemon_names
+                if name in remaining
+            )
+        return collapsed
+
     def format_line(self, user_id: str, pokemon_name: str) -> str:
         prefix = ""
+        display_name = pokemon_name
+        is_all = pokemon_name.casefold().startswith("all ")
+        if is_all:
+            display_name = pokemon_name[4:]
         if self.custom_emoji:
             prefix = "".join(
                 TYPE_EMOJIS[pokemon_type]
-                for pokemon_type in self.cog.pokemon_types[pokemon_name]
+                for pokemon_type in self.cog.pokemon_types[display_name]
             )
         return f"{prefix}{pokemon_name} — <@{user_id}>"
 
@@ -731,11 +769,23 @@ class GrabConfirmView(discord.ui.View):
                     )
                 except TimeoutError:
                     pass
-            await self.cog.add_reserve_direct(
-                guild,
-                pokemon_name,
-                user_id,
-            )
+            if pokemon_name.casefold().startswith("all "):
+                family_name = pokemon_name[4:]
+                for family_member in self.cog.resolve_pokemon_family(
+                    family_name,
+                    include_regionals=False,
+                ):
+                    await self.cog.add_reserve_direct(
+                        guild,
+                        str(family_member),
+                        user_id,
+                    )
+            else:
+                await self.cog.add_reserve_direct(
+                    guild,
+                    pokemon_name,
+                    user_id,
+                )
             await channel.send(
                 f"v!r add {pokemon_name} <@{user_id}>"
                 f"\nReserve **{pokemon_name}** added to <@{user_id}>."
