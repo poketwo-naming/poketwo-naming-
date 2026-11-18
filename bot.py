@@ -2017,26 +2017,27 @@ class PokéTwoNamingBot(commands.Cog):
         self.save_bot_state()
         if len(pokemon_names) == 1:
             await ctx.send(
-                f"✅ Added to your reserve: **{pokemon_names[0]}** for {member.mention}."
+                f"✅ **{pokemon_names[0]}** added to {member.mention}'s reserves."
             )
         else:
-            added_lines = [
-                f"✅ Added to your reserve: **{pokemon_name}** for {member.mention}."
-                for pokemon_name in pokemon_names
+            suffix = f" added to {member.mention}'s reserves."
+            requested_names = [
+                term.strip()
+                for term in pokemon_input.split(",")
+                if term.strip()
             ]
             batch = []
             batch_length = 0
-            for line in added_lines:
-                if batch and batch_length + len(line) + 1 > 1800:
-                    await ctx.send("\n".join(batch))
+            for name in requested_names:
+                if batch and batch_length + len(name) + 2 > 1800:
+                    await ctx.send(", ".join(batch))
                     batch = []
                     batch_length = 0
-                batch.append(line)
-                batch_length += len(line) + 1
+                batch.append(name)
+                batch_length += len(name) + 2
             if batch:
                 await ctx.send(
-                    "\n".join(batch)
-                    + f"\n\n✅ Added **{len(pokemon_names)} Pokémon** to reserve."
+                    "✅ " + ", ".join(batch) + suffix
                 )
 
     async def remove_reserve(self, ctx, *, entry: str):
