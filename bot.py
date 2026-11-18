@@ -698,6 +698,46 @@ class ExchangeReservesView(discord.ui.View):
         )
 
 
+class ServerSettingsView(discord.ui.View):
+    """Settings menu; the Open buttons are placeholders for now."""
+
+    SECTIONS = (
+        ("Naming", "Naming `On` · Mode `Assisted`"),
+        (
+            "Roles & Pings",
+            "Configure ping roles and rare, regional, hunt, collection, "
+            "reserve, and quest output.",
+        ),
+        ("Starboard", "Configure the main starboard and the separate shinyboard system."),
+        ("Modules", "Control server-level Profile Tracking and Analytics data collection."),
+        ("Appearance", "Set the bot's server profile, banner, and embed color."),
+    )
+
+    def __init__(self, user_id: int):
+        super().__init__(timeout=300)
+        self.user_id = user_id
+        for _ in self.SECTIONS:
+            button = discord.ui.Button(label="Open", style=discord.ButtonStyle.primary)
+            button.callback = self.placeholder
+            self.add_item(button)
+
+    async def placeholder(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+
+    @staticmethod
+    def build_embed() -> discord.Embed:
+        embed = discord.Embed(
+            title="Server Settings",
+            description=(
+                "Pick a section to configure. Changes inside each section "
+                "save immediately.\n\n"
+                + "\n".join(f"**{name}**\n{text}\n" for name, text in ServerSettingsView.SECTIONS)
+            ),
+        )
+        embed.set_footer(text="Server settings are kept for this server's setup.")
+        return embed
+
+
 class GrabReservesView(discord.ui.View):
     """Preview and confirm reservations parsed from a replied list."""
 
@@ -1936,6 +1976,14 @@ class PokéTwoNamingBot(commands.Cog):
             reason="MissingNo spawned; waiting for staff to resume",
         )
         return True
+
+    @commands.command(name="settings")
+    async def settings(self, ctx):
+        """Show the server settings menu."""
+        await ctx.send(
+            embed=ServerSettingsView.build_embed(),
+            view=ServerSettingsView(ctx.author.id),
+        )
 
     @commands.command(name="ping")
     async def ping(self, ctx):
