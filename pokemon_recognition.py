@@ -39,6 +39,7 @@ class PokemonImageRecognizer:
         self,
         model_path: str | Path = "pokemon_image_model.npz",
         encoder_path: str | Path = "pokemon_image_encoder.onnx",
+        refinement_path: str | Path = "pokemon_image_refinements.npz",
     ):
         self.model_path = Path(model_path)
         self.encoder_path = Path(encoder_path)
@@ -55,6 +56,12 @@ class PokemonImageRecognizer:
             self.calibration_intercept = float(model["calibration_intercept"])
             self.training_samples = int(model["training_samples"])
             self.validation_accuracy = float(model["validation_accuracy"])
+        with np.load(refinement_path, allow_pickle=False) as refinements:
+            self.refinement_embeddings = refinements["embeddings"].astype(
+                np.float32
+            )
+            self.refinement_labels = refinements["labels"]
+            self.refinement_classes = refinements["classes"]
 
     def recognize(self, image: Image.Image) -> tuple[str, float, float]:
         """Return the Pokémon class, calibrated confidence, and elapsed seconds."""
@@ -66,7 +73,26 @@ class PokemonImageRecognizer:
         scores = self.centroids @ embedding
         top_two = np.argpartition(scores, -2)[-2:]
         second_best, best = top_two[np.argsort(scores[top_two])]
-        margin = float(scores[best] - scores[second_best])
+        predicted_name = str(self.classes[best])
+        refinement_class_ids = {
+            int(np.flatnonzero(self.refinement_classes == name)[0])
+            for name in ("Blipbug", "Alolan Meowth")
+        }
+        if best in refinement_class_ids:
+            refinement_scores = self.refinement_embeddings @ embedding
+            sorted_indexes = np.argsort(refinement_scores)[::-1]
+            refined_label = int(self.refinement_labels[sorted_indexes[0]])
+            predicted_name = str(self.classes[refined_label])
+            other_label_score = next(
+                float(refinement_scores[index])
+                for index in sorted_indexes
+                if self.refinement_labels[index] != refined_label
+            )
+            margin = float(
+                refinement_scores[sorted_indexes[0]] - other_label_score
+            )
+        else:
+            margin = float(scores[best] - scores[second_best])
         logit = self.calibration_coefficient * margin + self.calibration_intercept
         confidence = float(100 / (1 + np.exp(-np.clip(logit, -30, 30))))
-        return str(self.classes[best]), confidence, perf_counter() - started
+        return predicted_name, confidence, perf_counter() - started
