@@ -1249,9 +1249,9 @@ class PokéTwoNamingBot(commands.Cog):
                         f"<@{user_id}>" for user_id in collection_owners
                     )
                     content.append(f"Collection pings: {mentions}")
-            content.append(f"Click to Copy ->\n```\n{copy_command}\n```")
+            content.append(f"Click to Copy -> `{copy_command}`")
         elif pokemon_name.casefold() != "missingno":
-            content.append(f"Click to Copy ->\n```\n{copy_command}\n```")
+            content.append(f"Click to Copy -> `{copy_command}`")
         return "\n".join(content), embed
 
     def set_shiny_hunt(
@@ -1929,12 +1929,7 @@ class PokéTwoNamingBot(commands.Cog):
             except Exception as error:
                 print(f"Could not remove spawn image background: {error}")
                 thumbnail_data = image_data
-            with Image.open(BytesIO(thumbnail_data)) as image:
-                thumbnail = image.convert("RGBA")
-            thumbnail.thumbnail((256, 256))
-            thumbnail_buffer = BytesIO()
-            thumbnail.save(thumbnail_buffer, format="PNG", optimize=True)
-            thumbnail_buffer.seek(0)
+            thumbnail_buffer = self.prepare_spawn_thumbnail(thumbnail_data)
             embed.set_thumbnail(url="attachment://pokemon.png")
             await message.channel.send(
                 content=content,
@@ -1982,6 +1977,33 @@ class PokéTwoNamingBot(commands.Cog):
         if not isinstance(result, bytes):
             raise TypeError("Background removal did not return image bytes")
         return result
+
+    @staticmethod
+    def prepare_spawn_thumbnail(image_data: bytes) -> BytesIO:
+        """Crop transparent margins and enlarge the extracted Pokémon sprite."""
+        with Image.open(BytesIO(image_data)) as image:
+            sprite = image.convert("RGBA")
+        bounds = sprite.getchannel("A").point(
+            lambda alpha: 255 if alpha > 16 else 0
+        ).getbbox()
+        if bounds is not None:
+            sprite = sprite.crop(bounds)
+
+        scale = 256 / max(sprite.size)
+        size = (
+            max(1, round(sprite.width * scale)),
+            max(1, round(sprite.height * scale)),
+        )
+        sprite = sprite.resize(size, Image.Resampling.LANCZOS)
+        thumbnail = Image.new("RGBA", (256, 256))
+        thumbnail.alpha_composite(
+            sprite,
+            ((256 - sprite.width) // 2, (256 - sprite.height) // 2),
+        )
+        thumbnail_buffer = BytesIO()
+        thumbnail.save(thumbnail_buffer, format="PNG", optimize=True)
+        thumbnail_buffer.seek(0)
+        return thumbnail_buffer
 
     async def _get_spawn_image(self, message):
         """Return the spawn image bytes and download duration."""
