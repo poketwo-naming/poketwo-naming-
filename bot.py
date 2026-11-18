@@ -1855,7 +1855,8 @@ class PokéTwoNamingBot(commands.Cog):
             ctx.message.content,
             count=1,
         ).strip()
-        parts = raw_entry.split(maxsplit=1)
+        action_entry = raw_entry or entry.strip()
+        parts = action_entry.split(maxsplit=1)
         action = parts[0].casefold() if parts else ""
         remainder = parts[1].strip() if len(parts) > 1 else ""
 
@@ -1891,7 +1892,7 @@ class PokéTwoNamingBot(commands.Cog):
                 await ctx.send("Usage: `v!r clear`")
                 return
             await self.clear_reserves(ctx)
-        elif not raw_entry:
+        elif not action_entry:
             await ctx.send(
                 "Use `v!r list [@user]`, `v!r add <pokemon,...> <@user>`, "
                 "`v!r remove <pokemon,...> [@user]`, or `v!r clear`."
