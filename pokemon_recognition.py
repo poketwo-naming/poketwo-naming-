@@ -12,7 +12,15 @@ IMAGE_SIZE = 224
 RESIZE_SIZE = 232
 MEAN = np.asarray([0.485, 0.456, 0.406], dtype=np.float32)[:, None, None]
 STD = np.asarray([0.229, 0.224, 0.225], dtype=np.float32)[:, None, None]
-FOCUSED_CROP_CLASSES = ("Finizen", "Palafin", "Hero Palafin")
+FOCUSED_CROP_CLASSES = (
+    "Finizen",
+    "Palafin",
+    "Hero Palafin",
+    "Squawkabilly",
+    "Blue Plumage Squawkabilly",
+    "White Plumage Squawkabilly",
+    "Yellow Plumage Squawkabilly",
+)
 
 
 def preprocess(image: Image.Image) -> np.ndarray:
