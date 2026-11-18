@@ -656,7 +656,8 @@ class ExchangeReservesView(discord.ui.View):
         self.completed = True
         self.stop()
         for child in self.children:
-            child.disabled = True
+            if isinstance(child, discord.ui.Button):
+                child.disabled = True
 
     async def allowed(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author_id or self.completed:
