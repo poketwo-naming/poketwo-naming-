@@ -1062,14 +1062,14 @@ class PokéTwoNamingBot(commands.Cog):
         return bool(role_id and member.get_role(int(role_id)))
 
     def pokemon_from_grab_tail(self, text: str) -> str | None:
-        """Resolve the Pokémon at the end of one user list segment."""
+        """Resolve the first Pokémon after a user mention."""
         cleaned = re.sub(
             r"<a?:[^:>]+:\d+>",
             "",
             text,
         )
         chunks = re.split(r"\s*(?:\||—|–|\n|;| - )\s*", cleaned)
-        for chunk in reversed(chunks):
+        for chunk in chunks:
             value = re.sub(r"^[\s:*\-–—]+|[\s*_.,!]+$", "", chunk).strip()
             if not value:
                 continue
@@ -1087,7 +1087,7 @@ class PokéTwoNamingBot(commands.Cog):
         return None
 
     def parse_grab_list(self, message) -> list[tuple[str, str]]:
-        """Parse user mentions and Pokémon names from a reserve-list message."""
+        """Parse only Pokémon that appear after each user mention."""
         text = message.content or ""
         for embed in message.embeds:
             text += "\n" + (embed.description or "")
