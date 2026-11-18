@@ -1983,9 +1983,8 @@ class PokéTwoNamingBot(commands.Cog):
         """Crop transparent margins and enlarge the extracted Pokémon sprite."""
         with Image.open(BytesIO(image_data)) as image:
             sprite = image.convert("RGBA")
-        bounds = sprite.getchannel("A").point(
-            lambda alpha: 255 if alpha > 16 else 0
-        ).getbbox()
+        alpha_lookup = [0 if alpha <= 16 else 255 for alpha in range(256)]
+        bounds = sprite.getchannel("A").point(alpha_lookup).getbbox()
         if bounds is not None:
             sprite = sprite.crop(bounds)
 
