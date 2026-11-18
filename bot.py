@@ -1846,17 +1846,41 @@ class PokéTwoNamingBot(commands.Cog):
         self.save_bot_state()
         await ctx.send("✅ Channel resumed. Pokétwo can send messages again.")
 
-    @commands.group(name="r", invoke_without_command=True)
-    async def reservations(self, ctx):
-        """Show reservation command usage."""
-        if ctx.invoked_subcommand is not None:
-            return
-        await ctx.send(
-            "Use `v!r list [@user]`, `v!r add <pokemon,...> <@user>`, "
-            "`v!r remove <pokemon,...> [@user]`, or `v!r clear`."
-        )
+    @commands.command(name="r")
+    async def reservations(self, ctx, *, entry: str = ""):
+        """Dispatch reservation actions without Discord group parsing."""
+        parts = entry.split(maxsplit=1)
+        action = parts[0].casefold() if parts else ""
+        remainder = parts[1].strip() if len(parts) > 1 else ""
 
-    @reservations.command(name="add")
+        if action == "add":
+            await self.add_reserve(ctx, entry=remainder)
+        elif action == "remove":
+            await self.remove_reserve(ctx, entry=remainder)
+        elif action == "list":
+            member = None
+            if remainder:
+                try:
+                    member = await commands.MemberConverter().convert(ctx, remainder)
+                except commands.BadArgument:
+                    await ctx.send("❌ I couldn't find that server member.")
+                    return
+            await self.list_reserves(ctx, member)
+        elif action == "clear":
+            if remainder:
+                await ctx.send("Usage: `v!r clear`")
+                return
+            await self.clear_reserves(ctx)
+        elif not entry:
+            await ctx.send(
+                "Use `v!r list [@user]`, `v!r add <pokemon,...> <@user>`, "
+                "`v!r remove <pokemon,...> [@user]`, or `v!r clear`."
+            )
+        else:
+            await ctx.send(
+                "Unknown reservation action. Use `add`, `remove`, `list`, or `clear`."
+            )
+
     async def add_reserve(self, ctx, *, entry: str):
         """Reserve a Pokémon for a member. Restricted command."""
         if ctx.guild is None:
@@ -1910,7 +1934,6 @@ class PokéTwoNamingBot(commands.Cog):
                 + f"\n\n✅ Added **{len(pokemon_names)} Pokémon** successfully."
             )
 
-    @reservations.command(name="remove")
     async def remove_reserve(self, ctx, *, entry: str):
         """Remove a server Pokémon reservation. Restricted command."""
         if ctx.guild is None:
@@ -1967,7 +1990,6 @@ class PokéTwoNamingBot(commands.Cog):
             result += " Skipped: " + "; ".join(skipped)
         await ctx.send(result)
 
-    @reservations.command(name="list")
     async def list_reserves(self, ctx, member: discord.Member | None = None):
         """List server reserves, optionally only those of one member."""
         if ctx.guild is None:
@@ -2018,7 +2040,6 @@ class PokéTwoNamingBot(commands.Cog):
         for embed_chunk in range(0, len(embeds), 10):
             await ctx.send(embeds=embeds[embed_chunk : embed_chunk + 10])
 
-    @reservations.command(name="clear")
     async def clear_reserves(self, ctx):
         """Clear every reservation in the current server after confirmation."""
         if ctx.guild is None:
