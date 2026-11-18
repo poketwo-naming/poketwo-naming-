@@ -692,13 +692,26 @@ class GrabConfirmView(discord.ui.View):
         del button
         if self.completed:
             return
+        channel = interaction.channel
+        if not isinstance(channel, discord.abc.Messageable):
+            await interaction.response.send_message(
+                "This confirmation must be used in a message channel.",
+                ephemeral=True,
+            )
+            return
+        guild = interaction.guild
+        if guild is None:
+            await interaction.response.send_message(
+                "Reservations can only be added inside a server.",
+                ephemeral=True,
+            )
+            return
         self.completed = True
         await interaction.response.edit_message(
             content="Adding reserves…",
             embed=None,
             view=None,
         )
-        channel = interaction.channel
         for user_id, pokemon_name in self.entries:
             if self.h_mode:
                 await channel.send(f"h!r add {pokemon_name} <@{user_id}>")
@@ -715,7 +728,7 @@ class GrabConfirmView(discord.ui.View):
                 except TimeoutError:
                     pass
             await self.cog.add_reserve_direct(
-                interaction.guild,
+                guild,
                 pokemon_name,
                 user_id,
             )
