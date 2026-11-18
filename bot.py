@@ -1083,6 +1083,7 @@ class PokéTwoNamingBot(commands.Cog):
         self.model_load_seconds = perf_counter() - model_started
         self.json_load_seconds = 0.0
         self.http_session = None
+        self.background_removal_session = None
         self.spawn_response_times = deque(maxlen=100)
         self.inference_times = deque(maxlen=100)
         self.store_times = deque(maxlen=100)
@@ -1202,6 +1203,7 @@ class PokéTwoNamingBot(commands.Cog):
             for pokemon_type in self.pokemon_types[pokemon_name]
         )
         best_name = self.pokemon_best_names[pokemon_name]
+        copy_command = f"@Pokétwo#8236 c {best_name.casefold()}"
         content = [
             f"{pokemon_name} {icons} {confidence:.2f}%",
             f"Best name: {best_name}",
@@ -1215,8 +1217,7 @@ class PokéTwoNamingBot(commands.Cog):
             embed.title = "MissingNo detected"
             embed.description = "**Do not catch this Pokémon.**"
         else:
-            copy_command = f"@Pokétwo#8236 c {best_name.casefold()}"
-            embed.description = f"**Copy Below**\n`{copy_command}`"
+            embed.description = f"**Copy Below**\n```\n{copy_command}\n```"
 
         if guild_id is not None and pokemon_name.casefold() != "missingno":
             reserved_user_id = self.bot_state.get("reserves", {}).get(
@@ -1248,9 +1249,9 @@ class PokéTwoNamingBot(commands.Cog):
                         f"<@{user_id}>" for user_id in collection_owners
                     )
                     content.append(f"Collection pings: {mentions}")
-            content.append(f"Click to Copy -> `{copy_command}`")
+            content.append(f"Click to Copy ->\n```\n{copy_command}\n```")
         elif pokemon_name.casefold() != "missingno":
-            content.append(f"Click to Copy -> `{copy_command}`")
+            content.append(f"Click to Copy ->\n```\n{copy_command}\n```")
         return "\n".join(content), embed
 
     def set_shiny_hunt(
@@ -1319,13 +1320,22 @@ class PokéTwoNamingBot(commands.Cog):
         return best_names
 
     async def cog_load(self):
-        """Create shared HTTP resources for spawn image downloads."""
+        """Create shared resources for spawn images and background removal."""
         self.http_session = aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=10)
         )
+        try:
+            from rembg import new_session
+
+            self.background_removal_session = await asyncio.to_thread(
+                new_session,
+                "u2netp",
+            )
+        except Exception as error:
+            print(f"Could not initialize spawn background removal: {error}")
 
     async def cog_unload(self):
-        """Close shared HTTP resources."""
+        """Close shared resources."""
         if self.http_session is not None:
             await self.http_session.close()
 
@@ -1911,17 +1921,25 @@ class PokéTwoNamingBot(commands.Cog):
                 message.guild.id if message.guild else None,
                 shiny_hunters,
             )
-            with Image.open(BytesIO(image_data)) as image:
-                thumbnail = image.convert("RGB")
+            try:
+                thumbnail_data = await asyncio.to_thread(
+                    self.remove_spawn_background,
+                    image_data,
+                )
+            except Exception as error:
+                print(f"Could not remove spawn image background: {error}")
+                thumbnail_data = image_data
+            with Image.open(BytesIO(thumbnail_data)) as image:
+                thumbnail = image.convert("RGBA")
             thumbnail.thumbnail((256, 256))
             thumbnail_buffer = BytesIO()
-            thumbnail.save(thumbnail_buffer, format="WEBP", quality=85)
+            thumbnail.save(thumbnail_buffer, format="PNG", optimize=True)
             thumbnail_buffer.seek(0)
-            embed.set_thumbnail(url="attachment://pokemon.webp")
+            embed.set_thumbnail(url="attachment://pokemon.png")
             await message.channel.send(
                 content=content,
                 embed=embed,
-                file=discord.File(thumbnail_buffer, filename="pokemon.webp"),
+                file=discord.File(thumbnail_buffer, filename="pokemon.png"),
             )
 
         if pokemon_name.casefold() == "missingno":
@@ -1953,6 +1971,17 @@ class PokéTwoNamingBot(commands.Cog):
         """Recognize an image without blocking the Discord event loop."""
         with Image.open(BytesIO(image_data)) as image:
             return self.recognizer.recognize(image)
+
+    def remove_spawn_background(self, image_data: bytes) -> bytes:
+        """Remove the scene background for the displayed Pokémon thumbnail."""
+        if self.background_removal_session is None:
+            return image_data
+        from rembg import remove
+
+        result = remove(image_data, session=self.background_removal_session)
+        if not isinstance(result, bytes):
+            raise TypeError("Background removal did not return image bytes")
+        return result
 
     async def _get_spawn_image(self, message):
         """Return the spawn image bytes and download duration."""

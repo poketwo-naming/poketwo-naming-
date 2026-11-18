@@ -47,8 +47,9 @@ images can be downloaded with `v!export_training` before retraining. The
 threshold can be changed with `REVIEW_CONFIDENCE_THRESHOLD`.
 
 Normal naming output includes a copyable Pokétwo catch command and a Pokémon
-embed with a thumbnail from the detected spawn image. The catch command uses
-the configured best name for each recognized Pokémon.
+embed with a background-removed thumbnail cut from the detected spawn image.
+The original image is still used for recognition and low-confidence review. The
+catch command uses the configured best name for each recognized Pokémon.
 
 MissingNo detection immediately denies Pokétwo's Send Messages permission in
 the current channel and asks staff not to catch it. Administrators configure a
