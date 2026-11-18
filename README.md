@@ -46,10 +46,9 @@ when necessary. Higher-confidence guesses use normal naming output. Reviewed
 images can be downloaded with `v!export_training` before retraining. The
 threshold can be changed with `REVIEW_CONFIDENCE_THRESHOLD`.
 
-Normal naming output sends a prediction and preview immediately, then replaces
-the preview with a background-removed Pokémon thumbnail. The original image is
-still used for recognition and low-confidence review. API status reports sprite
-processing separately from response latency. The catch command uses the
+Normal naming output uses a transparent official Pokémon artwork thumbnail
+from PokéAPI, selected for the predicted Pokémon form. The spawn image is still
+used for recognition and low-confidence review. The catch command uses the
 configured best name for each recognized Pokémon.
 
 MissingNo detection immediately denies Pokétwo's Send Messages permission in
@@ -84,8 +83,8 @@ python tools/build_pokemon_names.py
 ```
 
 The source images are ignored by Git. Commit and deploy the generated model,
-encoder, `pokemon_types.json`, `pokemon_best_names.json`, and
-`pokemon_aliases.json` files.
+encoder, `pokemon_types.json`, `pokemon_sprite_ids.json`,
+`pokemon_best_names.json`, and `pokemon_aliases.json` files.
 
 To teach the bot commonly confused Pokémon (Alolan Meowth/Rattata, Blipbug,
 Luxray, Pikipek) after adding images to their folders, rebuild the lightweight

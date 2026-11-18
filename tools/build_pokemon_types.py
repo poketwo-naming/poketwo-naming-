@@ -13,6 +13,7 @@ POKEAPI_CSV_BASE = (
 )
 TRAINING_ROOT = Path("pokemon_images/training_data")
 OUTPUT = Path("pokemon_types.json")
+SPRITE_IDS_OUTPUT = Path("pokemon_sprite_ids.json")
 
 CANONICAL_OVERRIDES = {
     "10% Zygarde": "zygarde-10",
@@ -105,6 +106,15 @@ CUSTOM_TYPES = {
     "Rotom Pokédex": ["electric", "ghost"],
     "Smearguru": ["normal"],
 }
+CUSTOM_SPRITE_IDENTIFIERS = {
+    "Chef Dente": "greedent",
+    "Mosslax": "snorlax",
+    "Peakychu": "pikachu",
+    "Rotom Drone": "rotom",
+    "Rotom Phone": "rotom",
+    "Rotom Pokédex": "rotom",
+    "Smearguru": "smeargle",
+}
 
 REGION_SUFFIXES = {
     "alolan": "alola",
@@ -132,10 +142,12 @@ def download_csv(name: str) -> list[dict[str, str]]:
     return list(csv.DictReader(text.splitlines()))
 
 
-def canonical_types():
+def canonical_types(pokemon_rows=None):
+    if pokemon_rows is None:
+        pokemon_rows = download_csv("pokemon.csv")
     pokemon = {
         int(row["id"]): row["identifier"]
-        for row in download_csv("pokemon.csv")
+        for row in pokemon_rows
     }
     type_names = {
         int(row["id"]): row["identifier"]
@@ -210,13 +222,40 @@ def build_type_map(types_by_identifier):
     return result
 
 
+def build_sprite_id_map(pokemon_rows):
+    pokemon_ids = {
+        row["identifier"]: int(row["id"])
+        for row in pokemon_rows
+    }
+    identifiers = set(pokemon_ids)
+    classes = sorted(
+        path.name for path in TRAINING_ROOT.iterdir() if path.is_dir()
+    )
+    result = {}
+    for class_name in classes:
+        identifier = CUSTOM_SPRITE_IDENTIFIERS.get(class_name)
+        if identifier is None:
+            try:
+                identifier = resolve_class_identifier(class_name, identifiers)
+            except ValueError:
+                continue
+        if identifier in pokemon_ids:
+            result[class_name] = pokemon_ids[identifier]
+    return result
+
+
 def main() -> None:
     if not TRAINING_ROOT.is_dir():
         raise FileNotFoundError(f"Training directory not found: {TRAINING_ROOT}")
-    type_map = build_type_map(canonical_types())
+    pokemon_rows = download_csv("pokemon.csv")
+    type_map = build_type_map(canonical_types(pokemon_rows))
+    sprite_id_map = build_sprite_id_map(pokemon_rows)
     with open(OUTPUT, "w", encoding="utf-8") as output:
         json.dump(type_map, output, ensure_ascii=False, indent=2, sort_keys=True)
     print(f"Created {OUTPUT} with {len(type_map)} Pokémon class mappings.")
+    with open(SPRITE_IDS_OUTPUT, "w", encoding="utf-8") as output:
+        json.dump(sprite_id_map, output, ensure_ascii=False, indent=2, sort_keys=True)
+    print(f"Created {SPRITE_IDS_OUTPUT} with {len(sprite_id_map)} sprite mappings.")
 
 
 if __name__ == "__main__":

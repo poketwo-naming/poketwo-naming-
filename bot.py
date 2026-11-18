@@ -1083,10 +1083,6 @@ class PokéTwoNamingBot(commands.Cog):
         self.model_load_seconds = perf_counter() - model_started
         self.json_load_seconds = 0.0
         self.http_session = None
-        self.background_removal_session = None
-        self.thumbnail_update_tasks = set()
-        self.thumbnail_processing_times = deque(maxlen=100)
-        self.thumbnail_processing_lock = asyncio.Lock()
         self.spawn_response_times = deque(maxlen=100)
         self.inference_times = deque(maxlen=100)
         self.store_times = deque(maxlen=100)
@@ -1095,6 +1091,7 @@ class PokéTwoNamingBot(commands.Cog):
         self.recent_spawn_times = {}
         self.class_names = {name.casefold(): name for name in self.recognizer.classes}
         self.pokemon_types = self.load_pokemon_types()
+        self.pokemon_sprite_ids = self.load_pokemon_sprite_ids()
         self.pokemon_best_names = self.load_pokemon_best_names()
         self.pokemon_aliases = self.load_pokemon_aliases()
         self.reviewed_spawn_count = self.load_collected_training_count()
@@ -1126,6 +1123,11 @@ class PokéTwoNamingBot(commands.Cog):
     def load_pokemon_aliases(self):
         """Load localized and romanized Pokémon-name aliases."""
         with open("pokemon_aliases.json", "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    def load_pokemon_sprite_ids(self):
+        """Load PokéAPI IDs used for transparent official artwork thumbnails."""
+        with open("pokemon_sprite_ids.json", "r", encoding="utf-8") as f:
             return json.load(f)
 
     def resolve_pokemon_name(self, name: str) -> str | None:
@@ -1323,29 +1325,13 @@ class PokéTwoNamingBot(commands.Cog):
         return best_names
 
     async def cog_load(self):
-        """Create shared resources for spawn images and background removal."""
+        """Create shared HTTP resources for spawn image downloads."""
         self.http_session = aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=10)
         )
-        try:
-            from rembg import new_session
-
-            self.background_removal_session = await asyncio.to_thread(
-                new_session,
-                "u2netp",
-            )
-        except Exception as error:
-            print(f"Could not initialize spawn background removal: {error}")
 
     async def cog_unload(self):
         """Close shared resources."""
-        for task in self.thumbnail_update_tasks:
-            task.cancel()
-        if self.thumbnail_update_tasks:
-            await asyncio.gather(
-                *self.thumbnail_update_tasks,
-                return_exceptions=True,
-            )
         if self.http_session is not None:
             await self.http_session.close()
 
@@ -1931,27 +1917,19 @@ class PokéTwoNamingBot(commands.Cog):
                 message.guild.id if message.guild else None,
                 shiny_hunters,
             )
-            with Image.open(BytesIO(image_data)) as image:
-                thumbnail = image.convert("RGB")
-            thumbnail.thumbnail((256, 256))
-            thumbnail_buffer = BytesIO()
-            thumbnail.save(thumbnail_buffer, format="WEBP", quality=85)
-            thumbnail_buffer.seek(0)
-            embed.set_thumbnail(url="attachment://pokemon.webp")
-            response_message = await message.channel.send(
+            sprite_id = self.pokemon_sprite_ids.get(pokemon_name)
+            if sprite_id is not None:
+                embed.set_thumbnail(
+                    url=(
+                        "https://raw.githubusercontent.com/PokeAPI/sprites/master/"
+                        "sprites/pokemon/other/official-artwork/"
+                        f"{sprite_id}.png"
+                    )
+                )
+            await message.channel.send(
                 content=content,
                 embed=embed,
-                file=discord.File(thumbnail_buffer, filename="pokemon.webp"),
             )
-            task = asyncio.create_task(
-                self.update_spawn_thumbnail(
-                    response_message,
-                    embed.copy(),
-                    image_data,
-                )
-            )
-            self.thumbnail_update_tasks.add(task)
-            task.add_done_callback(self.thumbnail_update_tasks.discard)
 
         if pokemon_name.casefold() == "missingno":
             guild_id = str(message.guild.id)
@@ -1982,75 +1960,6 @@ class PokéTwoNamingBot(commands.Cog):
         """Recognize an image without blocking the Discord event loop."""
         with Image.open(BytesIO(image_data)) as image:
             return self.recognizer.recognize(image)
-
-    def remove_spawn_background(self, image_data: bytes) -> bytes:
-        """Remove the scene background for the displayed Pokémon thumbnail."""
-        if self.background_removal_session is None:
-            return image_data
-        from rembg import remove
-
-        result = remove(image_data, session=self.background_removal_session)
-        if not isinstance(result, bytes):
-            raise TypeError("Background removal did not return image bytes")
-        return result
-
-    @staticmethod
-    def prepare_spawn_thumbnail(image_data: bytes) -> BytesIO:
-        """Crop transparent margins and enlarge the extracted Pokémon sprite."""
-        with Image.open(BytesIO(image_data)) as image:
-            sprite = image.convert("RGBA")
-        alpha_lookup = [0 if alpha <= 16 else 255 for alpha in range(256)]
-        bounds = sprite.getchannel("A").point(alpha_lookup).getbbox()
-        if bounds is not None:
-            sprite = sprite.crop(bounds)
-
-        scale = 256 / max(sprite.size)
-        size = (
-            max(1, round(sprite.width * scale)),
-            max(1, round(sprite.height * scale)),
-        )
-        sprite = sprite.resize(size, Image.Resampling.LANCZOS)
-        thumbnail = Image.new("RGBA", (256, 256))
-        thumbnail.alpha_composite(
-            sprite,
-            ((256 - sprite.width) // 2, (256 - sprite.height) // 2),
-        )
-        thumbnail_buffer = BytesIO()
-        thumbnail.save(thumbnail_buffer, format="PNG", optimize=True)
-        thumbnail_buffer.seek(0)
-        return thumbnail_buffer
-
-    async def update_spawn_thumbnail(
-        self,
-        message,
-        embed: discord.Embed,
-        image_data: bytes,
-    ) -> None:
-        """Replace the quick preview with its transparent Pokémon cutout."""
-        async with self.thumbnail_processing_lock:
-            started = perf_counter()
-            try:
-                thumbnail_data = await asyncio.to_thread(
-                    self.remove_spawn_background,
-                    image_data,
-                )
-                thumbnail_buffer = self.prepare_spawn_thumbnail(thumbnail_data)
-            except Exception as error:
-                print(f"Could not remove spawn image background: {error}")
-                self.thumbnail_processing_times.append(perf_counter() - started)
-                return
-            self.thumbnail_processing_times.append(perf_counter() - started)
-
-        embed.set_thumbnail(url="attachment://pokemon.png")
-        try:
-            await message.edit(
-                embed=embed,
-                attachments=[
-                    discord.File(thumbnail_buffer, filename="pokemon.png")
-                ],
-            )
-        except discord.HTTPException as error:
-            print(f"Could not update spawn thumbnail: {error}")
 
     async def _get_spawn_image(self, message):
         """Return the spawn image bytes and download duration."""
@@ -2956,10 +2865,6 @@ class PokéTwoNamingBot(commands.Cog):
             (
                 "Response Latest",
                 f"{timing(self.spawn_response_times, 'latest') * 1000:.0f} ms",
-            ),
-            (
-                "Sprite Avg",
-                f"{timing(self.thumbnail_processing_times) * 1000:.0f} ms",
             ),
             (
                 "Pokémons Named",
