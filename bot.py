@@ -531,6 +531,22 @@ class PokéTwoNamingBot(commands.Cog):
         if interaction_user is not None:
             return str(interaction_user.id)
 
+        message_content = " ".join(
+            [message.content or ""]
+            + [
+                str(part)
+                for embed in message.embeds
+                for part in (embed.title, embed.description, embed.footer.text if embed.footer else None)
+                if part
+            ]
+        )
+        embedded_user_ids = re.findall(
+            r"<@!?(\d+)>",
+            message_content,
+        )
+        if len(set(embedded_user_ids)) == 1:
+            return str(embedded_user_ids[0])
+
         pending = self.pending_shiny_status_requests.get(int(message.channel.id))
         if pending and pending[1] >= time() - 30:
             return str(pending[0])
@@ -637,6 +653,32 @@ class PokéTwoNamingBot(commands.Cog):
                         is_shiny_status = True
             if is_shiny_status and pokemon_input and chain is not None:
                 break
+        if pokemon_input is None or chain is None:
+            combined = " ".join(
+                [message.content or ""]
+                + [
+                    f"{embed.title or ''} {embed.description or ''} "
+                    + " ".join(
+                        f"{field.name} {field.value}"
+                        for field in embed.fields
+                    )
+                    for embed in message.embeds
+                ]
+            )
+            currently_hunting = re.search(
+                r"currently hunting[\s:*-]+([^\n]+)",
+                combined,
+                re.IGNORECASE,
+            )
+            chain_match = re.search(
+                r"\bchain[\s:*-]+([\d,]+)",
+                combined,
+                re.IGNORECASE,
+            )
+            if currently_hunting:
+                pokemon_input = currently_hunting.group(1).strip()
+            if chain_match:
+                chain = int(chain_match.group(1).replace(",", ""))
         if pokemon_input is None or chain is None:
             return
 
@@ -951,10 +993,9 @@ class PokéTwoNamingBot(commands.Cog):
             return
         if (
             message.guild
-            and any(user.id == POKETWO_BOT_ID for user in message.mentions)
             and re.search(
-                r"\b(?:sh|shinyhunt|catch)\b",
-                message.content,
+                r"(?:^|\s)(?:<@!?716390085896962058>\s*)?(?:sh|shinyhunt|catch)(?:\s|$)",
+                message.content.lower(),
                 re.IGNORECASE,
             )
         ):
