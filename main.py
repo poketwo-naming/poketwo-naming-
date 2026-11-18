@@ -2,6 +2,7 @@
 Pokétwo Naming Bot - Main entry point
 """
 import os
+import re
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -46,6 +47,16 @@ async def on_message(message):
     """Handle incoming messages"""
     if message.author == bot.user:
         return
+    direct_match = re.fullmatch(
+        r"\s*[vV]!r\s+list(?:\s+(.+?))?\s*",
+        message.content,
+    )
+    if direct_match:
+        ctx = await bot.get_context(message)
+        cog = bot.get_cog("PokéTwoNamingBot")
+        if cog is not None:
+            await cog.handle_reserve_list(ctx, direct_match.group(1) or "")
+            return
     await bot.process_commands(message)
 
 

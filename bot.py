@@ -1865,28 +1865,7 @@ class PokéTwoNamingBot(commands.Cog):
         elif action == "remove":
             await self.remove_reserve(ctx, entry=remainder)
         elif action == "list":
-            member = None
-            if remainder:
-                mention_match = re.search(r"<@!?(\d+)>", remainder)
-                user_id = (
-                    int(mention_match.group(1))
-                    if mention_match
-                    else (int(remainder) if remainder.isdigit() else None)
-                )
-                if user_id is not None:
-                    member = ctx.guild.get_member(user_id)
-                    if member is None:
-                        try:
-                            member = await ctx.guild.fetch_member(user_id)
-                        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-                            member = None
-                if member is None:
-                    try:
-                        member = await commands.MemberConverter().convert(ctx, remainder)
-                    except commands.BadArgument:
-                        await ctx.send("❌ I couldn't find that server member.")
-                        return
-            await self.list_reserves(ctx, member)
+            await self.handle_reserve_list(ctx, remainder)
         elif action == "clear":
             if remainder:
                 await ctx.send("Usage: `v!r clear`")
@@ -1901,6 +1880,36 @@ class PokéTwoNamingBot(commands.Cog):
             await ctx.send(
                 "Unknown reservation action. Use `add`, `remove`, `list`, or `clear`."
             )
+
+    async def handle_reserve_list(self, ctx, member_input: str = ""):
+        """List all reserves or only those belonging to one server member."""
+        member = None
+        if member_input:
+            remainder = member_input.strip()
+            mention_match = re.search(r"<@!?(\d+)>", remainder)
+            user_id = (
+                int(mention_match.group(1))
+                if mention_match
+                else (int(remainder) if remainder.isdigit() else None)
+            )
+            if user_id is not None:
+                member = ctx.guild.get_member(user_id)
+                if member is None:
+                    try:
+                        member = await ctx.guild.fetch_member(user_id)
+                    except (
+                        discord.NotFound,
+                        discord.Forbidden,
+                        discord.HTTPException,
+                    ):
+                        member = None
+            if member is None:
+                try:
+                    member = await commands.MemberConverter().convert(ctx, remainder)
+                except commands.BadArgument:
+                    await ctx.send("❌ I couldn't find that server member.")
+                    return
+        await self.list_reserves(ctx, member)
 
     async def add_reserve(self, ctx, *, entry: str):
         """Reserve a Pokémon for a member. Restricted command."""
