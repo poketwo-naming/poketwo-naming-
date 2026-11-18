@@ -29,7 +29,7 @@ TRAINING_ROOT = "pokemon_images/training_data"
 TRAINING_COLLECTION_FILE = "pokemon_images/new_training_images.json"
 MODEL_READ_VERSION = "V2.0.0"
 TRAINING_REVIEWER_USER_IDS = {217819108329259008}
-BOT_STATE_FILE = "bot_state.json"
+BOT_STATE_FILE = os.getenv("BOT_STATE_FILE", "bot_state.json")
 PREMIUM_MAIN_GUILD_ID = 1530949341013868635
 REVIEW_CONFIDENCE_THRESHOLD = float(
     os.getenv("REVIEW_CONFIDENCE_THRESHOLD", "50")
@@ -956,6 +956,7 @@ class PokéTwoNamingBot(commands.Cog):
         self.pokemon_aliases = self.load_pokemon_aliases()
         self.reviewed_spawn_count = self.load_collected_training_count()
         self.bot_state = self.load_bot_state()
+        self.seed_restricted_roles()
         self.active_incenses = {
             int(channel_id): float(expires_at)
             for channel_id, expires_at in self.bot_state["active_incenses"].items()
@@ -1220,6 +1221,23 @@ class PokéTwoNamingBot(commands.Cog):
         state.setdefault("afk", {})
         return state
 
+    def seed_restricted_roles(self):
+        """Merge roles from RESTRICTED_ROLES ("guild_id:role_id,...") so they survive state loss."""
+        changed = False
+        for pair in os.getenv("RESTRICTED_ROLES", "").split(","):
+            guild_id, _, role_id = pair.strip().partition(":")
+            if not (guild_id.isdigit() and role_id.isdigit()):
+                continue
+            ids = self.restricted_role_ids(guild_id)
+            if int(role_id) not in ids:
+                ids.add(int(role_id))
+                self.bot_state["restricted_roles"][guild_id] = sorted(
+                    str(rid) for rid in ids
+                )
+                changed = True
+        if changed:
+            self.save_bot_state()
+
     def save_bot_state(self):
         """Persist state atomically so interruptions cannot leave empty JSON."""
         directory = os.path.dirname(BOT_STATE_FILE)
@@ -1311,8 +1329,16 @@ class PokéTwoNamingBot(commands.Cog):
         """Check whether a member can use commands marked restricted."""
         if self.is_administrator(ctx):
             return True
-        role_id = self.bot_state["restricted_roles"].get(str(ctx.guild.id))
-        return bool(role_id and ctx.author.get_role(int(role_id)))
+        role_ids = self.restricted_role_ids(ctx.guild.id)
+        return any(role.id in role_ids for role in ctx.author.roles)
+
+    def restricted_role_ids(self, guild_id) -> set[int]:
+        """Return all role IDs allowed to use restricted commands."""
+        value = self.bot_state["restricted_roles"].get(str(guild_id))
+        if not value:
+            return set()
+        values = value if isinstance(value, list) else [value]
+        return {int(role_id) for role_id in values}
 
     def has_restricted_interaction_permission(
         self,
@@ -1329,8 +1355,8 @@ class PokéTwoNamingBot(commands.Cog):
             or member.guild_permissions.manage_guild
         ):
             return True
-        role_id = self.bot_state["restricted_roles"].get(str(guild.id))
-        return bool(role_id and member.get_role(int(role_id)))
+        role_ids = self.restricted_role_ids(guild.id)
+        return any(role.id in role_ids for role in member.roles)
 
     def pokemon_names_from_grab_segment(self, text: str) -> list[str]:
         """Resolve every Pokémon listed after one user mention."""
@@ -1730,8 +1756,10 @@ class PokéTwoNamingBot(commands.Cog):
 
         if pokemon_name.casefold() == "missingno":
             guild_id = str(message.guild.id)
-            role_id = self.bot_state["restricted_roles"].get(guild_id)
-            staff_mention = f"<@&{role_id}>" if role_id else "@staff"
+            role_ids = sorted(self.restricted_role_ids(guild_id))
+            staff_mention = (
+                " ".join(f"<@&{rid}>" for rid in role_ids) if role_ids else "@staff"
+            )
             pause_note = (
                 " The channel is paused for Pokétwo."
                 if missingno_pause
@@ -1893,9 +1921,17 @@ class PokéTwoNamingBot(commands.Cog):
         if role is None:
             await ctx.send("❌ That role is not in this server.")
             return
-        self.bot_state["restricted_roles"][str(ctx.guild.id)] = str(role.id)
+        role_ids = self.restricted_role_ids(ctx.guild.id)
+        role_ids.add(role.id)
+        self.bot_state["restricted_roles"][str(ctx.guild.id)] = sorted(
+            str(rid) for rid in role_ids
+        )
         self.save_bot_state()
-        await ctx.send(f"✅ Restricted commands are now available to {role.mention}.")
+        mentions = " ".join(f"<@&{rid}>" for rid in sorted(role_ids))
+        await ctx.send(
+            f"✅ Restricted commands are available to: {mentions}",
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
 
     @commands.command(name="afk")
     async def afk(self, ctx):
