@@ -563,28 +563,29 @@ class PokéTwoNamingBot(commands.Cog):
             if reserved_user_id:
                 output += f"\nreserved: <@{reserved_user_id}>"
             else:
-                if shiny_hunters is None:
-                    shiny_hunters = self.shiny_hunters_for_spawn(
-                        guild_id,
-                        pokemon_name,
-                    )
+                current_hunters = self.shiny_hunters_for_spawn(
+                    guild_id,
+                    pokemon_name,
+                )
+                shiny_hunters = list(
+                    dict.fromkeys((shiny_hunters or []) + current_hunters)
+                )
                 if shiny_hunters:
                     mentions = " ".join(f"<@{user_id}>" for user_id in shiny_hunters)
                     output += f"\nshinyhunt: {mentions}"
-                else:
-                    collection_owners = [
-                        user_id
-                        for user_id, pokemon_names in self.bot_state.get(
-                            "collections",
-                            {},
-                        ).get(str(guild_id), {}).items()
-                        if pokemon_name in pokemon_names
-                    ]
-                    if collection_owners:
-                        mentions = " ".join(
-                            f"<@{user_id}>" for user_id in collection_owners
-                        )
-                        output += f"\ncollection: {mentions}"
+                collection_owners = [
+                    user_id
+                    for user_id, pokemon_names in self.bot_state.get(
+                        "collections",
+                        {},
+                    ).get(str(guild_id), {}).items()
+                    if pokemon_name in pokemon_names
+                ]
+                if collection_owners:
+                    mentions = " ".join(
+                        f"<@{user_id}>" for user_id in collection_owners
+                    )
+                    output += f"\ncollection: {mentions}"
         return output
 
     def set_shiny_hunt(
@@ -986,6 +987,23 @@ class PokéTwoNamingBot(commands.Cog):
                     value=" ".join(f"<@{user_id}>" for user_id in shiny_hunters),
                     inline=True,
                 )
+            if not reserved_user_id:
+                collection_owners = [
+                    user_id
+                    for user_id, pokemon_names in self.bot_state.get(
+                        "collections",
+                        {},
+                    ).get(str(message.guild.id), {}).items()
+                    if pokemon_name in pokemon_names
+                ]
+                if collection_owners:
+                    embed.add_field(
+                        name="Collection",
+                        value=" ".join(
+                            f"<@{user_id}>" for user_id in collection_owners
+                        ),
+                        inline=True,
+                    )
             embed.set_image(url="attachment://spawn-review.webp")
             with Image.open(BytesIO(image_data)) as image:
                 review_buffer = BytesIO()

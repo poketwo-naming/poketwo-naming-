@@ -57,8 +57,8 @@ beneath the best name. An active reservation replaces the shiny-hunt line with
 the reserved member. Chain tracking is not stored.
 
 Collections are personal and unrestricted: each member can only modify their
-own collection. Collection pings appear only when there is no reserve or shiny
-hunt for that spawn.
+own collection. Spawn output lists shiny hunts before collections. A reserve
+replaces both sections.
 
 Active incense counts expire automatically after 90 seconds without a Pokétwo
 spawn in that channel. Override the inactivity window with
