@@ -1195,23 +1195,36 @@ class PokéTwoNamingBot(commands.Cog):
         confidence: float,
         guild_id: int | None = None,
         shiny_hunters: list[str] | None = None,
-    ) -> str:
-        """Format the prediction with every correct primary/secondary type icon."""
+    ) -> tuple[str, discord.Embed]:
+        """Build a copyable catch command and Pokémon embed."""
         icons = "".join(
             TYPE_EMOJIS[pokemon_type]
             for pokemon_type in self.pokemon_types[pokemon_name]
         )
-        output = (
-            f"{icons} {pokemon_name} {confidence:.2f}%\n"
-            f"best name: {self.pokemon_best_names[pokemon_name]}"
+        best_name = self.pokemon_best_names[pokemon_name]
+        content = [
+            f"{pokemon_name} {icons} {confidence:.2f}%",
+            f"Best name: {best_name}",
+        ]
+        embed = discord.Embed(
+            title=f"Catch {pokemon_name}",
+            color=discord.Color.blurple(),
         )
-        if guild_id is not None:
+        if pokemon_name.casefold() == "missingno":
+            content.append("Do not catch this Pokémon.")
+            embed.title = "MissingNo detected"
+            embed.description = "**Do not catch this Pokémon.**"
+        else:
+            copy_command = f"@Pokétwo#8236 c {best_name.casefold()}"
+            embed.description = f"**Copy Below**\n`{copy_command}`"
+
+        if guild_id is not None and pokemon_name.casefold() != "missingno":
             reserved_user_id = self.bot_state.get("reserves", {}).get(
                 str(guild_id),
                 {},
             ).get(pokemon_name)
             if reserved_user_id:
-                output += f"\nreserved: <@{reserved_user_id}>"
+                content.append(f"Reserved: <@{reserved_user_id}>")
             else:
                 current_hunters = self.shiny_hunters_for_spawn(
                     guild_id,
@@ -1221,18 +1234,24 @@ class PokéTwoNamingBot(commands.Cog):
                     dict.fromkeys((shiny_hunters or []) + current_hunters)
                 )
                 if shiny_hunters:
-                    mentions = " ".join(f"<@{user_id}>" for user_id in shiny_hunters)
-                    output += f"\nshinyhunt: {mentions}"
+                    mentions = ", ".join(
+                        f"<@{user_id}> - {pokemon_name.casefold()}"
+                        for user_id in shiny_hunters
+                    )
+                    content.append(f"Shiny hunt pings: {mentions}")
                 collection_owners = self.collection_owners_for_spawn(
                     guild_id,
                     pokemon_name,
                 )
                 if collection_owners:
-                    mentions = " ".join(
+                    mentions = ", ".join(
                         f"<@{user_id}>" for user_id in collection_owners
                     )
-                    output += f"\ncollection: {mentions}"
-        return output
+                    content.append(f"Collection pings: {mentions}")
+            content.append(f"Click to Copy -> `{copy_command}`")
+        elif pokemon_name.casefold() != "missingno":
+            content.append(f"Click to Copy -> `{copy_command}`")
+        return "\n".join(content), embed
 
     def set_shiny_hunt(
         self,
@@ -1886,13 +1905,23 @@ class PokéTwoNamingBot(commands.Cog):
                 view=SpawnReviewView(self, pokemon_name, image_data),
             )
         else:
+            content, embed = self.format_spawn_prediction(
+                pokemon_name,
+                confidence,
+                message.guild.id if message.guild else None,
+                shiny_hunters,
+            )
+            with Image.open(BytesIO(image_data)) as image:
+                thumbnail = image.convert("RGB")
+            thumbnail.thumbnail((256, 256))
+            thumbnail_buffer = BytesIO()
+            thumbnail.save(thumbnail_buffer, format="WEBP", quality=85)
+            thumbnail_buffer.seek(0)
+            embed.set_thumbnail(url="attachment://pokemon.webp")
             await message.channel.send(
-                self.format_spawn_prediction(
-                    pokemon_name,
-                    confidence,
-                    message.guild.id if message.guild else None,
-                    shiny_hunters,
-                )
+                content=content,
+                embed=embed,
+                file=discord.File(thumbnail_buffer, filename="pokemon.webp"),
             )
 
         if pokemon_name.casefold() == "missingno":

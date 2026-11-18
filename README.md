@@ -46,6 +46,10 @@ when necessary. Higher-confidence guesses use normal naming output. Reviewed
 images can be downloaded with `v!export_training` before retraining. The
 threshold can be changed with `REVIEW_CONFIDENCE_THRESHOLD`.
 
+Normal naming output includes a copyable Pokétwo catch command and a Pokémon
+embed with a thumbnail from the detected spawn image. The catch command uses
+the configured best name for each recognized Pokémon.
+
 MissingNo detection immediately denies Pokétwo's Send Messages permission in
 the current channel and asks staff not to catch it. Administrators configure a
 restricted staff role with `v!permission <role_id>`; that role can use `v!resume`
@@ -55,9 +59,9 @@ Channels** permission for this pause/resume feature.
 Spawn recognition and MissingNo handling require Bronze, Silver, or Gold
 premium access. Other informational and configuration commands remain usable.
 
-Multiple members can shiny hunt the same Pokémon. `shinyhunt:` pings them
-beneath the best name. An active reservation replaces the shiny-hunt line with
-the reserved member. Chain tracking is not stored.
+Multiple members can shiny hunt the same Pokémon. `shinyhunt:` pings them in
+the naming message. An active reservation replaces the shiny-hunt and collection
+lines with the reserved member. Chain tracking is not stored.
 
 Collections are personal and unrestricted: each member can only modify their
 own collection. Spawn output lists shiny hunts before collections. A reserve
