@@ -26,6 +26,10 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 | `v!r clear` | `v!r clear` | Confirm and clear all server reserves (restricted) |
 | `v!sh [pokemon]` | `v!sh Pikachu` | Start/switch a hunt, or show your current hunt and chain |
 | `v!sh clear` | `v!sh clear` | Clear your shiny hunt |
+| `v!cl add [all] <pokemon>` | `v!cl add all Arceus` | Add one Pokémon or all forms to your collection |
+| `v!cl remove <pokemon>` | `v!cl remove Fairy Arceus` | Remove one Pokémon from your collection |
+| `v!cl list` | `v!cl list` | List your own collection |
+| `v!cl clear` | `v!cl clear` | Clear your own collection |
 | `v!permission <role_id>` | `v!permission 123456789` | Grant a role restricted-command access |
 | `v!training` | `v!training` | Show reviewed training images in the review channel |
 | `v!export_training` | `v!export_training` | Download reviewed images for retraining |
@@ -51,6 +55,10 @@ premium access. Other informational and configuration commands remain usable.
 Multiple members can shiny hunt the same Pokémon. `shinyhunt:` pings them
 beneath the best name. An active reservation replaces the shiny-hunt line with
 the reserved member. Chain tracking is not stored.
+
+Collections are personal and unrestricted: each member can only modify their
+own collection. Collection pings appear only when there is no reserve or shiny
+hunt for that spawn.
 
 Active incense counts expire automatically after 90 seconds without a Pokétwo
 spawn in that channel. Override the inactivity window with

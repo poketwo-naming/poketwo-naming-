@@ -81,6 +81,18 @@ COMMAND_CATALOG = (
     ),
     ("Shiny Hunts", "v!sh clear", "Clears your current shiny hunt."),
     (
+        "Collections",
+        "v!cl add [all] <pokemon>",
+        "Adds one Pokémon or all matching forms to your collection.",
+    ),
+    (
+        "Collections",
+        "v!cl remove <pokemon>",
+        "Removes one Pokémon from your collection.",
+    ),
+    ("Collections", "v!cl list", "Lists your own collection."),
+    ("Collections", "v!cl clear", "Clears your own collection."),
+    (
         "Administration",
         "v!permission <role_id>",
         "Assigns the restricted-command role. Server administrators only.",
@@ -559,6 +571,20 @@ class PokéTwoNamingBot(commands.Cog):
                 if shiny_hunters:
                     mentions = " ".join(f"<@{user_id}>" for user_id in shiny_hunters)
                     output += f"\nshinyhunt: {mentions}"
+                else:
+                    collection_owners = [
+                        user_id
+                        for user_id, pokemon_names in self.bot_state.get(
+                            "collections",
+                            {},
+                        ).get(str(guild_id), {}).items()
+                        if pokemon_name in pokemon_names
+                    ]
+                    if collection_owners:
+                        mentions = " ".join(
+                            f"<@{user_id}>" for user_id in collection_owners
+                        )
+                        output += f"\ncollection: {mentions}"
         return output
 
     def set_shiny_hunt(
@@ -632,6 +658,7 @@ class PokéTwoNamingBot(commands.Cog):
                 "reserves": {},
                 "active_incenses": {},
                 "shiny_hunts": {},
+                "collections": {},
             }
         with open(BOT_STATE_FILE, "r", encoding="utf-8") as f:
             state = json.load(f)
@@ -640,6 +667,7 @@ class PokéTwoNamingBot(commands.Cog):
         state.setdefault("reserves", {})
         state.setdefault("active_incenses", {})
         state.setdefault("shiny_hunts", {})
+        state.setdefault("collections", {})
         return state
 
     def save_bot_state(self):
@@ -1456,6 +1484,125 @@ class PokéTwoNamingBot(commands.Cog):
                 ctx.guild.id,
                 ctx.author.id,
             ),
+        )
+
+    @commands.group(name="cl", invoke_without_command=True)
+    async def collection(self, ctx):
+        """Show the caller's collection help."""
+        if ctx.invoked_subcommand is not None:
+            return
+        await ctx.send(
+            "Usage: `v!cl add <pokemon>`, `v!cl remove <pokemon>`, "
+            "`v!cl list`, or `v!cl clear`."
+        )
+
+    @collection.command(name="add")
+    async def add_collection(self, ctx, *, pokemon_input: str):
+        """Add one Pokémon or an entire family to the caller's collection."""
+        if ctx.guild is None:
+            await ctx.send("Collections can only be managed inside a server.")
+            return
+        add_all = pokemon_input.casefold().startswith("all ")
+        family_input = pokemon_input[4:].strip() if add_all else pokemon_input.strip()
+        if add_all:
+            pokemon_names = self.resolve_pokemon_family(family_input)
+        else:
+            pokemon_name = self.resolve_pokemon_name(family_input)
+            pokemon_names = [pokemon_name] if pokemon_name else []
+        if not pokemon_names:
+            await ctx.send(f"❌ Unknown Pokémon: `{family_input}`")
+            return
+
+        guild_collections = self.bot_state["collections"].setdefault(
+            str(ctx.guild.id),
+            {},
+        )
+        collection = guild_collections.setdefault(str(ctx.author.id), [])
+        added = [
+            str(pokemon_name)
+            for pokemon_name in pokemon_names
+            if str(pokemon_name) not in collection
+        ]
+        collection.extend(added)
+        self.save_bot_state()
+        await ctx.send(
+            f"✅ Added **{len(added)}** Pokémon to your collection."
+            if add_all
+            else f"✅ Added **{pokemon_names[0]}** to your collection."
+        )
+
+    @collection.command(name="remove")
+    async def remove_collection(self, ctx, *, pokemon_input: str):
+        """Remove one Pokémon from the caller's collection."""
+        if ctx.guild is None:
+            await ctx.send("Collections can only be managed inside a server.")
+            return
+        pokemon_name = self.resolve_pokemon_name(pokemon_input)
+        if pokemon_name is None:
+            await ctx.send(f"❌ Unknown Pokémon: `{pokemon_input}`")
+            return
+        collection = self.bot_state["collections"].get(
+            str(ctx.guild.id),
+            {},
+        ).get(str(ctx.author.id), [])
+        if str(pokemon_name) not in collection:
+            await ctx.send(f"❌ **{pokemon_name}** is not in your collection.")
+            return
+        collection.remove(str(pokemon_name))
+        self.save_bot_state()
+        await ctx.send(f"✅ Removed **{pokemon_name}** from your collection.")
+
+    @collection.command(name="list")
+    async def list_collection(self, ctx):
+        """List the caller's collection."""
+        if ctx.guild is None:
+            await ctx.send("Collections can only be viewed inside a server.")
+            return
+        collection = sorted(
+            self.bot_state["collections"].get(
+                str(ctx.guild.id),
+                {},
+            ).get(str(ctx.author.id), []),
+            key=str.casefold,
+        )
+        if not collection:
+            await ctx.send("Your collection is empty.")
+            return
+        lines = [f"• {pokemon_name}" for pokemon_name in collection]
+        embeds = []
+        for start in range(0, len(lines), 45):
+            embeds.append(
+                discord.Embed(
+                    title=f"{ctx.author.display_name}'s Collection",
+                    description="\n".join(lines[start : start + 45]),
+                    color=discord.Color.blue(),
+                ).set_footer(
+                    text=(
+                        f"{start + 1}-{min(start + 45, len(lines))} "
+                        f"of {len(lines)} Pokémon"
+                    )
+                )
+            )
+        for chunk_start in range(0, len(embeds), 10):
+            await ctx.send(embeds=embeds[chunk_start : chunk_start + 10])
+
+    @collection.command(name="clear")
+    async def clear_collection(self, ctx):
+        """Clear the caller's collection."""
+        if ctx.guild is None:
+            await ctx.send("Collections can only be managed inside a server.")
+            return
+        guild_collections = self.bot_state["collections"].get(
+            str(ctx.guild.id),
+            {},
+        )
+        collection = guild_collections.pop(str(ctx.author.id), None)
+        if not collection:
+            await ctx.send("Your collection is already empty.")
+            return
+        self.save_bot_state()
+        await ctx.send(
+            f"✅ Cleared **{len(collection)}** Pokémon from your collection."
         )
 
     @commands.command(name="api")
