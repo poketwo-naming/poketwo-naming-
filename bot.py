@@ -38,6 +38,81 @@ PREMIUM_CAPACITIES = {
     "silver": 200,
     "gold": 300,
 }
+COMMAND_CATALOG = (
+    ("General", "v!ping", "Shows the bot's gateway latency."),
+    ("General", "v!help [page]", "Shows all commands with descriptions, paginated."),
+    ("General", "v!commands [page]", "Shows categorized command names, paginated."),
+    (
+        "Recognition",
+        "v!api",
+        "Shows global incense, recognition, inference, and response metrics.",
+    ),
+    ("Recognition", "v!servers", "Lists every server where the bot is connected."),
+    ("Naming", "v!suggestname <pokemon>", "Shows nickname suggestions for a Pokémon."),
+    (
+        "Naming",
+        "v!nameit <pokemon>",
+        "Shows a quick nickname suggestion for a Pokémon.",
+    ),
+    (
+        "Naming",
+        "v!savename <id> <nickname>",
+        "Saves a nickname for a Pokémon to your collection.",
+    ),
+    ("Naming", "v!mynames", "Lists your saved Pokémon nicknames."),
+    ("Naming", "v!deletename <id>", "Deletes a nickname from your collection."),
+    (
+        "Reservations",
+        "v!r",
+        "Resumes Pokétwo in a channel paused after MissingNo. Restricted.",
+    ),
+    (
+        "Reservations",
+        "v!r add <pokemon> <@user>",
+        "Reserves a Pokémon for a member. Restricted.",
+    ),
+    (
+        "Reservations",
+        "v!r remove <pokemon> [@user]",
+        "Removes a Pokémon reservation. Restricted.",
+    ),
+    (
+        "Reservations",
+        "v!r list [@user]",
+        "Lists server reservations, optionally filtered to one member.",
+    ),
+    (
+        "Shiny Hunts",
+        "v!sh <pokemon>",
+        "Starts a shiny hunt or asks before switching your current hunt.",
+    ),
+    ("Shiny Hunts", "v!sh clear", "Clears your current shiny hunt."),
+    (
+        "Administration",
+        "v!permission <role_id>",
+        "Assigns the restricted-command role. Server administrators only.",
+    ),
+    (
+        "Premium",
+        "v!premium",
+        "Shows the current server's Bronze, Silver, or Gold tier.",
+    ),
+    (
+        "Premium",
+        "v!premium add <tier> <server_id>",
+        "Grants a server tier. Bot owner from the main server only.",
+    ),
+    (
+        "Training",
+        "v!training",
+        "Shows the count of reviewed images waiting for model training.",
+    ),
+    (
+        "Training",
+        "v!export_training",
+        "Downloads newly reviewed training images as a ZIP.",
+    ),
+)
 TYPE_EMOJIS = {
     "water": "<:water:1560303864094130357>",
     "rock": "<:rock:1564789532384174100>",
@@ -259,6 +334,60 @@ class ShinyHuntSwitchView(discord.ui.View):
         self.disable_buttons()
         await interaction.response.edit_message(
             content=f"Kept your **{self.old_pokemon}** shiny hunt.",
+            view=self,
+        )
+
+
+class HelpPagesView(discord.ui.View):
+    """Navigate paginated help and command-list embeds."""
+
+    def __init__(self, author_id: int, pages: list[discord.Embed]):
+        super().__init__(timeout=120)
+        self.author_id = author_id
+        self.pages = pages
+        self.page = 0
+        self.update_buttons()
+
+    def update_buttons(self):
+        self.previous_button.disabled = len(self.pages) < 2 or self.page == 0
+        self.next_button.disabled = (
+            len(self.pages) < 2 or self.page == len(self.pages) - 1
+        )
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id == self.author_id:
+            return True
+        await interaction.response.send_message(
+            "Only the person who opened this help menu can change pages.",
+            ephemeral=True,
+        )
+        return False
+
+    @discord.ui.button(label="Previous", style=discord.ButtonStyle.secondary)
+    async def previous_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ):
+        del button
+        self.page = max(0, self.page - 1)
+        self.update_buttons()
+        await interaction.response.edit_message(
+            embed=self.pages[self.page],
+            view=self,
+        )
+
+    @discord.ui.button(label="Next", style=discord.ButtonStyle.primary)
+    async def next_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ):
+        del button
+        self.page = min(len(self.pages) - 1, self.page + 1)
+        self.update_buttons()
+        await interaction.response.edit_message(
+            embed=self.pages[self.page],
             view=self,
         )
 
@@ -1479,95 +1608,74 @@ class PokéTwoNamingBot(commands.Cog):
         
         await ctx.send(f"✅ Deleted nickname **{deleted_name}** for Pokémon **{pokemon_id}**")
 
-    @commands.command(name="help_naming")
-    async def help_naming(self, ctx):
-        """Display help for Pokétwo naming bot"""
-        embed = discord.Embed(
-            title="🎀 Pokétwo Naming Bot Help",
-            description="Commands for managing Pokémon names",
-            color=discord.Color.purple()
-        )
-        embed.add_field(
-            name="v!suggestname <pokemon>",
-            value="Get name suggestions for a Pokémon",
-            inline=False
-        )
-        embed.add_field(
-            name="v!nameit <pokemon>",
-            value="Quick names for catching a Pokémon",
-            inline=False
-        )
-        embed.add_field(
-            name="v!savename <id> <nickname>",
-            value="Save a nickname for your Pokémon",
-            inline=False
-        )
-        embed.add_field(
-            name="v!mynames",
-            value="View all your saved Pokémon names",
-            inline=False
-        )
-        embed.add_field(
-            name="v!deletename <id>",
-            value="Delete a saved Pokémon name",
-            inline=False
-        )
-        embed.add_field(
-            name="v!ping",
-            value="Check bot status",
-            inline=False
-        )
-        embed.add_field(
-            name="v!api",
-            value="View Pokémon recognition and response timings",
-            inline=False
-        )
-        embed.add_field(
-            name="v!servers",
-            value="List every server where the bot is active",
-            inline=False
-        )
-        embed.add_field(
-            name="v!premium",
-            value="View Bronze, Silver, and Gold incense naming capacities",
-            inline=False
-        )
-        embed.add_field(
-            name="v!r",
-            value="Resume a channel paused after MissingNo (restricted)",
-            inline=False
-        )
-        embed.add_field(
-            name="v!sh <pokemon>",
-            value="Start or switch your shiny hunt with confirmation",
-            inline=False
-        )
-        embed.add_field(
-            name="v!sh clear",
-            value="Clear your current shiny hunt",
-            inline=False
-        )
-        embed.add_field(
-            name="v!permission <role_id>",
-            value="Grant a role access to restricted commands (administrator)",
-            inline=False
-        )
-        embed.add_field(
-            name="v!training",
-            value="Show reviewed image count in the training channel",
-            inline=False
-        )
-        embed.add_field(
-            name="v!export_training",
-            value="Download reviewed images for retraining",
-            inline=False
-        )
-        embed.add_field(
-            name="📡 Auto-Detection",
-            value="Bot automatically detects Pokétwo spawns and shows naming suggestions!",
-            inline=False
-        )
-        await ctx.send(embed=embed)
+    @staticmethod
+    def command_pages(command_only: bool = False) -> list[discord.Embed]:
+        """Build help pages with no more than 20 commands per page."""
+        page_size = 20
+        page_count = (len(COMMAND_CATALOG) + page_size - 1) // page_size
+        pages = []
+        for page_index in range(page_count):
+            entries = COMMAND_CATALOG[
+                page_index * page_size : (page_index + 1) * page_size
+            ]
+            embed = discord.Embed(
+                title=(
+                    "Command List"
+                    if command_only
+                    else "🎀 Pokétwo Naming Bot Help"
+                ),
+                description=(
+                    "Commands grouped by category."
+                    if command_only
+                    else "All commands and what each one does."
+                ),
+                color=discord.Color.purple(),
+            )
+            categories = {}
+            for category, syntax, description in entries:
+                categories.setdefault(category, []).append(
+                    f"`{syntax}`"
+                    if command_only
+                    else f"`{syntax}`\n{description}"
+                )
+            for category, commands in categories.items():
+                embed.add_field(
+                    name=category,
+                    value="\n".join(commands),
+                    inline=False,
+                )
+            embed.set_footer(
+                text=(
+                    f"Page {page_index + 1}/{page_count} • "
+                    f"{len(entries)} commands"
+                )
+            )
+            pages.append(embed)
+        return pages
+
+    @commands.command(name="help")
+    async def help_command(self, ctx, page: int = 1):
+        """Display paginated command explanations."""
+        pages = self.command_pages(command_only=False)
+        if page < 1 or page > len(pages):
+            await ctx.send(f"Choose a page from 1 to {len(pages)}.")
+            return
+        view = HelpPagesView(ctx.author.id, pages)
+        view.page = page - 1
+        view.update_buttons()
+        await ctx.send(embed=pages[view.page], view=view)
+
+    @commands.command(name="commands")
+    async def commands_list(self, ctx, page: int = 1):
+        """Display paginated command names by category."""
+        pages = self.command_pages(command_only=True)
+        if page < 1 or page > len(pages):
+            await ctx.send(f"Choose a page from 1 to {len(pages)}.")
+            return
+        view = HelpPagesView(ctx.author.id, pages)
+        view.page = page - 1
+        view.update_buttons()
+        await ctx.send(embed=pages[view.page], view=view)
 
 
 async def setup(bot):

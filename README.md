@@ -35,7 +35,8 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 | `v!permission <role_id>` | `v!permission 123456789` | Grant a role restricted-command access |
 | `v!training` | `v!training` | Show reviewed training images in the review channel |
 | `v!export_training` | `v!export_training` | Download reviewed images for retraining |
-| `v!help_naming` | `v!help_naming` | Display this help message |
+| `v!help [page]` | `v!help 1` | Paginated command explanations |
+| `v!commands [page]` | `v!commands 1` | Categorized command list |
 
 In channel `1531476097970212915`, spawn guesses below 50% confidence include
 **Yes/No** review buttons. Yes saves the image under the predicted Pokémon
