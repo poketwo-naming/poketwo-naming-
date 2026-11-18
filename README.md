@@ -54,10 +54,9 @@ Channels** permission for this pause/resume feature.
 Spawn recognition and MissingNo handling require Bronze, Silver, or Gold
 premium access. Other informational and configuration commands remain usable.
 
-Multiple members can shiny hunt the same Pokémon. Their hunt chain increments
-on matching Pokétwo catch results, resets after catching another Pokémon, and
-`shinyhunt:` pings them beneath the best name.
-An active reservation replaces the shiny-hunt line with the reserved member.
+Multiple members can shiny hunt the same Pokémon. `shinyhunt:` pings them
+beneath the best name. An active reservation replaces the shiny-hunt line with
+the reserved member. Chain tracking is not stored.
 
 Active incense counts expire automatically after 90 seconds without a Pokétwo
 spawn in that channel. Override the inactivity window with

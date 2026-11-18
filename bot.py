@@ -85,7 +85,7 @@ COMMAND_CATALOG = (
     (
         "Shiny Hunts",
         "v!sh [pokemon]",
-        "Starts/switches a hunt, or shows your current Pokémon and chain.",
+        "Starts/switches a hunt, or shows your current Pokémon.",
     ),
     ("Shiny Hunts", "v!sh clear", "Clears your current shiny hunt."),
     (
@@ -312,7 +312,7 @@ class ShinyHuntSwitchView(discord.ui.View):
         await interaction.response.edit_message(
             content=(
                 f"✅ Switched your shiny hunt from **{self.old_pokemon}** "
-                f"to **{self.new_pokemon}**. Chain reset to **0**."
+                f"to **{self.new_pokemon}**."
             ),
             view=self,
         )
@@ -410,8 +410,6 @@ class PokéTwoNamingBot(commands.Cog):
         self.last_spawn_metrics = None
         self.recognized_spawn_count = 0
         self.recent_spawn_times = {}
-        self.pending_shiny_status_requests = {}
-        self.processed_shiny_catches = deque(maxlen=1000)
         self.class_names = {name.casefold(): name for name in self.recognizer.classes}
         self.pokemon_types = self.load_pokemon_types()
         self.pokemon_best_names = self.load_pokemon_best_names()
@@ -496,14 +494,13 @@ class PokéTwoNamingBot(commands.Cog):
         user_id: int,
         pokemon_name: str,
     ):
-        """Create or replace a member's shiny hunt with a fresh chain."""
+        """Create or replace a member's shiny hunt."""
         guild_hunts = self.bot_state["shiny_hunts"].setdefault(
             str(guild_id),
             {},
         )
         guild_hunts[str(user_id)] = {
             "pokemon": str(pokemon_name),
-            "chain": 0,
         }
         self.save_bot_state()
 
@@ -512,227 +509,13 @@ class PokéTwoNamingBot(commands.Cog):
         guild_id: int,
         pokemon_name: str,
     ) -> list[str]:
-        """Return members hunting a spawned Pokémon without changing chains."""
+        """Return members hunting a spawned Pokémon."""
         guild_hunts = self.bot_state["shiny_hunts"].get(str(guild_id), {})
         return [
             user_id
             for user_id, hunt in guild_hunts.items()
             if hunt.get("pokemon") == pokemon_name
         ]
-
-    def command_user_id(self, message) -> str | None:
-        """Resolve the user who invoked a Pokétwo command response."""
-        interaction = getattr(message, "interaction_metadata", None) or getattr(
-            message,
-            "interaction",
-            None,
-        )
-        interaction_user = getattr(interaction, "user", None)
-        if interaction_user is not None:
-            return str(interaction_user.id)
-
-        message_content = " ".join(
-            [message.content or ""]
-            + [
-                str(part)
-                for embed in message.embeds
-                for part in (embed.title, embed.description, embed.footer.text if embed.footer else None)
-                if part
-            ]
-        )
-        embedded_user_ids = re.findall(
-            r"<@!?(\d+)>",
-            message_content,
-        )
-        if len(set(embedded_user_ids)) == 1:
-            return str(embedded_user_ids[0])
-
-        pending = self.pending_shiny_status_requests.get(int(message.channel.id))
-        if pending and pending[1] >= time() - 30:
-            return str(pending[0])
-
-        if len(message.mentions) == 1:
-            return str(message.mentions[0].id)
-        reference = getattr(message, "reference", None)
-        referenced = reference.resolved if reference else None
-        if referenced and referenced.author.id != POKETWO_BOT_ID:
-            return str(referenced.author.id)
-        return None
-
-    def remember_poketwo_shiny_request(self, message) -> bool:
-        """Remember who requested a Pokétwo shiny-hunt status in this channel."""
-        normalized = (message.content or "").casefold()
-        commands = (
-            r"\bsh\b",
-            r"\bshinyhunt\b",
-            r"\bshiny[\s-]?hunt\b",
-            r"<@!?" + str(POKETWO_BOT_ID) + r">\s*(?:sh|shinyhunt)\b",
-            r"\bcatch\b",
-        )
-        if not any(re.search(pattern, normalized) for pattern in commands):
-            return False
-        self.pending_shiny_status_requests[int(message.channel.id)] = (
-            int(message.author.id),
-            time(),
-        )
-        print(
-            "Pokétwo shiny-chain request recorded: "
-            f"channel={message.channel.id} user={message.author.id}"
-        )
-        return True
-
-    def track_poketwo_catch(self, message) -> None:
-        """Update shiny-hunt chains from a Pokétwo catch result."""
-        if not message.guild:
-            return
-        text_parts = [message.content or ""]
-        for embed in message.embeds:
-            text_parts.extend(
-                filter(
-                    None,
-                    [
-                        embed.title,
-                        embed.description,
-                        embed.footer.text if embed.footer else None,
-                    ],
-                )
-            )
-        text = " ".join(text_parts)
-        if not re.search(
-            r"\b(?:you\s+)?caught\b|\bcongratulations\b",
-            text,
-            re.IGNORECASE,
-        ):
-            return
-        message_id = int(message.id)
-        if message_id in self.processed_shiny_catches:
-            return
-        user_id = self.command_user_id(message)
-        if user_id is None:
-            mention_ids = {
-                str(match)
-                for match in re.findall(r"<@!?(\d+)>", text)
-            }
-            if len(mention_ids) == 1:
-                user_id = next(iter(mention_ids))
-        if user_id is None:
-            return
-        self.processed_shiny_catches.append(message_id)
-        self.pending_shiny_status_requests.pop(int(message.channel.id), None)
-        guild_hunts = self.bot_state["shiny_hunts"].get(
-            str(message.guild.id),
-            {},
-        )
-        hunt = guild_hunts.get(user_id)
-        if not hunt:
-            return
-        hunted_name = str(hunt.get("pokemon", ""))
-        reported_chain = re.search(
-            r"\b(?:shiny\s+)?chain\s*(?:[:=]|is|to)?\s*(\d+)\b",
-            text,
-            re.IGNORECASE,
-        )
-        if reported_chain:
-            hunt["chain"] = int(reported_chain.group(1))
-        elif re.search(
-            rf"(?<![\w'-]){re.escape(hunted_name)}(?![\w'-])",
-            text,
-            re.IGNORECASE,
-        ):
-            hunt["chain"] = int(hunt.get("chain", 0)) + 1
-        else:
-            hunt["chain"] = 0
-        self.save_bot_state()
-
-    def track_poketwo_shiny_hunt(self, message) -> None:
-        """Sync a member's hunt from Pokétwo's shiny-hunt status embed."""
-        if not message.guild:
-            return
-        pokemon_input = None
-        chain = None
-        for embed in message.embeds:
-            summary = " ".join(
-                filter(
-                    None,
-                    [
-                        embed.title,
-                        embed.description,
-                        embed.footer.text if embed.footer else None,
-                    ],
-                )
-            )
-            is_shiny_status = "shiny hunt" in summary.casefold()
-            for field in embed.fields:
-                field_name = str(field.name).casefold()
-                field_value = str(field.value).strip()
-                if "currently hunting" in field_name or field_name == "pokemon":
-                    pokemon_input = field_value
-                    is_shiny_status = True
-                if "chain" in field_name:
-                    match = re.search(r"\d+", field_value.replace(",", ""))
-                    if match:
-                        chain = int(match.group())
-                        is_shiny_status = True
-            if is_shiny_status and pokemon_input and chain is not None:
-                break
-        if pokemon_input is None or chain is None:
-            combined = " ".join(
-                [message.content or ""]
-                + [
-                    f"{embed.title or ''} {embed.description or ''} "
-                    + " ".join(
-                        f"{field.name} {field.value}"
-                        for field in embed.fields
-                    )
-                    for embed in message.embeds
-                ]
-            )
-            currently_hunting = re.search(
-                r"currently hunting[\s:*-]+([^\n]+)",
-                combined,
-                re.IGNORECASE,
-            )
-            chain_match = re.search(
-                r"\bchain[\s:*-]+([\d,]+)",
-                combined,
-                re.IGNORECASE,
-            )
-            if currently_hunting:
-                pokemon_input = currently_hunting.group(1).strip()
-            if chain_match:
-                chain = int(chain_match.group(1).replace(",", ""))
-        if pokemon_input is None or chain is None:
-            return
-
-        pokemon_name = self.resolve_pokemon_name(pokemon_input)
-        if pokemon_name is None:
-            print(
-                "Could not resolve Pokémon from Pokétwo shiny-hunt status: "
-                f"{pokemon_input!r}"
-            )
-            return
-        user_id = self.command_user_id(message)
-        if user_id is None:
-            print(
-                "Could not associate Pokétwo shiny-hunt status with a user: "
-                f"channel={message.channel.id}"
-            )
-            return
-
-        guild_hunts = self.bot_state["shiny_hunts"].setdefault(
-            str(message.guild.id),
-            {},
-        )
-        guild_hunts[user_id] = {
-            "pokemon": str(pokemon_name),
-            "chain": chain,
-        }
-        self.save_bot_state()
-        self.pending_shiny_status_requests.pop(int(message.channel.id), None)
-        print(
-            "Pokétwo shiny chain synchronized: "
-            f"user={user_id} pokemon={pokemon_name} chain={chain}"
-        )
 
     def load_pokemon_best_names(self):
         """Load and validate the shortest localized name for each model class."""
@@ -1025,14 +808,9 @@ class PokéTwoNamingBot(commands.Cog):
         # Ignore bot's own messages
         if message.author.id == self.bot.user.id:
             return
-        if message.guild and message.author.id != POKETWO_BOT_ID:
-            self.remember_poketwo_shiny_request(message)
-
         # Check if message is from Pokétwo bot
         if message.author.id == POKETWO_BOT_ID:
             self.track_incense(message)
-            self.track_poketwo_shiny_hunt(message)
-            self.track_poketwo_catch(message)
             if message.guild and self.premium_tier(message.guild.id) is None:
                 return
             if self.is_spawn_message(message) and self.channel_within_incense_capacity(
@@ -1048,7 +826,6 @@ class PokéTwoNamingBot(commands.Cog):
             return
         if after.author.id == POKETWO_BOT_ID:
             self.track_incense(after)
-            self.track_poketwo_shiny_hunt(after)
 
     @staticmethod
     def is_spawn_message(message) -> bool:
@@ -1340,8 +1117,7 @@ class PokéTwoNamingBot(commands.Cog):
             ).get(str(ctx.author.id))
             if hunt:
                 await ctx.send(
-                    f"✨ Shiny hunting **{hunt.get('pokemon')}**. "
-                    f"Chain: **{int(hunt.get('chain', 0))}**."
+                    f"✨ Shiny hunting **{hunt.get('pokemon')}**."
                 )
             else:
                 await ctx.send("You are not currently shiny hunting a Pokémon.")
@@ -1357,8 +1133,7 @@ class PokéTwoNamingBot(commands.Cog):
         ).get(str(ctx.author.id))
         if hunt and hunt.get("pokemon") == resolved_name:
             await ctx.send(
-                f"You are already shiny hunting **{resolved_name}**. "
-                f"Chain: **{int(hunt.get('chain', 0))}**."
+                f"You are already shiny hunting **{resolved_name}**."
             )
             return
         if hunt:
@@ -1366,7 +1141,7 @@ class PokéTwoNamingBot(commands.Cog):
             await ctx.send(
                 (
                     f"You are currently shiny hunting **{old_pokemon}**.\n"
-                    f"Switch to **{resolved_name}** and reset the chain?"
+                    f"Switch to **{resolved_name}**?"
                 ),
                 view=ShinyHuntSwitchView(
                     self,
@@ -1384,7 +1159,7 @@ class PokéTwoNamingBot(commands.Cog):
             str(resolved_name),
         )
         await ctx.send(
-            f"✨ Shiny hunting **{resolved_name}**. Chain: **0**."
+            f"✨ Shiny hunting **{resolved_name}**."
         )
 
     @shiny_hunt.command(name="clear")
