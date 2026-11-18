@@ -31,6 +31,7 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 | `v!r add all <pokemon> <@user>` | `v!r add all Arceus @user` | Reserve all matching forms of a Pokémon |
 | `v!r remove <pokemon> [@user]` | `v!r remove Pikachu @user` | Remove a Pokémon reserve (restricted) |
 | `v!r list [@user]` | `v!r list @user` | List all server reserves or one member's reserves |
+| `v!r clear` | `v!r clear` | Confirm and clear all server reserves (restricted) |
 | `v!sh [pokemon]` | `v!sh Pikachu` | Start/switch a hunt, or show your current hunt and chain |
 | `v!sh clear` | `v!sh clear` | Clear your shiny hunt |
 | `v!permission <role_id>` | `v!permission 123456789` | Grant a role restricted-command access |

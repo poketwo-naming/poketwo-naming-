@@ -83,6 +83,11 @@ COMMAND_CATALOG = (
         "Lists server reservations, optionally filtered to one member.",
     ),
     (
+        "Reservations",
+        "v!r clear",
+        "Asks for confirmation before clearing every server reservation. Restricted.",
+    ),
+    (
         "Shiny Hunts",
         "v!sh [pokemon]",
         "Starts/switches a hunt, or shows your current Pokémon.",
@@ -389,6 +394,74 @@ class HelpPagesView(discord.ui.View):
         self.update_buttons()
         await interaction.response.edit_message(
             embed=self.pages[self.page],
+            view=self,
+        )
+
+
+class ClearReservesView(discord.ui.View):
+    """Confirm clearing every reservation in one server."""
+
+    def __init__(self, cog, guild_id: int, user_id: int):
+        super().__init__(timeout=60)
+        self.cog = cog
+        self.guild_id = guild_id
+        self.user_id = user_id
+        self.completed = False
+
+    async def reject_other_user(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id == self.user_id:
+            return False
+        await interaction.response.send_message(
+            "Only the person who requested this clear can answer.",
+            ephemeral=True,
+        )
+        return True
+
+    def disable_buttons(self):
+        self.completed = True
+        self.stop()
+        for child in self.children:
+            if isinstance(child, discord.ui.Button):
+                child.disabled = True
+
+    @discord.ui.button(label="Yes", style=discord.ButtonStyle.danger)
+    async def confirm_clear(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ):
+        del button
+        if await self.reject_other_user(interaction):
+            return
+        if self.completed:
+            return
+        reserves = self.cog.bot_state["reserves"].setdefault(
+            str(self.guild_id),
+            {},
+        )
+        count = len(reserves)
+        reserves.clear()
+        self.cog.save_bot_state()
+        self.disable_buttons()
+        await interaction.response.edit_message(
+            content=f"✅ Cleared **{count}** Pokémon reserve(s).",
+            view=self,
+        )
+
+    @discord.ui.button(label="No", style=discord.ButtonStyle.secondary)
+    async def cancel_clear(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ):
+        del button
+        if await self.reject_other_user(interaction):
+            return
+        if self.completed:
+            return
+        self.disable_buttons()
+        await interaction.response.edit_message(
+            content="Reservation clear cancelled.",
             view=self,
         )
 
@@ -1396,6 +1469,33 @@ class PokéTwoNamingBot(commands.Cog):
             )
         for embed_chunk in range(0, len(embeds), 10):
             await ctx.send(embeds=embeds[embed_chunk : embed_chunk + 10])
+
+    @resume_or_reserve.command(name="clear")
+    async def clear_reserves(self, ctx):
+        """Clear every reservation in the current server after confirmation."""
+        if ctx.guild is None:
+            await ctx.send("Reservations can only be managed inside a server.")
+            return
+        if not self.has_restricted_permission(ctx):
+            await ctx.send("❌ You do not have permission to clear reserves.")
+            return
+        count = len(
+            self.bot_state["reserves"].get(str(ctx.guild.id), {})
+        )
+        if count == 0:
+            await ctx.send("There are no reserves to clear.")
+            return
+        await ctx.send(
+            (
+                f"⚠️ Are you sure you want to clear all **{count}** "
+                "Pokémon reserves in this server?"
+            ),
+            view=ClearReservesView(
+                self,
+                ctx.guild.id,
+                ctx.author.id,
+            ),
+        )
 
     @commands.command(name="api")
     async def api_status(self, ctx):
