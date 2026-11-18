@@ -1068,7 +1068,7 @@ class PokéTwoNamingBot(commands.Cog):
             "",
             text,
         )
-        chunks = re.split(r"\s*(?:\||—|–|\n|;|\s-\s)\s*", cleaned)
+        chunks = re.split(r"\s*(?:\||—|–|\n|;|/|\s-\s)\s*", cleaned)
         pokemon_names = []
         for chunk in chunks:
             value = re.sub(r"^[\s:*\-–—]+|[\s*_.,!]+$", "", chunk).strip()
@@ -1092,22 +1092,32 @@ class PokéTwoNamingBot(commands.Cog):
 
     def parse_grab_list(self, message) -> list[tuple[str, str]]:
         """Parse only Pokémon that appear after each user mention."""
-        text = message.content or ""
-        for embed in message.embeds:
-            text += "\n" + (embed.description or "")
-            for field in embed.fields:
-                text += f"\n{field.name}\n{field.value}"
-        mentions = list(re.finditer(r"<@!?(\d+)>", text))
+        text_sources = [message]
+        text_sources.extend(getattr(message, "message_snapshots", []) or [])
+        text = ""
+        for source in text_sources:
+            text += "\n" + (source.content or "")
+            for embed in source.embeds:
+                text += "\n" + (embed.title or "")
+                text += "\n" + (embed.description or "")
+                for field in embed.fields:
+                    text += f"\n{field.name}\n{field.value}"
         entries = []
-        for index, mention in enumerate(mentions):
-            end = mentions[index + 1].start() if index + 1 < len(mentions) else len(text)
-            pokemon_names = self.pokemon_names_from_grab_segment(
-                text[mention.end() : end]
-            )
-            for pokemon_name in pokemon_names:
-                entry = (mention.group(1), str(pokemon_name))
-                if entry not in entries:
-                    entries.append(entry)
+        for line in text.splitlines():
+            mentions = list(re.finditer(r"<@!?(\d+)>", line))
+            for index, mention in enumerate(mentions):
+                end = (
+                    mentions[index + 1].start()
+                    if index + 1 < len(mentions)
+                    else len(line)
+                )
+                pokemon_names = self.pokemon_names_from_grab_segment(
+                    line[mention.end() : end]
+                )
+                for pokemon_name in pokemon_names:
+                    entry = (mention.group(1), str(pokemon_name))
+                    if entry not in entries:
+                        entries.append(entry)
         return entries
 
     async def referenced_grab_message(self, ctx):
