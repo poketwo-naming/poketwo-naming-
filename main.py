@@ -55,6 +55,15 @@ async def on_message(message):
         ctx = await bot.get_context(message)
         cog = bot.get_cog("PokéTwoNamingBot")
         if cog is None:
+            cog = next(
+                (
+                    loaded_cog
+                    for loaded_cog in bot.cogs.values()
+                    if hasattr(loaded_cog, "show_reserve_list")
+                ),
+                None,
+            )
+        if cog is None:
             await message.channel.send(
                 "❌ Reserve list handler is not loaded. Restart the bot."
             )
@@ -63,10 +72,16 @@ async def on_message(message):
             "Direct reserve-list route: "
             f"content={message.content!r} user={reserve_list_match.group(1)!r}"
         )
-        await cog.show_reserve_list(
-            ctx,
-            reserve_list_match.group(1) or "",
-        )
+        try:
+            await cog.show_reserve_list(
+                ctx,
+                reserve_list_match.group(1) or "",
+            )
+        except discord.DiscordException as error:
+            print(f"Reserve list routing failed: {error}")
+            await message.channel.send(
+                "❌ Reserve list failed. Check the bot logs."
+            )
         return
     await bot.process_commands(message)
 
