@@ -97,6 +97,11 @@ COMMAND_CATALOG = (
     ),
     ("Shiny Hunts", "v!sh clear", "Clears your current shiny hunt."),
     (
+        "Shiny Hunts",
+        "v!afk",
+        "Opens buttons to turn shiny hunt/collection pings on or off.",
+    ),
+    (
         "Collections",
         "v!cl add [all] <pokemon,...>",
         "Adds comma-separated Pokémon/forms to your collection.",
@@ -357,6 +362,72 @@ class ShinyHuntSwitchView(discord.ui.View):
             content=f"Kept your **{self.old_pokemon}** shiny hunt.",
             view=self,
         )
+
+
+class AfkView(discord.ui.View):
+    """On/Off buttons for shiny hunt and collection pings."""
+
+    KINDS = (("shiny_hunt", "Shiny Hunt"), ("collection", "Collection"))
+
+    def __init__(self, cog, user_id: int):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.user_id = user_id
+        self.message: discord.Message | None = None
+        self.refresh_buttons()
+
+    def build_embed(self) -> discord.Embed:
+        embed = discord.Embed(color=discord.Color.blurple())
+        for kind, label in self.KINDS:
+            on = self.cog.pings_enabled(self.user_id, kind)
+            embed.add_field(
+                name=f"{label} {'✅' if on else '❌'}",
+                value="Receiving pings" if on else "AFK (muted)",
+                inline=False,
+            )
+        return embed
+
+    def refresh_buttons(self):
+        self.clear_items()
+        for kind, label in self.KINDS:
+            on = self.cog.pings_enabled(self.user_id, kind)
+            button = discord.ui.Button(
+                label="On" if on else "Off",
+                style=discord.ButtonStyle.success
+                if on
+                else discord.ButtonStyle.danger,
+            )
+            button.callback = self.make_callback(kind)
+            self.add_item(button)
+
+    def make_callback(self, kind: str):
+        async def callback(interaction: discord.Interaction):
+            if interaction.user.id != self.user_id:
+                await interaction.response.send_message(
+                    "Only the person who ran v!afk can use these buttons.",
+                    ephemeral=True,
+                )
+                return
+            settings = self.cog.bot_state["afk"].setdefault(str(self.user_id), {})
+            settings[kind] = not settings.get(kind, False)
+            self.cog.save_bot_state()
+            self.refresh_buttons()
+            await interaction.response.edit_message(
+                embed=self.build_embed(),
+                view=self,
+            )
+
+        return callback
+
+    async def on_timeout(self):
+        if self.message is not None:
+            for item in self.children:
+                if isinstance(item, discord.ui.Button):
+                    item.disabled = True
+            try:
+                await self.message.edit(view=self)
+            except discord.HTTPException:
+                pass
 
 
 class HelpPagesView(discord.ui.View):
@@ -1012,14 +1083,10 @@ class PokéTwoNamingBot(commands.Cog):
                 if shiny_hunters:
                     mentions = " ".join(f"<@{user_id}>" for user_id in shiny_hunters)
                     output += f"\nshinyhunt: {mentions}"
-                collection_owners = [
-                    user_id
-                    for user_id, pokemon_names in self.bot_state.get(
-                        "collections",
-                        {},
-                    ).get(str(guild_id), {}).items()
-                    if pokemon_name in pokemon_names
-                ]
+                collection_owners = self.collection_owners_for_spawn(
+                    guild_id,
+                    pokemon_name,
+                )
                 if collection_owners:
                     mentions = " ".join(
                         f"<@{user_id}>" for user_id in collection_owners
@@ -1054,7 +1121,29 @@ class PokéTwoNamingBot(commands.Cog):
             user_id
             for user_id, hunt in guild_hunts.items()
             if hunt.get("pokemon") == pokemon_name
+            and self.pings_enabled(user_id, "shiny_hunt")
         ]
+
+    def collection_owners_for_spawn(
+        self,
+        guild_id: int,
+        pokemon_name: str,
+    ) -> list[str]:
+        """Return members collecting a spawned Pokémon who receive pings."""
+        return [
+            user_id
+            for user_id, pokemon_names in self.bot_state.get(
+                "collections",
+                {},
+            ).get(str(guild_id), {}).items()
+            if pokemon_name in pokemon_names
+            and self.pings_enabled(user_id, "collection")
+        ]
+
+    def pings_enabled(self, user_id, kind: str) -> bool:
+        """Return whether a user receives pings of this kind (default: yes)."""
+        muted = self.bot_state.get("afk", {}).get(str(user_id), {})
+        return not muted.get(kind, False)
 
     def load_pokemon_best_names(self):
         """Load and validate the shortest localized name for each model class."""
@@ -1098,6 +1187,7 @@ class PokéTwoNamingBot(commands.Cog):
             "active_incenses": {},
             "shiny_hunts": {},
             "collections": {},
+            "afk": {},
         }
         if not os.path.exists(BOT_STATE_FILE):
             return default_state
@@ -1127,6 +1217,7 @@ class PokéTwoNamingBot(commands.Cog):
         state.setdefault("active_incenses", {})
         state.setdefault("shiny_hunts", {})
         state.setdefault("collections", {})
+        state.setdefault("afk", {})
         return state
 
     def save_bot_state(self):
@@ -1601,14 +1692,10 @@ class PokéTwoNamingBot(commands.Cog):
                     inline=True,
                 )
             if not reserved_user_id:
-                collection_owners = [
-                    user_id
-                    for user_id, pokemon_names in self.bot_state.get(
-                        "collections",
-                        {},
-                    ).get(str(message.guild.id), {}).items()
-                    if pokemon_name in pokemon_names
-                ]
+                collection_owners = self.collection_owners_for_spawn(
+                    message.guild.id,
+                    pokemon_name,
+                )
                 if collection_owners:
                     embed.add_field(
                         name="Collection",
@@ -1809,6 +1896,12 @@ class PokéTwoNamingBot(commands.Cog):
         self.bot_state["restricted_roles"][str(ctx.guild.id)] = str(role.id)
         self.save_bot_state()
         await ctx.send(f"✅ Restricted commands are now available to {role.mention}.")
+
+    @commands.command(name="afk")
+    async def afk(self, ctx):
+        """Toggle shiny hunt and collection pings with buttons."""
+        view = AfkView(self, ctx.author.id)
+        view.message = await ctx.send(embed=view.build_embed(), view=view)
 
     @commands.group(name="sh", invoke_without_command=True)
     async def shiny_hunt(self, ctx, *, pokemon_name: str = ""):
