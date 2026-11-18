@@ -754,7 +754,7 @@ class GrabReservesView(discord.ui.View):
         cog,
         author_id: int,
         channel_id: int,
-        entries: list[tuple[str, str, bool]],
+        entries: list[tuple[str, str, bool, bool]],
         h_mode: bool = False,
     ):
         super().__init__(timeout=300)
@@ -765,7 +765,9 @@ class GrabReservesView(discord.ui.View):
         self.h_mode = h_mode
         self.alphabetical = False
         self.all_forms = False
-        self.has_all_form_entries = any(all_forms for _, _, all_forms in entries)
+        self.has_all_form_entries = any(
+            all_forms for _, _, all_forms, _ in entries
+        )
         self.custom_emoji = False
         self.processing = False
         self.refresh_button_labels()
@@ -779,9 +781,12 @@ class GrabReservesView(discord.ui.View):
         )
         return False
 
-    def expanded_entries(self) -> list[tuple[str, str]]:
+    def expanded_entries(self) -> list[tuple[str, str, bool]]:
         entries = []
-        for user_id, pokemon_name, requested_all_forms in self.entries:
+        for user_id, pokemon_name, requested_all_forms, is_category in self.entries:
+            if is_category:
+                entries.append((user_id, pokemon_name, True))
+                continue
             names = (
                 self.cog.resolve_pokemon_family(
                     pokemon_name,
@@ -790,12 +795,19 @@ class GrabReservesView(discord.ui.View):
                 if self.all_forms and requested_all_forms
                 else [pokemon_name]
             )
-            entries.extend((user_id, str(name)) for name in names)
+            entries.extend((user_id, str(name), False) for name in names)
         if self.alphabetical:
             entries.sort(key=lambda entry: (entry[1].casefold(), entry[0]))
         return entries
 
-    def format_line(self, user_id: str, pokemon_name: str) -> str:
+    def format_line(
+        self,
+        user_id: str,
+        pokemon_name: str,
+        is_category: bool = False,
+    ) -> str:
+        if is_category:
+            return f"{pokemon_name} - <@{user_id}>"
         prefix = ""
         display_name = pokemon_name
         is_all = pokemon_name.casefold().startswith("all ")
@@ -810,15 +822,15 @@ class GrabReservesView(discord.ui.View):
 
     def copy_text(self) -> str:
         return "\n".join(
-            self.format_line(user_id, pokemon_name)
-            for user_id, pokemon_name in self.expanded_entries()
+            self.format_line(user_id, pokemon_name, is_category)
+            for user_id, pokemon_name, is_category in self.expanded_entries()
         )
 
     def build_embed(self) -> discord.Embed:
         entries = self.expanded_entries()
         description = "\n".join(
-            self.format_line(user_id, pokemon_name)
-            for user_id, pokemon_name in entries[:50]
+            self.format_line(user_id, pokemon_name, is_category)
+            for user_id, pokemon_name, is_category in entries[:50]
         )
         if len(entries) > 50:
             description += f"\n…and {len(entries) - 50} more"
@@ -828,7 +840,7 @@ class GrabReservesView(discord.ui.View):
             color=discord.Color.purple(),
         ).set_footer(
             text=(
-                f"{len(entries)} reserve(s) • "
+                f"{len(entries)} entry(s) • "
                 f"{'Alphabetical' if self.alphabetical else 'Original order'} • "
                 f"{'All forms on' if self.all_forms else 'All forms off'}"
             )
@@ -918,8 +930,8 @@ class GrabReservesView(discord.ui.View):
         self.processing = True
         entries = self.expanded_entries()
         preview = "\n".join(
-            f"{pokemon_name} — <@{user_id}>"
-            for user_id, pokemon_name in entries[:25]
+            self.format_line(user_id, pokemon_name, is_category)
+            for user_id, pokemon_name, is_category in entries[:25]
         )
         if len(entries) > 25:
             preview += f"\n…and {len(entries) - 25} more"
@@ -947,7 +959,7 @@ class GrabConfirmView(discord.ui.View):
         cog,
         author_id: int,
         channel_id: int,
-        entries: list[tuple[str, str]],
+        entries: list[tuple[str, str, bool]],
         h_mode: bool,
     ):
         super().__init__(timeout=120)
@@ -992,36 +1004,30 @@ class GrabConfirmView(discord.ui.View):
             embed=None,
             view=None,
         )
-        for user_id, pokemon_name in self.entries:
-            if self.h_mode:
-                await channel.send(f"h!r add {pokemon_name} <@{user_id}>")
-                try:
-                    await self.cog.bot.wait_for(
-                        "message",
-                        check=lambda response: (
-                            response.channel.id == self.channel_id
-                            and response.author.bot
-                            and response.author.id != self.cog.bot.user.id
-                        ),
-                        timeout=5,
-                    )
-                except TimeoutError:
-                    pass
-            if pokemon_name.casefold().startswith("all "):
-                family_name = pokemon_name[4:]
-                for family_member in self.cog.resolve_pokemon_family(
-                    family_name,
-                    include_regionals=False,
-                ):
-                    await self.cog.add_reserve_direct(
-                        guild,
-                        str(family_member),
-                        user_id,
-                    )
-            else:
+        for user_id, pokemon_name, is_category in self.entries:
+            reserve_names = (
+                self.cog.guild_categories(guild.id).get(pokemon_name, [])
+                if is_category
+                else [pokemon_name]
+            )
+            for reserve_name in reserve_names:
+                if self.h_mode:
+                    await channel.send(f"h!r add {reserve_name} <@{user_id}>")
+                    try:
+                        await self.cog.bot.wait_for(
+                            "message",
+                            check=lambda response: (
+                                response.channel.id == self.channel_id
+                                and response.author.bot
+                                and response.author.id != self.cog.bot.user.id
+                            ),
+                            timeout=5,
+                        )
+                    except TimeoutError:
+                        pass
                 await self.cog.add_reserve_direct(
                     guild,
-                    pokemon_name,
+                    reserve_name,
                     user_id,
                 )
             await channel.send(
@@ -1493,7 +1499,7 @@ class PokéTwoNamingBot(commands.Cog):
         return any(role.id in role_ids for role in member.roles)
 
     def pokemon_names_from_grab_segment(self, text: str) -> list[tuple[str, bool]]:
-        """Resolve every Pokémon listed after one user mention."""
+        """Resolve Pokémon and retain explicit all-form intent."""
         cleaned = re.sub(
             r"<a?:[^:>]+:\d+>",
             "",
@@ -1531,7 +1537,7 @@ class PokéTwoNamingBot(commands.Cog):
         self,
         message,
         guild_id: int | None = None,
-    ) -> list[tuple[str, str, bool]]:
+    ) -> list[tuple[str, str, bool, bool]]:
         """Parse Pokémon and category labels associated with each user mention."""
         if guild_id is None and message.guild is not None:
             guild_id = message.guild.id
@@ -1545,7 +1551,7 @@ class PokéTwoNamingBot(commands.Cog):
                 text += "\n" + (embed.description or "")
                 for field in embed.fields:
                     text += f"\n{field.name}\n{field.value}"
-        entries: list[tuple[str, str, bool]] = []
+        entries: list[tuple[str, str, bool, bool]] = []
         for line in text.splitlines():
             mentions = list(re.finditer(r"<@!?(\d+)>", line))
             for index, mention in enumerate(mentions):
@@ -1565,14 +1571,9 @@ class PokéTwoNamingBot(commands.Cog):
                         if category_key:
                             break
                 if category_key is not None:
-                    for pokemon_name in self.guild_categories(guild_id)[category_key]:
-                        entry = (
-                            mention.group(1),
-                            str(pokemon_name),
-                            False,
-                        )
-                        if entry not in entries:
-                            entries.append(entry)
+                    entry = (mention.group(1), category_key, False, True)
+                    if entry not in entries:
+                        entries.append(entry)
                 end = (
                     mentions[index + 1].start()
                     if index + 1 < len(mentions)
@@ -1586,6 +1587,7 @@ class PokéTwoNamingBot(commands.Cog):
                         mention.group(1),
                         str(pokemon_name),
                         requested_all_forms,
+                        False,
                     )
                     if entry not in entries:
                         entries.append(entry)
@@ -2401,10 +2403,26 @@ class PokéTwoNamingBot(commands.Cog):
             return
         from_id = match.group(1) or match.group(2)
         parsed_entries = self.parse_grab_list(source, ctx.guild.id)
-        entries = [
-            (user_id, pokemon_name)
-            for user_id, pokemon_name, _ in parsed_entries
-        ]
+        entries = []
+        for user_id, pokemon_name, requested_all_forms, is_category in parsed_entries:
+            if is_category:
+                entries.extend(
+                    (user_id, str(category_member))
+                    for category_member in self.guild_categories(ctx.guild.id).get(
+                        pokemon_name,
+                        [],
+                    )
+                )
+            elif requested_all_forms:
+                entries.extend(
+                    (user_id, str(family_member))
+                    for family_member in self.resolve_pokemon_family(
+                        pokemon_name,
+                        include_regionals=False,
+                    )
+                )
+            else:
+                entries.append((user_id, pokemon_name))
         if not entries:
             await ctx.send(
                 "❌ This list doesn't work. I couldn't find any "

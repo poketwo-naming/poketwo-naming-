@@ -54,9 +54,9 @@ configured best name for each recognized Pokémon. A matching image in
 Pokétwo variants.
 
 For `v!grab` and `h!grab`, a category name before a user mention (for example,
-`rare - @user - Pikachu`) adds every Pokémon in that category to the user. The
-All forms toggle only expands an entry when its original text starts with
-`all <Pokémon name>`.
+`rare - @user - Pikachu`) appears as one `rare - @user` preview entry; confirming
+adds every Pokémon in that category to the user. The All forms toggle only
+expands an entry when its original text starts with `all <Pokémon name>`.
 
 MissingNo detection immediately denies Pokétwo's Send Messages permission in
 the current channel and asks staff not to catch it. Administrators configure a
