@@ -606,6 +606,97 @@ class ClearReservesView(discord.ui.View):
         )
 
 
+class ExchangeReservesView(discord.ui.View):
+    """Confirm moving reserves from one user to the users in a replied list."""
+
+    def __init__(self, cog, guild_id, author_id, from_id, entries):
+        super().__init__(timeout=120)
+        self.cog = cog
+        self.guild_id = str(guild_id)
+        self.author_id = author_id
+        self.from_id = str(from_id)
+        self.entries = entries
+        self.completed = False
+
+    def missing(self) -> list[str]:
+        reserves = self.cog.bot_state["reserves"].get(self.guild_id, {})
+        return [
+            name for _, name in self.entries if reserves.get(name) != self.from_id
+        ]
+
+    def build_embed(self) -> discord.Embed:
+        grouped: dict[str, list[str]] = {}
+        for user_id, name in self.entries:
+            grouped.setdefault(user_id, []).append(name)
+        lines = [
+            f"• <@{user_id}> - {', '.join(names)}"
+            for user_id, names in grouped.items()
+        ]
+        description = (
+            f"**Remove from:** <@{self.from_id}>\n\n**Add to:**\n"
+            + "\n".join(lines)
+        )
+        missing = self.missing()
+        if missing:
+            shown = ", ".join(missing[:15])
+            if len(missing) > 15:
+                shown += f" (+{len(missing) - 15} more)"
+            description += (
+                "\n\n⚠️ This user does not currently have these reserves:\n"
+                f"{shown}\nThese will be skipped. Please make sure you used "
+                "the right original user before confirming."
+            )
+        description += "\n\n**Green check exchanges these reserves. Red check cancels.**"
+        return discord.Embed(
+            title="Confirm Reserve Exchange",
+            description=description[:4096],
+        )
+
+    def finish(self):
+        self.completed = True
+        self.stop()
+        for child in self.children:
+            child.disabled = True
+
+    async def allowed(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author_id or self.completed:
+            await interaction.response.send_message(
+                "Only the person who ran this command can answer.",
+                ephemeral=True,
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="✔", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button):
+        del button
+        if not await self.allowed(interaction):
+            return
+        reserves = self.cog.bot_state["reserves"].setdefault(self.guild_id, {})
+        moved = 0
+        for user_id, name in self.entries:
+            if reserves.get(name) == self.from_id:
+                reserves[name] = str(user_id)
+                moved += 1
+        self.cog.save_bot_state()
+        self.finish()
+        await interaction.response.edit_message(
+            content=f"✅ Exchanged **{moved}** reserve(s) from <@{self.from_id}>.",
+            embed=None,
+            view=self,
+        )
+
+    @discord.ui.button(label="✖", style=discord.ButtonStyle.danger)
+    async def cancel(self, interaction: discord.Interaction, button):
+        del button
+        if not await self.allowed(interaction):
+            return
+        self.finish()
+        await interaction.response.edit_message(
+            content="Reserve exchange cancelled.", embed=None, view=self
+        )
+
+
 class GrabReservesView(discord.ui.View):
     """Preview and confirm reservations parsed from a replied list."""
 
@@ -1365,7 +1456,7 @@ class PokéTwoNamingBot(commands.Cog):
             "",
             text,
         )
-        chunks = re.split(r"\s*(?:\||—|–|\n|;|/|\s-\s)\s*", cleaned)
+        chunks = re.split(r"\s*(?:\||—|–|\n|;|/|,|\s-\s)\s*", cleaned)
         pokemon_names = []
         for chunk in chunks:
             value = re.sub(r"^[\s:*\-–—]+|[\s*_.,!]+$", "", chunk).strip()
@@ -2087,6 +2178,8 @@ class PokéTwoNamingBot(commands.Cog):
             await self.add_reserve(ctx, entry=remainder)
         elif action == "remove":
             await self.remove_reserve(ctx, entry=remainder)
+        elif action in ("e", "exchange"):
+            await self.exchange_reserves(ctx, remainder)
         elif action == "list":
             await self.show_reserve_list(ctx, remainder)
         elif action == "clear":
@@ -2104,6 +2197,35 @@ class PokéTwoNamingBot(commands.Cog):
             await ctx.send(
                 "Unknown reservation action. Use `add`, `remove`, `list`, or `clear`."
             )
+
+    async def exchange_reserves(self, ctx, remainder: str):
+        """Move reserves from the given user to those in a replied list."""
+        if ctx.guild is None:
+            await ctx.send("This command can only be used inside a server.")
+            return
+        if not self.has_restricted_permission(ctx):
+            await ctx.send("❌ You do not have permission to exchange reserves.")
+            return
+        match = re.search(r"<@!?(\d+)>|\b(\d{15,20})\b", remainder)
+        source = await self.referenced_grab_message(ctx)
+        if match is None or source is None:
+            await ctx.send(
+                "Reply to a `user - pokemon` list with `v!r e <@user>` "
+                "(the user the reserves currently belong to)."
+            )
+            return
+        from_id = match.group(1) or match.group(2)
+        entries = self.parse_grab_list(source)
+        if not entries:
+            await ctx.send(
+                "❌ This list doesn't work. I couldn't find any "
+                "`<@user> Pokémon` pairs."
+            )
+            return
+        view = ExchangeReservesView(
+            self, ctx.guild.id, ctx.author.id, from_id, entries
+        )
+        await ctx.send(embed=view.build_embed(), view=view)
 
     async def add_reserve(self, ctx, *, entry: str):
         """Reserve a Pokémon for a member. Restricted command."""
