@@ -1849,7 +1849,13 @@ class PokéTwoNamingBot(commands.Cog):
     @commands.command(name="r")
     async def reservations(self, ctx, *, entry: str = ""):
         """Dispatch reservation actions without Discord group parsing."""
-        parts = entry.split(maxsplit=1)
+        raw_entry = re.sub(
+            r"^\s*[vV]!r\b",
+            "",
+            ctx.message.content,
+            count=1,
+        ).strip()
+        parts = raw_entry.split(maxsplit=1)
         action = parts[0].casefold() if parts else ""
         remainder = parts[1].strip() if len(parts) > 1 else ""
 
@@ -1860,18 +1866,32 @@ class PokéTwoNamingBot(commands.Cog):
         elif action == "list":
             member = None
             if remainder:
-                try:
-                    member = await commands.MemberConverter().convert(ctx, remainder)
-                except commands.BadArgument:
-                    await ctx.send("❌ I couldn't find that server member.")
-                    return
+                mention_match = re.search(r"<@!?(\d+)>", remainder)
+                user_id = (
+                    int(mention_match.group(1))
+                    if mention_match
+                    else (int(remainder) if remainder.isdigit() else None)
+                )
+                if user_id is not None:
+                    member = ctx.guild.get_member(user_id)
+                    if member is None:
+                        try:
+                            member = await ctx.guild.fetch_member(user_id)
+                        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                            member = None
+                if member is None:
+                    try:
+                        member = await commands.MemberConverter().convert(ctx, remainder)
+                    except commands.BadArgument:
+                        await ctx.send("❌ I couldn't find that server member.")
+                        return
             await self.list_reserves(ctx, member)
         elif action == "clear":
             if remainder:
                 await ctx.send("Usage: `v!r clear`")
                 return
             await self.clear_reserves(ctx)
-        elif not entry:
+        elif not raw_entry:
             await ctx.send(
                 "Use `v!r list [@user]`, `v!r add <pokemon,...> <@user>`, "
                 "`v!r remove <pokemon,...> [@user]`, or `v!r clear`."

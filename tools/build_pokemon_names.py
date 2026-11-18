@@ -74,6 +74,11 @@ def build_localized_data() -> tuple[dict[str, str], dict[str, str]]:
         species_id: shortest_name(names)
         for species_id, names in localized_species.items()
     }
+    english_by_species = {
+        int(row["pokemon_species_id"]): row["name"]
+        for row in download_csv("pokemon_species_names.csv")
+        if int(row["local_language_id"]) == 9
+    }
     identifiers = set(identifier_to_species)
     classes = sorted(
         path.name for path in TRAINING_ROOT.iterdir() if path.is_dir()
@@ -101,7 +106,11 @@ def build_localized_data() -> tuple[dict[str, str], dict[str, str]]:
             names = species_all_names[species_id]
             best_names[class_name] = CATCH_NAME_OVERRIDES.get(
                 class_name,
-                best_by_species[species_id],
+                (
+                    english_by_species[species_id]
+                    if species_id >= 906
+                    else best_by_species[species_id]
+                ),
             )
 
         names = list(
