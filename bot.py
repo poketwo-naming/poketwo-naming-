@@ -83,8 +83,8 @@ COMMAND_CATALOG = (
     ),
     (
         "Shiny Hunts",
-        "v!sh <pokemon>",
-        "Starts a shiny hunt or asks before switching your current hunt.",
+        "v!sh [pokemon]",
+        "Starts/switches a hunt, or shows your current Pokémon and chain.",
     ),
     ("Shiny Hunts", "v!sh clear", "Clears your current shiny hunt."),
     (
@@ -495,19 +495,65 @@ class PokéTwoNamingBot(commands.Cog):
         guild_id: int,
         pokemon_name: str,
     ) -> list[str]:
-        """Increment and return members hunting the spawned Pokémon."""
+        """Return members hunting a spawned Pokémon without changing chains."""
         guild_hunts = self.bot_state["shiny_hunts"].get(str(guild_id), {})
-        hunters = []
+        return [
+            user_id
+            for user_id, hunt in guild_hunts.items()
+            if hunt.get("pokemon") == pokemon_name
+        ]
+
+    def track_poketwo_catch(self, message) -> None:
+        """Update shiny-hunt chains from a Pokétwo catch result."""
+        if not message.guild:
+            return
+        text_parts = [message.content or ""]
+        for embed in message.embeds:
+            text_parts.extend(
+                filter(
+                    None,
+                    [
+                        embed.title,
+                        embed.description,
+                        embed.footer.text if embed.footer else None,
+                    ],
+                )
+            )
+        text = " ".join(text_parts)
+        if not re.search(
+            r"\b(?:you\s+)?caught\b|\bcongratulations\b",
+            text,
+            re.IGNORECASE,
+        ):
+            return
+
+        mentioned_user_ids = {str(user.id) for user in message.mentions}
+        if not mentioned_user_ids:
+            mentioned_user_ids = {
+                str(match)
+                for match in re.findall(r"<@!?(\d+)>", text)
+            }
+        guild_hunts = self.bot_state["shiny_hunts"].get(
+            str(message.guild.id),
+            {},
+        )
         changed = False
-        for user_id, hunt in guild_hunts.items():
-            if hunt.get("pokemon") != pokemon_name:
+        for user_id in mentioned_user_ids:
+            hunt = guild_hunts.get(user_id)
+            if not hunt:
                 continue
-            hunt["chain"] = int(hunt.get("chain", 0)) + 1
-            hunters.append(user_id)
+            hunted_name = str(hunt.get("pokemon", ""))
+            if re.search(
+                rf"(?<![\w'-]){re.escape(hunted_name)}(?![\w'-])",
+                text,
+                re.IGNORECASE,
+            ):
+                hunt["chain"] = int(hunt.get("chain", 0)) + 1
+            else:
+                hunt["chain"] = 0
             changed = True
         if changed:
             self.save_bot_state()
-        return hunters
 
     def load_pokemon_best_names(self):
         """Load and validate the shortest localized name for each model class."""
@@ -806,6 +852,7 @@ class PokéTwoNamingBot(commands.Cog):
             if message.guild and self.premium_tier(message.guild.id) is None:
                 return
             self.track_incense(message)
+            self.track_poketwo_catch(message)
             if self.is_spawn_message(message) and self.channel_within_incense_capacity(
                 message
             ):
@@ -1104,7 +1151,17 @@ class PokéTwoNamingBot(commands.Cog):
             return
         pokemon_name = pokemon_name.strip()
         if not pokemon_name:
-            await ctx.send("Usage: `v!sh <pokémon name>`")
+            hunt = self.bot_state["shiny_hunts"].get(
+                str(ctx.guild.id),
+                {},
+            ).get(str(ctx.author.id))
+            if hunt:
+                await ctx.send(
+                    f"✨ Shiny hunting **{hunt.get('pokemon')}**. "
+                    f"Chain: **{int(hunt.get('chain', 0))}**."
+                )
+            else:
+                await ctx.send("You are not currently shiny hunting a Pokémon.")
             return
         resolved_name = self.class_names.get(pokemon_name.casefold())
         if resolved_name is None:

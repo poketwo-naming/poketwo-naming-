@@ -30,7 +30,7 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 | `v!r add <pokemon> <@user>` | `v!r add Pikachu @user` | Reserve a Pokémon for a member (restricted) |
 | `v!r remove <pokemon> [@user]` | `v!r remove Pikachu @user` | Remove a Pokémon reserve (restricted) |
 | `v!r list [@user]` | `v!r list @user` | List all server reserves or one member's reserves |
-| `v!sh <pokemon>` | `v!sh Pikachu` | Start a shiny hunt or confirm switching Pokémon |
+| `v!sh [pokemon]` | `v!sh Pikachu` | Start/switch a hunt, or show your current hunt and chain |
 | `v!sh clear` | `v!sh clear` | Clear your shiny hunt |
 | `v!permission <role_id>` | `v!permission 123456789` | Grant a role restricted-command access |
 | `v!training` | `v!training` | Show reviewed training images in the review channel |
@@ -55,7 +55,8 @@ Spawn recognition and MissingNo handling require Bronze, Silver, or Gold
 premium access. Other informational and configuration commands remain usable.
 
 Multiple members can shiny hunt the same Pokémon. Their hunt chain increments
-on each matching spawn, and `shinyhunt:` pings them beneath the best name.
+on matching Pokétwo catch results, resets after catching another Pokémon, and
+`shinyhunt:` pings them beneath the best name.
 An active reservation replaces the shiny-hunt line with the reserved member.
 
 Active incense counts expire automatically after 90 seconds without a Pokétwo
