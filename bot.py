@@ -1320,6 +1320,7 @@ class PokéTwoNamingBot(commands.Cog):
             "active_incenses": {},
             "shiny_hunts": {},
             "collections": {},
+            "categories": {},
             "afk": {},
         }
         if not os.path.exists(BOT_STATE_FILE):
@@ -1350,6 +1351,7 @@ class PokéTwoNamingBot(commands.Cog):
         state.setdefault("active_incenses", {})
         state.setdefault("shiny_hunts", {})
         state.setdefault("collections", {})
+        state.setdefault("categories", {})
         state.setdefault("afk", {})
         return state
 
@@ -1985,6 +1987,80 @@ class PokéTwoNamingBot(commands.Cog):
             view=ServerSettingsView(ctx.author.id),
         )
 
+    def guild_categories(self, guild_id) -> dict:
+        """Get categories for a guild."""
+        return self.bot_state["categories"].setdefault(str(guild_id), {})
+
+    def find_category(self, guild_id, name: str) -> str | None:
+        """Find a category by name (case-insensitive)."""
+        for key in self.guild_categories(guild_id):
+            if key.casefold() == name.casefold():
+                return key
+        return None
+
+    @commands.command(name="addcategory", aliases=["ac"])
+    async def add_category(self, ctx, *, name: str = ""):
+        """Create an empty Pokémon category."""
+        if ctx.guild is None:
+            await ctx.send("Categories can only be managed inside a server.")
+            return
+        name = name.strip()
+        if not name:
+            await ctx.send("Usage: `v!ac <name>`")
+            return
+        if self.find_category(ctx.guild.id, name):
+            await ctx.send(f"❌ Category **{name}** already exists.")
+            return
+        self.guild_categories(ctx.guild.id)[name] = []
+        self.save_bot_state()
+        await ctx.send(f"✅ Created category **{name}**.")
+
+    @commands.command(name="createcategory", aliases=["cc"])
+    async def fill_category(self, ctx, category: str = "", *, pokemon_input: str = ""):
+        """Add Pokémon to an existing category."""
+        if ctx.guild is None:
+            await ctx.send("Categories can only be managed inside a server.")
+            return
+        if not category or not pokemon_input.strip():
+            await ctx.send("Usage: `v!cc <category> <pokemon>, <pokemon>`")
+            return
+        key = self.find_category(ctx.guild.id, category)
+        if key is None:
+            await ctx.send(
+                f"❌ Category **{category}** doesn't exist. Create it with "
+                f"`v!ac {category}` first."
+            )
+            return
+        pokemon_names, unknown = self.resolve_pokemon_list(pokemon_input)
+        if unknown:
+            await ctx.send(
+                "❌ Unknown Pokémon: " + ", ".join(f"`{n}`" for n in unknown)
+            )
+            return
+        members = self.guild_categories(ctx.guild.id)[key]
+        added = [str(n) for n in pokemon_names if str(n) not in members]
+        members.extend(added)
+        self.save_bot_state()
+        if added:
+            await ctx.send(f"✅ Added to **{key}**: {', '.join(added)}.")
+        else:
+            await ctx.send(f"Those Pokémon are already in **{key}**.")
+
+    @commands.command(name="categorylist", aliases=["cal"])
+    async def category_list(self, ctx):
+        """Show every category and its Pokémon."""
+        if ctx.guild is None:
+            await ctx.send("Categories can only be managed inside a server.")
+            return
+        categories = self.guild_categories(ctx.guild.id)
+        if not categories:
+            await ctx.send("No categories yet. Create one with `v!ac <name>`.")
+            return
+        embed = discord.Embed(title="Categories")
+        for name, members in categories.items():
+            embed.add_field(name=name, value=f"{len(members)} Pokémon", inline=False)
+        await ctx.send(embed=embed)
+
     @commands.command(name="ping")
     async def ping(self, ctx):
         """Check if the bot is responsive"""
@@ -2300,7 +2376,20 @@ class PokéTwoNamingBot(commands.Cog):
         if member is None:
             await ctx.send("❌ That user is not in this server.")
             return
-        pokemon_names, unknown = self.resolve_pokemon_list(pokemon_input)
+        
+        pokemon_names = []
+        unknown = []
+        
+        category_key = self.find_category(ctx.guild.id, pokemon_input)
+        if category_key:
+            pokemon_names = self.guild_categories(ctx.guild.id)[category_key]
+        else:
+            collection_dict = self.bot_state["collections"].get(str(ctx.guild.id), {})
+            if pokemon_input.casefold() == "collection" and str(ctx.author.id) in collection_dict:
+                pokemon_names = collection_dict[str(ctx.author.id)]
+            else:
+                pokemon_names, unknown = self.resolve_pokemon_list(pokemon_input)
+        
         if unknown:
             await ctx.send(
                 "❌ Unknown Pokémon: "
