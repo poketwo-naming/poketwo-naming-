@@ -23,6 +23,7 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 | `v!r add all <pokemon,...> <@user>` | `v!r add all Arceus, Eevee @user` | Reserve all matching forms |
 | `v!r remove <pokemon,...> [@user]` | `v!r remove Pikachu, Eevee @user` | Remove multiple Pokémon reserves |
 | `v!r list [@user]` | `v!r list @user` | List all server reserves or one member's reserves |
+| `v!reserve list [@user]` | `v!reserve list @user` | Long-form reserve list command |
 | `v!r clear` | `v!r clear` | Confirm and clear all server reserves (restricted) |
 | `v!grab` | Reply with `v!grab` | Preview and add reserves parsed from a list |
 | `h!grab` | Reply with `h!grab` | Delegate the same list through h!r, then v!r |

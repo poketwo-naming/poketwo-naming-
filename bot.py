@@ -72,6 +72,11 @@ COMMAND_CATALOG = (
     ),
     (
         "Reservations",
+        "v!reserve list [@user]",
+        "Lists server reservations using the long-form command.",
+    ),
+    (
+        "Reservations",
         "v!r clear",
         "Asks for confirmation before clearing every server reservation. Restricted.",
     ),
@@ -1849,8 +1854,17 @@ class PokéTwoNamingBot(commands.Cog):
     @commands.command(name="r")
     async def reservations(self, ctx, *, entry: str = ""):
         """Dispatch reservation actions without Discord group parsing."""
+        await self.dispatch_reservations(ctx, entry)
+
+    @commands.command(name="reserve")
+    async def reserve_command(self, ctx, *, entry: str = ""):
+        """Long-form reservation command dispatcher."""
+        await self.dispatch_reservations(ctx, entry)
+
+    async def dispatch_reservations(self, ctx, entry: str = ""):
+        """Dispatch reserve/reservation actions from either command alias."""
         raw_entry = re.sub(
-            r"^\s*[vV]!r\b",
+            r"^\s*[vV]!(?:r|reserve)\b",
             "",
             ctx.message.content,
             count=1,
@@ -1873,7 +1887,8 @@ class PokéTwoNamingBot(commands.Cog):
             await self.clear_reserves(ctx)
         elif not action_entry:
             await ctx.send(
-                "Use `v!r list [@user]`, `v!r add <pokemon,...> <@user>`, "
+                "Use `v!r list [@user]` / `v!reserve list [@user]`, "
+                "`v!r add <pokemon,...> <@user>`, "
                 "`v!r remove <pokemon,...> [@user]`, or `v!r clear`."
             )
         else:
