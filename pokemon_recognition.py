@@ -12,6 +12,7 @@ IMAGE_SIZE = 224
 RESIZE_SIZE = 232
 MEAN = np.asarray([0.485, 0.456, 0.406], dtype=np.float32)[:, None, None]
 STD = np.asarray([0.229, 0.224, 0.225], dtype=np.float32)[:, None, None]
+FOCUSED_CROP_CLASSES = ("Finizen", "Palafin", "Hero Palafin")
 
 
 def preprocess(image: Image.Image) -> np.ndarray:
@@ -30,6 +31,16 @@ def preprocess(image: Image.Image) -> np.ndarray:
     )
     pixels = np.asarray(image, dtype=np.float32).transpose(2, 0, 1) / 255
     return ((pixels - MEAN) / STD).astype(np.float32)
+
+
+def preprocess_focused(image: Image.Image) -> np.ndarray:
+    """Zoom the centered Pokémon for fine-grained lookalike recognition."""
+    image = ImageOps.exif_transpose(image).convert("RGB")
+    crop_side = max(1, round(min(image.size) * 0.7))
+    left = (image.width - crop_side) // 2
+    top = (image.height - crop_side) // 2
+    focused = image.crop((left, top, left + crop_side, top + crop_side))
+    return preprocess(focused)
 
 
 class PokemonImageRecognizer:
@@ -62,9 +73,20 @@ class PokemonImageRecognizer:
             )
             self.refinement_labels = refinements["labels"]
             self.refinement_classes = refinements["classes"]
+            self.focused_centroids = (
+                refinements["focused_centroids"].astype(np.float32)
+                if "focused_centroids" in refinements.files
+                else np.empty((0, self.centroids.shape[1]), dtype=np.float32)
+            )
+            self.focused_class_ids = (
+                refinements["focused_class_ids"].astype(np.int64)
+                if "focused_class_ids" in refinements.files
+                else np.empty(0, dtype=np.int64)
+            )
         self.refinement_class_ids = {
             int(label) for label in np.unique(self.refinement_labels)
         }
+        self.focused_class_id_set = set(self.focused_class_ids.tolist())
 
     def recognize(self, image: Image.Image) -> tuple[str, float, float]:
         """Return the Pokémon class, calibrated confidence, and elapsed seconds."""
@@ -77,7 +99,22 @@ class PokemonImageRecognizer:
         top_two = np.argpartition(scores, -2)[-2:]
         second_best, best = top_two[np.argsort(scores[top_two])]
         predicted_name = str(self.classes[best])
-        if best in self.refinement_class_ids:
+        if int(best) in self.focused_class_id_set:
+            focused_tensor = np.expand_dims(preprocess_focused(image), axis=0)
+            focused_outputs = self.session.run(
+                None,
+                {self.input_name: focused_tensor},
+            )
+            focused_embedding = np.asarray(focused_outputs[0])[0]
+            focused_embedding /= max(float(np.linalg.norm(focused_embedding)), 1e-8)
+            focused_scores = self.focused_centroids @ focused_embedding
+            focused_order = np.argsort(focused_scores)[::-1]
+            focused_best = int(focused_order[0])
+            predicted_name = str(self.classes[self.focused_class_ids[focused_best]])
+            margin = float(
+                focused_scores[focused_order[0]] - focused_scores[focused_order[1]]
+            )
+        elif best in self.refinement_class_ids:
             refinement_scores = self.refinement_embeddings @ embedding
             sorted_indexes = np.argsort(refinement_scores)[::-1]
             refined_label = int(self.refinement_labels[sorted_indexes[0]])

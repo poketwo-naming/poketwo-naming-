@@ -49,7 +49,9 @@ threshold can be changed with `REVIEW_CONFIDENCE_THRESHOLD`.
 Normal naming output uses a transparent official Pokémon artwork thumbnail
 from PokéAPI, selected for the predicted Pokémon form. The spawn image is still
 used for recognition and low-confidence review. The catch command uses the
-configured best name for each recognized Pokémon.
+configured best name for each recognized Pokémon. A matching image in
+`pokemon_sprites/<Pokémon name>.png` overrides the official artwork for custom
+Pokétwo variants.
 
 MissingNo detection immediately denies Pokétwo's Send Messages permission in
 the current channel and asks staff not to catch it. Administrators configure a
@@ -87,8 +89,9 @@ encoder, `pokemon_types.json`, `pokemon_sprite_ids.json`,
 `pokemon_best_names.json`, and `pokemon_aliases.json` files.
 
 To teach the bot commonly confused Pokémon (Alolan Meowth/Rattata, Blipbug,
-Luxray, Pikipek) after adding images to their folders, rebuild the lightweight
-refinement file without retraining. Pass extra folder names to add more classes:
+Luxray, Pikipek, Finizen, Palafin, and Hero Palafin) after adding images to
+their folders, rebuild the lightweight refinement file without retraining. Pass
+extra folder names to add more classes:
 
 ```bash
 python tools/build_pokemon_refinements.py

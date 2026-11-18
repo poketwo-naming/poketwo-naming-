@@ -1916,19 +1916,31 @@ class PokéTwoNamingBot(commands.Cog):
                 message.guild.id if message.guild else None,
                 shiny_hunters,
             )
-            sprite_id = self.pokemon_sprite_ids.get(pokemon_name)
-            if sprite_id is not None:
-                embed.set_thumbnail(
-                    url=(
-                        "https://raw.githubusercontent.com/PokeAPI/sprites/master/"
-                        "sprites/pokemon/other/official-artwork/"
-                        f"{sprite_id}.png"
-                    )
-                )
-            await message.channel.send(
-                content=content,
-                embed=embed,
+            custom_sprite_path = os.path.join(
+                "pokemon_sprites",
+                f"{pokemon_name}.png",
             )
+            if os.path.isfile(custom_sprite_path):
+                embed.set_thumbnail(url="attachment://pokemon.png")
+                await message.channel.send(
+                    content=content,
+                    embed=embed,
+                    file=discord.File(custom_sprite_path, filename="pokemon.png"),
+                )
+            else:
+                sprite_id = self.pokemon_sprite_ids.get(pokemon_name)
+                if sprite_id is not None:
+                    embed.set_thumbnail(
+                        url=(
+                            "https://raw.githubusercontent.com/PokeAPI/sprites/master/"
+                            "sprites/pokemon/other/official-artwork/"
+                            f"{sprite_id}.png"
+                        )
+                    )
+                await message.channel.send(
+                    content=content,
+                    embed=embed,
+                )
 
         if pokemon_name.casefold() == "missingno":
             guild_id = str(message.guild.id)
