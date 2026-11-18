@@ -1061,30 +1061,34 @@ class PokéTwoNamingBot(commands.Cog):
         role_id = self.bot_state["restricted_roles"].get(str(guild.id))
         return bool(role_id and member.get_role(int(role_id)))
 
-    def pokemon_from_grab_tail(self, text: str) -> str | None:
-        """Resolve the first Pokémon after a user mention."""
+    def pokemon_names_from_grab_segment(self, text: str) -> list[str]:
+        """Resolve every Pokémon listed after one user mention."""
         cleaned = re.sub(
             r"<a?:[^:>]+:\d+>",
             "",
             text,
         )
-        chunks = re.split(r"\s*(?:\||—|–|\n|;| - )\s*", cleaned)
+        chunks = re.split(r"\s*(?:\||—|–|\n|;|\s-\s)\s*", cleaned)
+        pokemon_names = []
         for chunk in chunks:
             value = re.sub(r"^[\s:*\-–—]+|[\s*_.,!]+$", "", chunk).strip()
             if not value:
                 continue
             pokemon_name = self.resolve_pokemon_name(value)
             if pokemon_name:
-                return pokemon_name
+                pokemon_names.append(str(pokemon_name))
+                continue
             normalized = normalize_pokemon_alias(value)
-            ending_matches = [
+            contained_matches = [
                 (len(alias), class_name)
                 for alias, class_name in self.pokemon_aliases.items()
-                if alias and normalized.endswith(alias)
+                if alias and alias in normalized
             ]
-            if ending_matches:
-                return max(ending_matches, key=lambda item: item[0])[1]
-        return None
+            if contained_matches:
+                pokemon_names.append(
+                    str(max(contained_matches, key=lambda item: item[0])[1])
+                )
+        return list(dict.fromkeys(pokemon_names))
 
     def parse_grab_list(self, message) -> list[tuple[str, str]]:
         """Parse only Pokémon that appear after each user mention."""
@@ -1097,10 +1101,10 @@ class PokéTwoNamingBot(commands.Cog):
         entries = []
         for index, mention in enumerate(mentions):
             end = mentions[index + 1].start() if index + 1 < len(mentions) else len(text)
-            pokemon_name = self.pokemon_from_grab_tail(
+            pokemon_names = self.pokemon_names_from_grab_segment(
                 text[mention.end() : end]
             )
-            if pokemon_name:
+            for pokemon_name in pokemon_names:
                 entry = (mention.group(1), str(pokemon_name))
                 if entry not in entries:
                     entries.append(entry)
