@@ -10,7 +10,7 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 - **Delete Names** - Remove nicknames from your collection
 - **Recognize Spawns** - Identify every Pokétwo spawn from its image and display confidence
 - **Type Icons** - Prefix each prediction with its primary and secondary type emojis
-- **Best Names** - Show the shortest Latin-script localized name under each prediction
+- **Best Names** - Show the shortest localized name, romanized for nicknames
 - **Bot Status** - Check if the bot is online
 
 ## Commands
@@ -74,7 +74,8 @@ python tools/build_pokemon_names.py
 ```
 
 The source images are ignored by Git. Commit and deploy the generated model,
-encoder, `pokemon_types.json`, and `pokemon_best_names.json` files.
+encoder, `pokemon_types.json`, `pokemon_best_names.json`, and
+`pokemon_aliases.json` files.
 
 ## Installation
 
