@@ -2991,14 +2991,42 @@ class PokéTwoNamingBot(commands.Cog):
             file=discord.File(archive, filename="new_training_images.zip"),
         )
 
-    @staticmethod
-    def command_pages(command_only: bool = False) -> list[discord.Embed]:
+    def command_pages(self, command_only: bool = False) -> list[discord.Embed]:
         """Build help pages with no more than 20 commands per page."""
+        entries = list(COMMAND_CATALOG)
+        documented_paths = set()
+        categories_by_root = {}
+        for category, syntax, _ in COMMAND_CATALOG:
+            command_text = re.sub(r"^[vVhH]!", "", syntax.strip())
+            path_parts = []
+            for part in command_text.split():
+                if part.startswith(("<", "[")):
+                    break
+                path_parts.append(part)
+            if not path_parts:
+                continue
+            command_path = " ".join(path_parts)
+            documented_paths.add(command_path)
+            categories_by_root.setdefault(path_parts[0], category)
+
+        for command in self.bot.walk_commands():
+            command_path = command.qualified_name
+            if command_path in documented_paths:
+                continue
+            if any(path.startswith(f"{command_path} ") for path in documented_paths):
+                continue
+            syntax = f"v!{command_path}"
+            if command.signature:
+                syntax += f" {command.signature}"
+            description = command.help or command.brief or "No description available."
+            category = categories_by_root.get(command_path.split()[0], "Other")
+            entries.append((category, syntax, description))
+
         page_size = 20
-        page_count = (len(COMMAND_CATALOG) + page_size - 1) // page_size
+        page_count = (len(entries) + page_size - 1) // page_size
         pages = []
         for page_index in range(page_count):
-            entries = COMMAND_CATALOG[
+            page_entries = entries[
                 page_index * page_size : (page_index + 1) * page_size
             ]
             embed = discord.Embed(
@@ -3015,7 +3043,7 @@ class PokéTwoNamingBot(commands.Cog):
                 color=discord.Color.purple(),
             )
             categories = {}
-            for category, syntax, description in entries:
+            for category, syntax, description in page_entries:
                 categories.setdefault(category, []).append(
                     f"`{syntax}`"
                     if command_only
@@ -3030,7 +3058,7 @@ class PokéTwoNamingBot(commands.Cog):
             embed.set_footer(
                 text=(
                     f"Page {page_index + 1}/{page_count} • "
-                    f"{len(entries)} commands"
+                    f"{len(page_entries)} commands"
                 )
             )
             pages.append(embed)
