@@ -60,7 +60,8 @@ from PokéAPI, selected for the predicted Pokémon form. The spawn image is stil
 used for recognition and low-confidence review. The catch command uses the
 configured best name for each recognized Pokémon. A matching image in
 `pokemon_sprites/<Pokémon name>.png` overrides the official artwork for custom
-Pokétwo variants.
+Pokétwo variants. When no custom sprite is available, custom variants use the
+recognized spawn image instead of misleading base-species artwork.
 
 For `v!grab` and `h!grab`, a category name before a user mention (for example,
 `rare - @user - Pikachu`) appears as one `rare - @user` preview entry; confirming

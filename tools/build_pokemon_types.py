@@ -115,6 +115,7 @@ CUSTOM_SPRITE_IDENTIFIERS = {
     "Rotom Drone": "rotom",
     "Rotom Phone": "rotom",
     "Rotom Pokédex": "rotom",
+    "Ride Cyclizar": "cyclizar",
     "Smearguru": "smeargle",
 }
 

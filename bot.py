@@ -22,7 +22,10 @@ from geonamescache import GeonamesCache
 from PIL import Image, UnidentifiedImageError
 
 from pokemon_recognition import PokemonImageRecognizer
-from tools.build_pokemon_types import normalize as normalize_pokemon_alias
+from tools.build_pokemon_types import (
+    CUSTOM_SPRITE_IDENTIFIERS,
+    normalize as normalize_pokemon_alias,
+)
 
 
 POKETWO_BOT_ID = 716390085896962058
@@ -2111,6 +2114,24 @@ class PokéTwoNamingBot(commands.Cog):
                     content=content,
                     embed=embed,
                     file=discord.File(custom_sprite_path, filename="pokemon.png"),
+                )
+            elif pokemon_name in CUSTOM_SPRITE_IDENTIFIERS:
+                thumbnail_buffer = BytesIO()
+                with Image.open(BytesIO(image_data)) as image:
+                    image.convert("RGB").save(
+                        thumbnail_buffer,
+                        format="WEBP",
+                        quality=85,
+                    )
+                thumbnail_buffer.seek(0)
+                embed.set_thumbnail(url="attachment://pokemon.webp")
+                await message.channel.send(
+                    content=content,
+                    embed=embed,
+                    file=discord.File(
+                        thumbnail_buffer,
+                        filename="pokemon.webp",
+                    ),
                 )
             else:
                 sprite_id = self.pokemon_sprite_ids.get(pokemon_name)
