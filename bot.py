@@ -496,6 +496,20 @@ class AfkView(discord.ui.View):
 
     KINDS = (("shiny_hunt", "Shiny Hunt"), ("collection", "Collection"))
 
+    class ToggleButton(discord.ui.Button):
+        def __init__(self, owner: "AfkView", kind: str, enabled: bool):
+            super().__init__(
+                label="On" if enabled else "Off",
+                style=discord.ButtonStyle.success
+                if enabled
+                else discord.ButtonStyle.danger,
+            )
+            self.owner = owner
+            self.kind = kind
+
+        async def callback(self, interaction: discord.Interaction) -> None:
+            await self.owner.toggle_pings(interaction, self.kind)
+
     def __init__(self, cog, user_id: int):
         super().__init__(timeout=300)
         self.cog = cog
@@ -516,35 +530,29 @@ class AfkView(discord.ui.View):
 
     def refresh_buttons(self):
         self.clear_items()
-        for kind, label in self.KINDS:
+        for kind, _ in self.KINDS:
             on = self.cog.pings_enabled(self.user_id, kind)
-            button = discord.ui.Button(
-                label="On" if on else "Off",
-                style=discord.ButtonStyle.success
-                if on
-                else discord.ButtonStyle.danger,
-            )
-            button.callback = self.make_callback(kind)
-            self.add_item(button)
+            self.add_item(self.ToggleButton(self, kind, on))
 
-    def make_callback(self, kind: str):
-        async def callback(interaction: discord.Interaction):
-            if interaction.user.id != self.user_id:
-                await interaction.response.send_message(
-                    "Only the person who ran v!afk can use these buttons.",
-                    ephemeral=True,
-                )
-                return
-            settings = self.cog.bot_state["afk"].setdefault(str(self.user_id), {})
-            settings[kind] = not settings.get(kind, False)
-            self.cog.save_bot_state()
-            self.refresh_buttons()
-            await interaction.response.edit_message(
-                embed=self.build_embed(),
-                view=self,
+    async def toggle_pings(
+        self,
+        interaction: discord.Interaction,
+        kind: str,
+    ) -> None:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(
+                "Only the person who ran v!afk can use these buttons.",
+                ephemeral=True,
             )
-
-        return callback
+            return
+        settings = self.cog.bot_state["afk"].setdefault(str(self.user_id), {})
+        settings[kind] = not settings.get(kind, False)
+        self.cog.save_bot_state()
+        self.refresh_buttons()
+        await interaction.response.edit_message(
+            embed=self.build_embed(),
+            view=self,
+        )
 
     async def on_timeout(self):
         if self.message is not None:
