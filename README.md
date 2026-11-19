@@ -95,7 +95,11 @@ pip install -r requirements-train.txt
 python tools/build_pokemon_model.py
 python tools/build_pokemon_types.py
 python tools/build_pokemon_names.py
+python tools/build_pokemon_refinements.py
 ```
+
+Store male Nidoran examples under `pokemon_images/training_data/Nidoran♂`;
+`Nidoran` is the female class.
 
 The source images are ignored by Git. Commit and deploy the generated model,
 encoder, `pokemon_types.json`, `pokemon_sprite_ids.json`,

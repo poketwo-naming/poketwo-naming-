@@ -75,7 +75,11 @@ def split_by_class(
     for label in np.unique(labels):
         indexes = np.flatnonzero(labels == label)
         rng.shuffle(indexes)
+        if len(indexes) == 1:
+            training_indexes.extend(indexes)
+            continue
         validation_count = max(1, round(len(indexes) * 0.2))
+        validation_count = min(validation_count, len(indexes) - 1)
         validation_indexes.extend(indexes[:validation_count])
         training_indexes.extend(indexes[validation_count:])
 

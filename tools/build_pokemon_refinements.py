@@ -26,8 +26,18 @@ DEFAULT_CLASSES = [
     "Alolan Meowth",
     "Alolan Rattata",
     "Blipbug",
+    "Brionne",
+    "Jellicent",
     "Luxray",
+    "Munkidori",
+    "Nidoran",
+    "Nidoran♂",
+    "Noivern",
+    "Oinkologne",
     "Pikipek",
+    "Sableye",
+    "Trevenant",
+    "Zygarde",
     *FOCUSED_CROP_CLASSES,
 ]
 
