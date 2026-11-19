@@ -91,6 +91,10 @@ Active incense counts expire automatically after 90 seconds without a Pokétwo
 spawn in that channel. Override the inactivity window with
 `INCENSE_INACTIVITY_SECONDS`.
 
+The image encoder uses one CPU inference thread to reduce overhead, while
+classification and focused-image checks remain enabled. `v!api` reports recent
+recognition and response timings; actual speed depends on the host and network.
+
 The bot uses the Pokémon-named folders in `pokemon_images/training_data` to build
 the recognition model. Rebuild it after changing the training images:
 

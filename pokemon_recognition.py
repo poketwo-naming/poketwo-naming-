@@ -70,8 +70,12 @@ class PokemonImageRecognizer:
     ):
         self.model_path = Path(model_path)
         self.encoder_path = Path(encoder_path)
+        # A small encoder is faster without a large per-session CPU thread pool.
+        session_options = ort.SessionOptions()
+        session_options.intra_op_num_threads = 1
         self.session = ort.InferenceSession(
             str(self.encoder_path),
+            sess_options=session_options,
             providers=["CPUExecutionProvider"],
         )
         self.input_name = self.session.get_inputs()[0].name
@@ -112,7 +116,7 @@ class PokemonImageRecognizer:
         outputs = self.session.run(None, {self.input_name: input_tensor})
         embedding = np.asarray(outputs[0])[0]
         embedding = embedding / max(float(np.linalg.norm(embedding)), 1e-8)
-        scores = self.centroids @ embedding
+        scores = np.einsum("ij,j->i", self.centroids, embedding)
         top_two = np.argpartition(scores, -2)[-2:]
         second_best, best = top_two[np.argsort(scores[top_two])]
         predicted_name = str(self.classes[best])
@@ -132,7 +136,9 @@ class PokemonImageRecognizer:
                 focused_scores[focused_order[0]] - focused_scores[focused_order[1]]
             )
         elif best in self.refinement_class_ids:
-            refinement_scores = self.refinement_embeddings @ embedding
+            refinement_scores = np.einsum(
+                "ij,j->i", self.refinement_embeddings, embedding
+            )
             sorted_indexes = np.argsort(refinement_scores)[::-1]
             refined_label = int(self.refinement_labels[sorted_indexes[0]])
             predicted_name = str(self.classes[refined_label])
