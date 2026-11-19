@@ -1609,15 +1609,22 @@ class PokéTwoNamingBot(commands.Cog):
                         r"\s*(?:\||—|–|;|/|,|\s-\s)\s*",
                         line[: mention.start()],
                     )
-                    for segment in reversed(prefix_segments):
-                        segment = re.sub(
+                    prefix_segments = [
+                        cleaned
+                        for segment in prefix_segments
+                        if (
+                            cleaned := re.sub(
                             r"^[\s:*\-–—]+|[\s*_.,!]+$",
                             "",
                             segment,
-                        ).strip()
-                        category_key = self.find_category(guild_id, segment)
-                        if category_key:
-                            break
+                            ).strip()
+                        )
+                    ]
+                    if prefix_segments:
+                        category_key = self.find_category(
+                            guild_id,
+                            prefix_segments[-1],
+                        )
                 if category_key is not None:
                     entry = (mention.group(1), category_key, False, True)
                     if entry not in entries:
