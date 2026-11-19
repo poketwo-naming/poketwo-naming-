@@ -2334,7 +2334,7 @@ class PokéTwoNamingBot(commands.Cog):
 
         await ctx.send(
             f"This {place} is {phase}.\n"
-            f"Copy and paste: `@poketwo tz {place}` "
+            f"Copy and paste: `<@{POKETWO_BOT_ID}> tz {place}` "
             f"{TIMEZONE_PHASE_EMOJIS[phase]}"
         )
 

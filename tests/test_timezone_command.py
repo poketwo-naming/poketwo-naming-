@@ -26,7 +26,7 @@ class TimezoneCommandTests(unittest.IsolatedAsyncioTestCase):
 
         self.ctx.send.assert_awaited_once_with(
             "This Tokyo is night.\n"
-            "Copy and paste: `@poketwo tz Tokyo` 🌙"
+            "Copy and paste: `<@716390085896962058> tz Tokyo` 🌙"
         )
 
     async def test_tz_rejects_unknown_phase(self):
