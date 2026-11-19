@@ -2,6 +2,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import discord
+
 from bot import PokéTwoNamingBot
 
 
@@ -39,8 +41,25 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
     async def test_search_shows_every_reserving_member(self):
         await self.cog.search_reserve(self.ctx, "Pikachu")
 
-        self.ctx.send.assert_awaited_once_with(
-            "**Pikachu** is reserved by <@456>, <@789>."
+        self.ctx.send.assert_awaited_once()
+        embed = self.ctx.send.await_args.kwargs["embed"]
+        self.assertIsInstance(embed, discord.Embed)
+        self.assertEqual(embed.title, "Pikachu Reservations")
+        self.assertEqual(embed.description, "• <@456>\n• <@789>")
+        self.assertEqual(embed.footer.text, "2 reserving members")
+
+    async def test_search_shows_unreserved_result_in_an_embed(self):
+        self.cog.bot_state["reserves"]["123"].pop("Pikachu")
+
+        await self.cog.search_reserve(self.ctx, "Pikachu")
+
+        self.ctx.send.assert_awaited_once()
+        embed = self.ctx.send.await_args.kwargs["embed"]
+        self.assertIsInstance(embed, discord.Embed)
+        self.assertEqual(embed.title, "Pikachu Reservations")
+        self.assertEqual(
+            embed.description,
+            "No members have reserved this Pokémon.",
         )
 
 

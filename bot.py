@@ -69,7 +69,7 @@ COMMAND_CATALOG = (
     (
         "Reservations",
         "v!r search <pokemon>",
-        "Shows who has a Pokémon reserved.",
+        "Shows who has a Pokémon reserved in an embed.",
     ),
     (
         "Reservations",
@@ -2681,11 +2681,21 @@ class PokéTwoNamingBot(commands.Cog):
             await ctx.send(f"❌ Unknown Pokémon: `{pokemon_input.strip()}`")
             return
         user_ids = self.reserve_user_ids(ctx.guild.id, pokemon_name)
-        if not user_ids:
-            await ctx.send(f"**{pokemon_name}** is not currently reserved.")
-            return
-        owners = ", ".join(f"<@{user_id}>" for user_id in user_ids)
-        await ctx.send(f"**{pokemon_name}** is reserved by {owners}.")
+        description = (
+            "\n".join(f"• <@{user_id}>" for user_id in user_ids)
+            if user_ids
+            else "No members have reserved this Pokémon."
+        )
+        embed = discord.Embed(
+            title=f"{pokemon_name} Reservations",
+            description=description,
+            color=discord.Color.purple(),
+        )
+        if user_ids:
+            member_count = len(user_ids)
+            member_label = "member" if member_count == 1 else "members"
+            embed.set_footer(text=f"{member_count} reserving {member_label}")
+        await ctx.send(embed=embed)
 
     async def show_reserve_list(self, ctx, member_input: str = ""):
         """Fresh server reserve list implementation."""

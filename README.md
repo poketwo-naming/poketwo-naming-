@@ -22,7 +22,7 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 | `v!r add <pokemon,...> <@user>` | `v!r add Pikachu, Eevee @user` | Reserve multiple Pokémon for a member (restricted) |
 | `v!r add all <pokemon,...> <@user>` | `v!r add all Arceus, Eevee @user` | Reserve all matching forms (restricted) |
 | `v!r remove <pokemon,...|category> [@user]` | `v!r remove rare @user` | Remove Pokémon or all reserved members of a category (restricted) |
-| `v!r search <pokemon>` | `v!r search Pikachu` | Show who has a Pokémon reserved |
+| `v!r search <pokemon>` | `v!r search Pikachu` | Show who has a Pokémon reserved in an embed |
 | `v!r list [@user]` | `v!r list @user` | List all server reserves or one member's reserves |
 | `v!reserve list [@user]` | `v!reserve list @user` | Long-form reserve list command |
 | `v!r clear` | `v!r clear` | Confirm and clear all server reserves (restricted) |
