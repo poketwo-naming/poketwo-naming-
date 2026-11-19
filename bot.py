@@ -1709,9 +1709,18 @@ class PokéTwoNamingBot(commands.Cog):
             ).strip()
             if not value:
                 continue
-            requested_all_forms = value.casefold().startswith("all ")
-            if requested_all_forms:
-                value = value[4:].strip()
+            all_forms_match = re.search(
+                r"^(?:all\s+|all\s+forms?\s+)|"
+                r"\s+(?:all|all\s+forms?)$",
+                value,
+                flags=re.IGNORECASE,
+            )
+            requested_all_forms = all_forms_match is not None
+            if all_forms_match is not None:
+                value = (
+                    value[: all_forms_match.start()]
+                    + value[all_forms_match.end() :]
+                ).strip()
             pokemon_name = self.resolve_pokemon_name(value)
             if pokemon_name:
                 pokemon_names.append(
@@ -1762,10 +1771,13 @@ class PokéTwoNamingBot(commands.Cog):
             for index, mention in enumerate(mentions):
                 category_key = None
                 category_emoji = ""
+                prefix_start = (
+                    mentions[index - 1].end() if index > 0 else 0
+                )
                 if guild_id is not None:
                     prefix_segments = re.split(
                         r"\s*(?:\||—|–|;|/|,|\s-\s)\s*",
-                        line[: mention.start()],
+                        line[prefix_start : mention.start()],
                     )
                     prefix_segments = [
                         cleaned
@@ -1804,6 +1816,22 @@ class PokéTwoNamingBot(commands.Cog):
                     )
                     if entry not in entries:
                         entries.append(entry)
+                else:
+                    pokemon_names = self.pokemon_names_from_grab_segment(
+                        line[prefix_start : mention.start()]
+                    )
+                    for pokemon_name, requested_all_forms, custom_emoji in (
+                        pokemon_names
+                    ):
+                        entry = (
+                            mention.group(1),
+                            str(pokemon_name),
+                            requested_all_forms,
+                            False,
+                            custom_emoji,
+                        )
+                        if entry not in entries:
+                            entries.append(entry)
                 end = (
                     mentions[index + 1].start()
                     if index + 1 < len(mentions)

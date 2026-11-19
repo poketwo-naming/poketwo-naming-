@@ -104,10 +104,12 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_grab_preview_hides_users_and_uses_source_emoji(self):
-        self.cog.resolve_pokemon_family = lambda name, include_regionals: [
+        self.cog.resolve_pokemon_family = (
+            lambda name, include_regionals=True: [
             "Pikachu",
             "Cosplay Pikachu",
-        ]
+            ]
+        )
         view = GrabReservesView(
             self.cog,
             789,
@@ -123,14 +125,16 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
-        self.assertNotIn("<@456>", view.build_embed().description)
+        initial_description = view.build_embed().description or ""
+        self.assertNotIn("<@456>", initial_description)
         self.assertEqual(
-            view.build_embed().description,
+            initial_description,
             "Pikachu\nCosplay Pikachu",
         )
         view.custom_emoji = True
+        emoji_description = view.build_embed().description or ""
         self.assertEqual(
-            view.build_embed().description,
+            emoji_description,
             "<:party_pikachu:123456789> Pikachu\n"
             "<:party_pikachu:123456789> Cosplay Pikachu",
         )
@@ -141,6 +145,36 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
                 "Pikachu",
                 custom_emoji="<:party_pikachu:123456789>",
             ),
+        )
+
+    async def test_exchange_expands_all_forms_in_replied_list(self):
+        self.cog.class_names = {
+            "pikachu": "Pikachu",
+            "cosplay pikachu": "Cosplay Pikachu",
+        }
+        source = SimpleNamespace(
+            guild=SimpleNamespace(id=123),
+            content="Pikachu all - <@456>",
+            embeds=[],
+            message_snapshots=[],
+        )
+        self.cog.referenced_grab_message = AsyncMock(return_value=source)
+        self.cog.bot_state["reserves"]["123"] = {
+            "Pikachu": ["789"],
+            "Cosplay Pikachu": ["789"],
+        }
+        ctx = SimpleNamespace(
+            guild=SimpleNamespace(id=123),
+            author=SimpleNamespace(id=101),
+            send=AsyncMock(),
+        )
+
+        await self.cog.exchange_reserves(ctx, "<@789>")
+
+        view = ctx.send.await_args.kwargs["view"]
+        self.assertEqual(
+            view.entries,
+            [("456", "Cosplay Pikachu"), ("456", "Pikachu")],
         )
 
 
