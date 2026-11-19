@@ -1,10 +1,11 @@
 import unittest
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock
 
 import discord
 
-from bot import GrabReservesView, PokéTwoNamingBot
+from bot import GrabEmojiModal, GrabReservesView, PokéTwoNamingBot
 
 
 class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
@@ -131,12 +132,12 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
             initial_description,
             "Pikachu\nCosplay Pikachu",
         )
-        view.custom_emoji = True
+        view.custom_emoji = "<:my_pikachu:987654321>"
         emoji_description = view.build_embed().description or ""
         self.assertEqual(
             emoji_description,
-            "<:party_pikachu:123456789> Pikachu\n"
-            "<:party_pikachu:123456789> Cosplay Pikachu",
+            "<:my_pikachu:987654321> Pikachu\n"
+            "<:my_pikachu:987654321> Cosplay Pikachu",
         )
         self.assertIn(
             "<@456>",
@@ -146,6 +147,29 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
                 custom_emoji="<:party_pikachu:123456789>",
             ),
         )
+
+    async def test_custom_emoji_button_opens_modal(self):
+        view = GrabReservesView(
+            self.cog,
+            789,
+            101112,
+            [("456", "Pikachu", False, False, "")],
+        )
+        send_modal = AsyncMock()
+        interaction = cast(
+            discord.Interaction,
+            SimpleNamespace(
+                response=SimpleNamespace(send_modal=send_modal),
+            ),
+        )
+
+        await view.open_custom_emoji_modal(interaction)
+
+        await_call = send_modal.await_args
+        if await_call is None:
+            self.fail("Custom emoji modal was not opened.")
+        modal = await_call.args[0]
+        self.assertIsInstance(modal, GrabEmojiModal)
 
     async def test_exchange_expands_all_forms_in_replied_list(self):
         self.cog.class_names = {

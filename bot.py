@@ -839,6 +839,28 @@ class ServerSettingsView(discord.ui.LayoutView):
         await interaction.response.defer()
 
 
+class GrabEmojiModal(discord.ui.Modal, title="Custom Emoji"):
+    """Collect an emoji to prepend to the grabbed reserve list."""
+
+    emoji = discord.ui.TextInput(
+        label="Emoji",
+        placeholder="Paste an emoji or <:name:123456789>",
+        required=False,
+        max_length=100,
+    )
+
+    def __init__(self, grab_view):
+        super().__init__()
+        self.grab_view = grab_view
+        self.emoji.default = grab_view.custom_emoji
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await self.grab_view.set_custom_emoji(
+            interaction,
+            self.emoji.value,
+        )
+
+
 class GrabReservesView(discord.ui.View):
     """Preview and confirm reservations parsed from a replied list."""
 
@@ -861,7 +883,7 @@ class GrabReservesView(discord.ui.View):
             all_forms for _, _, all_forms, _, _ in entries
         )
         self.all_forms = self.has_all_form_entries
-        self.custom_emoji = False
+        self.custom_emoji = ""
         self.processing = False
         self.refresh_button_labels()
 
@@ -909,7 +931,8 @@ class GrabReservesView(discord.ui.View):
         custom_emoji: str = "",
         include_user: bool = True,
     ) -> str:
-        prefix = f"{custom_emoji} " if self.custom_emoji and custom_emoji else ""
+        del custom_emoji
+        prefix = f"{self.custom_emoji} " if self.custom_emoji else ""
         suffix = f" — <@{user_id}>" if include_user else ""
         return f"{prefix}{pokemon_name}{suffix}"
 
@@ -967,9 +990,7 @@ class GrabReservesView(discord.ui.View):
         self.forms_button.label = (
             "All forms on" if self.all_forms else "All forms off"
         )
-        self.emoji_button.label = (
-            "Hide custom emoji" if self.custom_emoji else "Custom emoji"
-        )
+        self.emoji_button.label = "Edit emoji" if self.custom_emoji else "Custom emoji"
 
     async def redraw(self, interaction: discord.Interaction):
         self.refresh_button_labels()
@@ -1005,7 +1026,17 @@ class GrabReservesView(discord.ui.View):
         button: discord.ui.Button,
     ):
         del button
-        self.custom_emoji = not self.custom_emoji
+        await self.open_custom_emoji_modal(interaction)
+
+    async def open_custom_emoji_modal(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(GrabEmojiModal(self))
+
+    async def set_custom_emoji(
+        self,
+        interaction: discord.Interaction,
+        emoji: str,
+    ):
+        self.custom_emoji = emoji.strip()
         await self.redraw(interaction)
 
     @discord.ui.button(label="Copy", style=discord.ButtonStyle.secondary)
@@ -2414,8 +2445,8 @@ class PokéTwoNamingBot(commands.Cog):
             return
 
         await ctx.send(
-            f"This {place} is {phase}.\n"
-            f"Copy and paste: `<@{POKETWO_BOT_ID}> tz {place}` "
+            f"It is {phase} in **{place}**.\n"
+            f"Copy: `<@{POKETWO_BOT_ID}> tz {place}` "
             f"{TIMEZONE_PHASE_EMOJIS[phase]}"
         )
 
