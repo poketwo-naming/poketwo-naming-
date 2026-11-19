@@ -130,6 +130,11 @@ COMMAND_CATALOG = (
         "Grants a server tier. Bot owner from the main server only.",
     ),
     (
+        "Premium",
+        "v!premiumservers [alias: v!ps]",
+        "Lists connected servers and their premium tiers.",
+    ),
+    (
         "Training",
         "v!training",
         "Shows the count of reviewed images waiting for model training.",
@@ -2230,6 +2235,36 @@ class PokéTwoNamingBot(commands.Cog):
             f"✅ Server `{server_id}` is now on **{normalized_tier.title()}** "
             f"({PREMIUM_CAPACITIES[normalized_tier]} simultaneous incense channels)."
         )
+
+    @commands.command(name="premiumservers", aliases=["ps"])
+    async def premium_servers_list(self, ctx):
+        """List connected servers and their premium tier."""
+        guilds = sorted(self.bot.guilds, key=lambda guild: guild.name.casefold())
+        if not guilds:
+            await ctx.send("This bot is not connected to any servers.")
+            return
+
+        lines = []
+        for guild in guilds:
+            name = discord.utils.escape_mentions(
+                discord.utils.escape_markdown(guild.name)
+            )
+            tier = self.premium_tier(guild.id)
+            tier_label = f"**{tier.title()}**" if tier else "**No premium**"
+            lines.append(f"**{name}** (`{guild.id}`) — {tier_label}")
+
+        page_size = 20
+        page_count = (len(lines) + page_size - 1) // page_size
+        for page_index in range(page_count):
+            page_lines = lines[page_index * page_size : (page_index + 1) * page_size]
+            embed = discord.Embed(
+                title="Premium Servers",
+                description="\n".join(page_lines),
+                color=discord.Color.purple(),
+            )
+            if page_count > 1:
+                embed.set_footer(text=f"Page {page_index + 1}/{page_count}")
+            await ctx.send(embed=embed)
 
     @commands.command(name="permission")
     async def set_restricted_role(self, ctx, role_id: int):
