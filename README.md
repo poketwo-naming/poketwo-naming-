@@ -19,9 +19,10 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 | `v!premium` | `v!premium` | Show the current server's premium tier |
 | `v!premium add <tier> <server_id>` | `v!premium add gold 123456789` | Owner-only tier grant from the main server |
 | `v!resume` | `v!resume` | Resume a channel paused after a MissingNo spawn |
-| `v!r add <pokemon,...> <@user>` | `v!r add Pikachu, Eevee @user` | Reserve multiple Pokémon for a member |
-| `v!r add all <pokemon,...> <@user>` | `v!r add all Arceus, Eevee @user` | Reserve all matching forms |
-| `v!r remove <pokemon,...> [@user]` | `v!r remove Pikachu, Eevee @user` | Remove multiple Pokémon reserves |
+| `v!r add <pokemon,...> <@user>` | `v!r add Pikachu, Eevee @user` | Reserve multiple Pokémon for a member (restricted) |
+| `v!r add all <pokemon,...> <@user>` | `v!r add all Arceus, Eevee @user` | Reserve all matching forms (restricted) |
+| `v!r remove <pokemon,...|category> [@user]` | `v!r remove rare @user` | Remove Pokémon or all reserved members of a category (restricted) |
+| `v!r search <pokemon>` | `v!r search Pikachu` | Show who has a Pokémon reserved |
 | `v!r list [@user]` | `v!r list @user` | List all server reserves or one member's reserves |
 | `v!reserve list [@user]` | `v!reserve list @user` | Long-form reserve list command |
 | `v!r clear` | `v!r clear` | Confirm and clear all server reserves (restricted) |
@@ -48,6 +49,10 @@ threshold can be changed with `REVIEW_CONFIDENCE_THRESHOLD`.
 
 Multiple members can reserve the same Pokémon; each receives the reserve ping
 when that Pokémon is recognized. Existing single-member reserves remain valid.
+`v!r search <pokemon>` and `v!r list` are available to everyone.
+`v!r add` and `v!r remove` are restricted to administrators and members with the
+configured restricted role. Removing a category removes those Pokémon reserves
+for all reserving members, or only the mentioned member when `@user` is supplied.
 
 Normal naming output uses a transparent official Pokémon artwork thumbnail
 from PokéAPI, selected for the predicted Pokémon form. The spawn image is still

@@ -64,7 +64,12 @@ COMMAND_CATALOG = (
     (
         "Reservations",
         "v!r remove <pokemon,...> [@user]",
-        "Removes comma-separated Pokémon reservations. Restricted.",
+        "Removes Pokémon or a category of reservations. Restricted.",
+    ),
+    (
+        "Reservations",
+        "v!r search <pokemon>",
+        "Shows who has a Pokémon reserved.",
     ),
     (
         "Reservations",
@@ -2453,6 +2458,8 @@ class PokéTwoNamingBot(commands.Cog):
             await self.exchange_reserves(ctx, remainder)
         elif action == "list":
             await self.show_reserve_list(ctx, remainder)
+        elif action == "search":
+            await self.search_reserve(ctx, remainder)
         elif action == "clear":
             if remainder:
                 await ctx.send("Usage: `v!r clear`")
@@ -2462,11 +2469,13 @@ class PokéTwoNamingBot(commands.Cog):
             await ctx.send(
                 "Use `v!r list [@user]` / `v!reserve list [@user]`, "
                 "`v!r add <pokemon,...> <@user>`, "
-                "`v!r remove <pokemon,...> [@user]`, or `v!r clear`."
+                "`v!r remove <pokemon,...|category> [@user]`, "
+                "`v!r search <pokemon>`, or `v!r clear`."
             )
         else:
             await ctx.send(
-                "Unknown reservation action. Use `add`, `remove`, `list`, or `clear`."
+                "Unknown reservation action. Use `add`, `remove`, `search`, "
+                "`list`, or `clear`."
             )
 
     async def exchange_reserves(self, ctx, remainder: str):
@@ -2617,7 +2626,16 @@ class PokéTwoNamingBot(commands.Cog):
                 await ctx.send("❌ That user is not in this server.")
                 return
 
-        pokemon_names, unknown = self.resolve_pokemon_list(pokemon_input)
+        guild_id = ctx.guild.id
+        category_key = self.find_category(guild_id, pokemon_input)
+        if category_key is not None:
+            pokemon_names = self.guild_categories(guild_id)[category_key]
+            unknown = []
+            if not pokemon_names:
+                await ctx.send(f"❌ Category **{category_key}** is empty.")
+                return
+        else:
+            pokemon_names, unknown = self.resolve_pokemon_list(pokemon_input)
         if unknown:
             await ctx.send(
                 "❌ Unknown Pokémon: "
@@ -2625,7 +2643,6 @@ class PokéTwoNamingBot(commands.Cog):
             )
             return
 
-        guild_id = ctx.guild.id
         removed = []
         skipped = []
         for pokemon_name in pokemon_names:
@@ -2650,6 +2667,25 @@ class PokéTwoNamingBot(commands.Cog):
         if skipped:
             result += " Skipped: " + "; ".join(skipped)
         await ctx.send(result)
+
+    async def search_reserve(self, ctx, pokemon_input: str):
+        """Show who has a Pokémon reserved, without requiring restricted access."""
+        if ctx.guild is None:
+            await ctx.send("Reservations can only be viewed inside a server.")
+            return
+        if not pokemon_input.strip():
+            await ctx.send("Usage: `v!r search <pokemon>`")
+            return
+        pokemon_name = self.resolve_pokemon_name(pokemon_input)
+        if pokemon_name is None:
+            await ctx.send(f"❌ Unknown Pokémon: `{pokemon_input.strip()}`")
+            return
+        user_ids = self.reserve_user_ids(ctx.guild.id, pokemon_name)
+        if not user_ids:
+            await ctx.send(f"**{pokemon_name}** is not currently reserved.")
+            return
+        owners = ", ".join(f"<@{user_id}>" for user_id in user_ids)
+        await ctx.send(f"**{pokemon_name}** is reserved by {owners}.")
 
     async def show_reserve_list(self, ctx, member_input: str = ""):
         """Fresh server reserve list implementation."""
