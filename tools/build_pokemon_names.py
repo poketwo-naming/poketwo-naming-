@@ -21,6 +21,7 @@ from tools.build_pokemon_types import (
 
 BEST_NAMES_OUTPUT = Path("pokemon_best_names.json")
 ALIASES_OUTPUT = Path("pokemon_aliases.json")
+SPECIES_OUTPUT = Path("pokemon_species.json")
 CUSTOM_SPECIES = {
     "Chef Dente": "greedent",
     "MissingNo": "MissingNo",
@@ -52,7 +53,9 @@ def shortest_name(names: list[str]) -> str:
     return min(candidates, key=lambda name: (len(name), name.casefold(), name))
 
 
-def build_localized_data() -> tuple[dict[str, str], dict[str, str]]:
+def build_localized_data() -> tuple[
+    dict[str, str], dict[str, str], dict[str, int | str]
+]:
     pokemon_rows = download_csv("pokemon.csv")
     identifier_to_species = {
         row["identifier"]: int(row["species_id"])
@@ -85,6 +88,7 @@ def build_localized_data() -> tuple[dict[str, str], dict[str, str]]:
     )
     best_names = {}
     aliases_to_classes = {}
+    species_by_class = {}
 
     for class_name in classes:
         if class_name in CUSTOM_TYPES:
@@ -113,6 +117,9 @@ def build_localized_data() -> tuple[dict[str, str], dict[str, str]]:
                 ),
             )
 
+        species_by_class[class_name] = (
+            species_id if species_id is not None else "MissingNo"
+        )
         names = list(
             dict.fromkeys(
                 [
@@ -138,20 +145,25 @@ def build_localized_data() -> tuple[dict[str, str], dict[str, str]]:
         )
         if len(shortest_classes) == 1:
             aliases[alias] = shortest_classes[0]
-    return best_names, aliases
+    return best_names, aliases, species_by_class
 
 
 def main() -> None:
     if not TRAINING_ROOT.is_dir():
         raise FileNotFoundError(f"Training directory not found: {TRAINING_ROOT}")
-    best_names, aliases = build_localized_data()
+    best_names, aliases, species_by_class = build_localized_data()
     with open(BEST_NAMES_OUTPUT, "w", encoding="utf-8") as output:
         json.dump(best_names, output, ensure_ascii=False, indent=2, sort_keys=True)
     with open(ALIASES_OUTPUT, "w", encoding="utf-8") as output:
         json.dump(aliases, output, ensure_ascii=False, indent=2, sort_keys=True)
+    with open(SPECIES_OUTPUT, "w", encoding="utf-8") as output:
+        json.dump(
+            species_by_class, output, ensure_ascii=False, indent=2, sort_keys=True
+        )
     print(
         f"Created {BEST_NAMES_OUTPUT} with {len(best_names)} names and "
-        f"{ALIASES_OUTPUT} with {len(aliases)} localized aliases."
+        f"{ALIASES_OUTPUT} with {len(aliases)} localized aliases, and "
+        f"{SPECIES_OUTPUT} with {len(species_by_class)} species mappings."
     )
 
 

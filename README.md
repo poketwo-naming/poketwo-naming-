@@ -30,6 +30,7 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 | `v!grab` | Reply with `v!grab` | Preview a reserve list; category labels before a mention expand to that category |
 | `h!grab` | Reply with `h!grab` | Same category support, delegated through h!r, then v!r |
 | `v!sh [pokemon]` | `v!sh Pikachu` | Start/switch a hunt, or show your current hunt |
+| `v!sh all <pokemon>` | `v!sh all Meowth` | Hunt every form of that Pokémon |
 | `v!sh clear` | `v!sh clear` | Clear your shiny hunt |
 | `v!cl add [all] <pokemon,...>` | `v!cl add Pikachu, Eevee` | Add multiple Pokémon to your collection |
 | `v!cl remove <pokemon,...>` | `v!cl remove Pikachu, Eevee` | Remove multiple Pokémon from your collection |
@@ -81,7 +82,9 @@ premium access. Other informational and configuration commands remain usable.
 
 Multiple members can shiny hunt the same Pokémon. `shinyhunt:` pings them in
 the naming message. An active reservation replaces the shiny-hunt and collection
-lines with the reserved member. Chain tracking is not stored.
+lines with the reserved member. Use `v!sh all <pokemon>` to hunt all forms,
+including regional and custom forms, of the same species. A hunt for a single
+form still only matches that form. Chain tracking is not stored.
 
 Collections are personal and unrestricted: each member can only modify their
 own collection. Spawn output lists shiny hunts before collections. A reserve
@@ -111,7 +114,7 @@ Store male Nidoran examples under `pokemon_images/training_data/Nidoran♂`;
 
 The source images are ignored by Git. Commit and deploy the generated model,
 encoder, `pokemon_types.json`, `pokemon_sprite_ids.json`,
-`pokemon_best_names.json`, and `pokemon_aliases.json` files.
+`pokemon_best_names.json`, `pokemon_aliases.json`, and `pokemon_species.json` files.
 
 To teach the bot commonly confused Pokémon (Alolan Meowth/Rattata, Blipbug,
 Luxray, Pikipek, Finizen, Palafin, Hero Palafin, and Squawkabilly plumage forms)

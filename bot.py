@@ -117,8 +117,8 @@ COMMAND_CATALOG = (
     ),
     (
         "Shiny Hunts",
-        "v!sh [pokemon]",
-        "Starts/switches a hunt, or shows your current Pokémon.",
+        "v!sh [all] [pokemon]",
+        "Starts/switches a hunt (optionally all forms), or shows your current Pokémon.",
     ),
     ("Shiny Hunts", "v!sh clear", "Clears your current shiny hunt."),
     (
@@ -238,6 +238,10 @@ def find_place_for_phase(
         if phase_at_location_time(current_time, timezone_name) == phase:
             return place
     return None
+
+
+def shiny_hunt_label(pokemon_name: str, all_forms: bool) -> str:
+    return f"all {pokemon_name}" if all_forms else pokemon_name
 
 
 def normalize_pokemon_name(name: str) -> str:
@@ -367,6 +371,7 @@ class ShinyHuntSwitchView(discord.ui.View):
         user_id: int,
         old_pokemon: str,
         new_pokemon: str,
+        new_all_forms: bool = False,
     ):
         super().__init__(timeout=60)
         self.cog = cog
@@ -374,6 +379,7 @@ class ShinyHuntSwitchView(discord.ui.View):
         self.user_id = user_id
         self.old_pokemon = old_pokemon
         self.new_pokemon = new_pokemon
+        self.new_all_forms = new_all_forms
         self.completed = False
 
     async def reject_other_user(self, interaction: discord.Interaction) -> bool:
@@ -411,12 +417,13 @@ class ShinyHuntSwitchView(discord.ui.View):
             self.guild_id,
             self.user_id,
             self.new_pokemon,
+            self.new_all_forms,
         )
         self.disable_buttons()
         await interaction.response.edit_message(
             content=(
                 f"✅ Switched your shiny hunt from **{self.old_pokemon}** "
-                f"to **{self.new_pokemon}**."
+                f"to **{shiny_hunt_label(self.new_pokemon, self.new_all_forms)}**."
             ),
             view=self,
         )
@@ -1155,6 +1162,7 @@ class PokéTwoNamingBot(commands.Cog):
         self.pokemon_sprite_ids = self.load_pokemon_sprite_ids()
         self.pokemon_best_names = self.load_pokemon_best_names()
         self.pokemon_aliases = self.load_pokemon_aliases()
+        self.pokemon_species = self.load_pokemon_species()
         self.reviewed_spawn_count = self.load_collected_training_count()
         self.bot_state = self.load_bot_state()
         self.seed_restricted_roles()
@@ -1185,6 +1193,19 @@ class PokéTwoNamingBot(commands.Cog):
         """Load localized and romanized Pokémon-name aliases."""
         with open("pokemon_aliases.json", "r", encoding="utf-8") as f:
             return json.load(f)
+
+    def load_pokemon_species(self):
+        """Load the species ID for each recognition class."""
+        with open("pokemon_species.json", "r", encoding="utf-8") as f:
+            species = json.load(f)
+        missing_classes = [
+            name for name in self.recognizer.classes if name not in species
+        ]
+        if missing_classes:
+            raise ValueError(
+                "Missing Pokémon species mappings: " + ", ".join(missing_classes[:10])
+            )
+        return species
 
     def load_pokemon_sprite_ids(self):
         """Load PokéAPI IDs used for transparent official artwork thumbnails."""
@@ -1326,6 +1347,7 @@ class PokéTwoNamingBot(commands.Cog):
         guild_id: int,
         user_id: int,
         pokemon_name: str,
+        all_forms: bool = False,
     ):
         """Create or replace a member's shiny hunt."""
         guild_hunts = self.bot_state["shiny_hunts"].setdefault(
@@ -1334,6 +1356,7 @@ class PokéTwoNamingBot(commands.Cog):
         )
         guild_hunts[str(user_id)] = {
             "pokemon": str(pokemon_name),
+            "all_forms": all_forms,
         }
         self.save_bot_state()
 
@@ -1347,7 +1370,14 @@ class PokéTwoNamingBot(commands.Cog):
         return [
             user_id
             for user_id, hunt in guild_hunts.items()
-            if hunt.get("pokemon") == pokemon_name
+            if (
+                hunt.get("pokemon") == pokemon_name
+                or (
+                    hunt.get("all_forms", False)
+                    and self.pokemon_species.get(hunt.get("pokemon"))
+                    == self.pokemon_species[pokemon_name]
+                )
+            )
             and self.pings_enabled(user_id, "shiny_hunt")
         ]
 
@@ -2432,32 +2462,44 @@ class PokéTwoNamingBot(commands.Cog):
                 {},
             ).get(str(ctx.author.id))
             if hunt:
+                label = shiny_hunt_label(
+                    hunt.get("pokemon"), hunt.get("all_forms", False)
+                )
                 await ctx.send(
-                    f"✨ Added to your shinyhunt: **{hunt.get('pokemon')}**."
+                    f"✨ Added to your shinyhunt: **{label}**."
                 )
             else:
                 await ctx.send("You are not currently shiny hunting a Pokémon.")
             return
-        resolved_name = self.resolve_pokemon_name(pokemon_name)
+        all_forms = pokemon_name.casefold().startswith("all ")
+        pokemon_input = pokemon_name[4:].strip() if all_forms else pokemon_name
+        resolved_name = self.resolve_pokemon_name(pokemon_input)
         if resolved_name is None:
-            await ctx.send(f"❌ Unknown Pokémon: `{pokemon_name}`")
+            await ctx.send(f"❌ Unknown Pokémon: `{pokemon_input}`")
             return
 
+        new_label = shiny_hunt_label(resolved_name, all_forms)
         hunt = self.bot_state["shiny_hunts"].get(
             str(ctx.guild.id),
             {},
         ).get(str(ctx.author.id))
-        if hunt and hunt.get("pokemon") == resolved_name:
+        if (
+            hunt
+            and hunt.get("pokemon") == resolved_name
+            and hunt.get("all_forms", False) == all_forms
+        ):
             await ctx.send(
-                f"Already in your shinyhunt: **{resolved_name}**."
+                f"Already in your shinyhunt: **{new_label}**."
             )
             return
         if hunt:
-            old_pokemon = str(hunt.get("pokemon"))
+            old_pokemon = shiny_hunt_label(
+                hunt.get("pokemon"), hunt.get("all_forms", False)
+            )
             await ctx.send(
                 (
                     f"You are currently shiny hunting **{old_pokemon}**.\n"
-                    f"Switch to **{resolved_name}**?"
+                    f"Switch to **{new_label}**?"
                 ),
                 view=ShinyHuntSwitchView(
                     self,
@@ -2465,6 +2507,7 @@ class PokéTwoNamingBot(commands.Cog):
                     ctx.author.id,
                     old_pokemon,
                     str(resolved_name),
+                    all_forms,
                 ),
             )
             return
@@ -2473,9 +2516,10 @@ class PokéTwoNamingBot(commands.Cog):
             ctx.guild.id,
             ctx.author.id,
             str(resolved_name),
+            all_forms,
         )
         await ctx.send(
-            f"✨ Added to your shinyhunt: **{resolved_name}**."
+            f"✨ Added to your shinyhunt: **{new_label}**."
         )
 
     @cast(commands.Group, shiny_hunt).command(name="clear")
@@ -2493,8 +2537,11 @@ class PokéTwoNamingBot(commands.Cog):
             await ctx.send("You are not currently shiny hunting a Pokémon.")
             return
         self.save_bot_state()
+        label = shiny_hunt_label(
+            hunt.get("pokemon"), hunt.get("all_forms", False)
+        )
         await ctx.send(
-            f"✅ Cleared your **{hunt.get('pokemon')}** shiny hunt."
+            f"✅ Cleared your **{label}** shiny hunt."
         )
 
     @commands.command(name="resume")
