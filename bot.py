@@ -1202,21 +1202,22 @@ class PokéTwoNamingBot(commands.Cog):
             title=f"Catch {pokemon_name}",
             color=discord.Color.blurple(),
         )
-        if pokemon_name.casefold() == "missingno":
+        is_missingno = pokemon_name.casefold() == "missingno"
+        if is_missingno:
             content.append("Do not catch this Pokémon.")
             embed.title = "MissingNo detected"
             embed.description = "**Do not catch this Pokémon.**"
         else:
             embed.description = f"**Copy Below**\n```\n{copy_command}\n```"
 
-        if guild_id is not None and pokemon_name.casefold() != "missingno":
+        if guild_id is not None:
             reserved_user_ids = self.reserve_user_ids(guild_id, pokemon_name)
             if reserved_user_ids:
                 mentions = ", ".join(
                     f"<@{user_id}>" for user_id in reserved_user_ids
                 )
                 content.append(f"Reserved: {mentions}")
-            else:
+            elif not is_missingno:
                 current_hunters = self.shiny_hunters_for_spawn(
                     guild_id,
                     pokemon_name,
@@ -1238,8 +1239,9 @@ class PokéTwoNamingBot(commands.Cog):
                         f"<@{user_id}>" for user_id in collection_owners
                     )
                     content.append(f"Collection pings: {mentions}")
-            content.append(f"Click to Copy -> `{copy_command}`")
-        elif pokemon_name.casefold() != "missingno":
+            if not is_missingno:
+                content.append(f"Click to Copy -> `{copy_command}`")
+        elif not is_missingno:
             content.append(f"Click to Copy -> `{copy_command}`")
         return "\n".join(content), embed
 

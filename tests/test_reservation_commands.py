@@ -62,6 +62,22 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
             "No members have reserved this Pokémon.",
         )
 
+    def test_missingno_prediction_includes_reserve_ping(self):
+        self.cog.bot_state["reserves"]["123"]["MissingNo"] = ["456"]
+        self.cog.pokemon_types = {"MissingNo": []}
+        self.cog.pokemon_best_names = {"MissingNo": "MissingNo"}
+
+        content, embed = self.cog.format_spawn_prediction(
+            "MissingNo",
+            99.0,
+            guild_id=123,
+        )
+
+        self.assertIn("Reserved: <@456>", content)
+        self.assertIn("Do not catch this Pokémon.", content)
+        self.assertNotIn("Click to Copy", content)
+        self.assertEqual(embed.title, "MissingNo detected")
+
 
 if __name__ == "__main__":
     unittest.main()
