@@ -620,9 +620,10 @@ class ExchangeReservesView(discord.ui.View):
         self.completed = False
 
     def missing(self) -> list[str]:
-        reserves = self.cog.bot_state["reserves"].get(self.guild_id, {})
         return [
-            name for _, name in self.entries if reserves.get(name) != self.from_id
+            name
+            for _, name in self.entries
+            if self.from_id not in self.cog.reserve_user_ids(self.guild_id, name)
         ]
 
     def build_embed(self) -> discord.Embed:
@@ -674,11 +675,10 @@ class ExchangeReservesView(discord.ui.View):
         del button
         if not await self.allowed(interaction):
             return
-        reserves = self.cog.bot_state["reserves"].setdefault(self.guild_id, {})
         moved = 0
         for user_id, name in self.entries:
-            if reserves.get(name) == self.from_id:
-                reserves[name] = str(user_id)
+            if self.cog.remove_reserve_owner(self.guild_id, name, self.from_id):
+                self.cog.add_reserve_owner(self.guild_id, name, user_id)
                 moved += 1
         self.cog.save_bot_state()
         self.finish()
@@ -1200,12 +1200,12 @@ class PokéTwoNamingBot(commands.Cog):
             embed.description = f"**Copy Below**\n```\n{copy_command}\n```"
 
         if guild_id is not None and pokemon_name.casefold() != "missingno":
-            reserved_user_id = self.bot_state.get("reserves", {}).get(
-                str(guild_id),
-                {},
-            ).get(pokemon_name)
-            if reserved_user_id:
-                content.append(f"Reserved: <@{reserved_user_id}>")
+            reserved_user_ids = self.reserve_user_ids(guild_id, pokemon_name)
+            if reserved_user_ids:
+                mentions = ", ".join(
+                    f"<@{user_id}>" for user_id in reserved_user_ids
+                )
+                content.append(f"Reserved: {mentions}")
             else:
                 current_hunters = self.shiny_hunters_for_spawn(
                     guild_id,
@@ -1283,6 +1283,49 @@ class PokéTwoNamingBot(commands.Cog):
         """Return whether a user receives pings of this kind (default: yes)."""
         muted = self.bot_state.get("afk", {}).get(str(user_id), {})
         return not muted.get(kind, False)
+
+    def reserve_user_ids(self, guild_id, pokemon_name: str) -> list[str]:
+        """Return all reserving user IDs, accepting legacy single-ID values."""
+        stored = self.bot_state.get("reserves", {}).get(str(guild_id), {}).get(
+            pokemon_name
+        )
+        if isinstance(stored, str):
+            user_ids = [stored]
+        elif isinstance(stored, list):
+            user_ids = [str(user_id) for user_id in stored]
+        else:
+            return []
+        return list(dict.fromkeys(user_ids))
+
+    def add_reserve_owner(self, guild_id, pokemon_name: str, user_id) -> bool:
+        """Add a reserving user without replacing existing owners."""
+        guild_reserves = self.bot_state["reserves"].setdefault(str(guild_id), {})
+        user_ids = self.reserve_user_ids(guild_id, pokemon_name)
+        normalized_user_id = str(user_id)
+        if normalized_user_id in user_ids:
+            return False
+        user_ids.append(normalized_user_id)
+        guild_reserves[pokemon_name] = user_ids
+        return True
+
+    def remove_reserve_owner(self, guild_id, pokemon_name: str, user_id=None) -> bool:
+        """Remove one owner, or every owner when no user ID is specified."""
+        guild_reserves = self.bot_state["reserves"].get(str(guild_id), {})
+        user_ids = self.reserve_user_ids(guild_id, pokemon_name)
+        if not user_ids:
+            return False
+        if user_id is None:
+            guild_reserves.pop(pokemon_name, None)
+            return True
+        normalized_user_id = str(user_id)
+        if normalized_user_id not in user_ids:
+            return False
+        user_ids.remove(normalized_user_id)
+        if user_ids:
+            guild_reserves[pokemon_name] = user_ids
+        else:
+            guild_reserves.pop(pokemon_name, None)
+        return True
 
     def load_pokemon_best_names(self):
         """Load and validate the shortest localized name for each model class."""
@@ -1652,11 +1695,7 @@ class PokéTwoNamingBot(commands.Cog):
                 member = await guild.fetch_member(int(user_id))
             except (discord.NotFound, discord.Forbidden, discord.HTTPException):
                 return False
-        guild_reserves = self.bot_state["reserves"].setdefault(
-            str(guild.id),
-            {},
-        )
-        guild_reserves[str(resolved_name)] = str(member.id)
+        self.add_reserve_owner(guild.id, str(resolved_name), member.id)
         self.save_bot_state()
         return True
 
@@ -1877,14 +1916,17 @@ class PokéTwoNamingBot(commands.Cog):
                 value=f"{confidence:.2f}%",
                 inline=True,
             )
-            reserved_user_id = self.bot_state.get("reserves", {}).get(
-                str(message.guild.id),
-                {},
-            ).get(pokemon_name) if message.guild else None
-            if reserved_user_id:
+            reserved_user_ids = (
+                self.reserve_user_ids(message.guild.id, pokemon_name)
+                if message.guild
+                else []
+            )
+            if reserved_user_ids:
                 embed.add_field(
                     name="Reserved",
-                    value=f"<@{reserved_user_id}>",
+                    value=" ".join(
+                        f"<@{user_id}>" for user_id in reserved_user_ids
+                    ),
                     inline=True,
                 )
             elif shiny_hunters:
@@ -1893,7 +1935,7 @@ class PokéTwoNamingBot(commands.Cog):
                     value=" ".join(f"<@{user_id}>" for user_id in shiny_hunters),
                     inline=True,
                 )
-            if not reserved_user_id:
+            if not reserved_user_ids:
                 collection_owners = self.collection_owners_for_spawn(
                     message.guild.id,
                     pokemon_name,
@@ -2479,12 +2521,8 @@ class PokéTwoNamingBot(commands.Cog):
             )
             return
 
-        guild_reserves = self.bot_state["reserves"].setdefault(
-            str(ctx.guild.id),
-            {},
-        )
         for pokemon_name in pokemon_names:
-            guild_reserves[str(pokemon_name)] = str(member.id)
+            self.add_reserve_owner(ctx.guild.id, str(pokemon_name), member.id)
         self.save_bot_state()
         if len(pokemon_names) == 1:
             await ctx.send(
@@ -2545,18 +2583,22 @@ class PokéTwoNamingBot(commands.Cog):
             )
             return
 
-        guild_reserves = self.bot_state["reserves"].get(str(ctx.guild.id), {})
+        guild_id = ctx.guild.id
         removed = []
         skipped = []
         for pokemon_name in pokemon_names:
-            reserved_user_id = guild_reserves.get(pokemon_name)
-            if reserved_user_id is None:
+            reserved_user_ids = self.reserve_user_ids(guild_id, pokemon_name)
+            if not reserved_user_ids:
                 skipped.append(f"{pokemon_name} is not reserved")
                 continue
-            if member is not None and reserved_user_id != str(member.id):
+            if member is not None and str(member.id) not in reserved_user_ids:
                 skipped.append(f"{pokemon_name} belongs to another user")
                 continue
-            del guild_reserves[pokemon_name]
+            self.remove_reserve_owner(
+                guild_id,
+                pokemon_name,
+                member.id if member is not None else None,
+            )
             removed.append(pokemon_name)
         if not removed:
             await ctx.send("❌ " + "; ".join(skipped))
@@ -2607,8 +2649,9 @@ class PokéTwoNamingBot(commands.Cog):
         filtered = sorted(
             (
                 (pokemon_name, user_id)
-                for pokemon_name, user_id in guild_reserves.items()
-                if member is None or str(user_id) == str(member.id)
+                for pokemon_name in guild_reserves
+                for user_id in self.reserve_user_ids(ctx.guild.id, pokemon_name)
+                if member is None or user_id == str(member.id)
             ),
             key=lambda reserve: reserve[0].casefold(),
         )

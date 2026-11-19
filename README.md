@@ -46,6 +46,9 @@ when necessary. Higher-confidence guesses use normal naming output. Reviewed
 images can be downloaded with `v!export_training` before retraining. The
 threshold can be changed with `REVIEW_CONFIDENCE_THRESHOLD`.
 
+Multiple members can reserve the same Pokémon; each receives the reserve ping
+when that Pokémon is recognized. Existing single-member reserves remain valid.
+
 Normal naming output uses a transparent official Pokémon artwork thumbnail
 from PokéAPI, selected for the predicted Pokémon form. The spawn image is still
 used for recognition and low-confidence review. The catch command uses the
