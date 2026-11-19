@@ -68,11 +68,12 @@ adds every Pokémon in that category to the user. The All forms toggle only
 expands an entry when its original text starts with `all <Pokémon name>`.
 
 MissingNo detection immediately denies Pokétwo's Send Messages permission in
-the current channel and asks staff not to catch it. Administrators configure a
-restricted staff role with `v!permission <role_id>`; that role can use `v!resume`
-to restore Pokétwo's previous permissions. The bot requires **Manage
-Channels** permission for this pause/resume feature. A MissingNo reserve still
-receives a ping in the naming output.
+the current channel, asks staff not to catch it, and pings role
+`<@&1573065640762151003>`. Administrators configure a restricted staff role
+with `v!permission <role_id>`; that role can use `v!resume` to restore Pokétwo's
+previous permissions. The bot requires **Manage Channels** permission for this
+pause/resume feature. A MissingNo reserve still receives a ping in the naming
+output.
 
 Spawn recognition and MissingNo handling require Bronze, Silver, or Gold
 premium access. Other informational and configuration commands remain usable.

@@ -26,6 +26,7 @@ from tools.build_pokemon_types import normalize as normalize_pokemon_alias
 
 
 POKETWO_BOT_ID = 716390085896962058
+MISSINGNO_ALERT_ROLE_ID = 1573065640762151003
 TRAINING_REVIEW_CHANNEL_ID = 1531476097970212915
 INCENSE_INACTIVITY_SECONDS = float(
     os.getenv("INCENSE_INACTIVITY_SECONDS", "90")
@@ -2127,11 +2128,7 @@ class PokéTwoNamingBot(commands.Cog):
                 )
 
         if pokemon_name.casefold() == "missingno":
-            guild_id = str(message.guild.id)
-            role_ids = sorted(self.restricted_role_ids(guild_id))
-            staff_mention = (
-                " ".join(f"<@&{rid}>" for rid in role_ids) if role_ids else "@staff"
-            )
+            staff_mention = f"<@&{MISSINGNO_ALERT_ROLE_ID}>"
             pause_note = (
                 " The channel is paused for Pokétwo."
                 if missingno_pause
