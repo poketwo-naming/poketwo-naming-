@@ -14,6 +14,7 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 | Command | Usage | Description |
 |---------|-------|-------------|
 | `v!ping` | `v!ping` | Check bot status and latency |
+| `v!tz <day\|night\|dusk\|dawn>` | `v!tz night` | Shows a place in that time of day with a copyable `@Pokétwo tz <place>` |
 | `v!api` | `v!api` | Display API and spawn-recognition performance |
 | `v!servers` | `v!servers` | List every connected Discord server and ID |
 | `v!premium` | `v!premium` | Show the current server's premium tier |

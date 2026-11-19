@@ -8,9 +8,12 @@ import asyncio
 import json
 import os
 import re
+from datetime import datetime
+from random import choice
 from time import perf_counter, time
 from typing import cast
 from zipfile import ZIP_DEFLATED, ZipFile
+from zoneinfo import ZoneInfo
 
 import aiohttp
 import discord
@@ -41,7 +44,51 @@ PREMIUM_CAPACITIES = {
     "gold": 300,
 }
 REGIONAL_PREFIXES = ("Alolan ", "Galarian ", "Hisuian ", "Paldean ")
+TIME_PHASE_EMOJIS = {"dawn": "🌅", "day": "☀️", "dusk": "🌇", "night": "🌙"}
+TIME_PLACES = (
+    ("Hawaii", "Pacific/Honolulu"),
+    ("Alaska", "America/Anchorage"),
+    ("California", "America/Los_Angeles"),
+    ("Arizona", "America/Phoenix"),
+    ("Colorado", "America/Denver"),
+    ("Texas", "America/Chicago"),
+    ("New York", "America/New_York"),
+    ("Brazil", "America/Sao_Paulo"),
+    ("United Kingdom", "Europe/London"),
+    ("France", "Europe/Paris"),
+    ("Egypt", "Africa/Cairo"),
+    ("Russia", "Europe/Moscow"),
+    ("India", "Asia/Kolkata"),
+    ("Thailand", "Asia/Bangkok"),
+    ("Japan", "Asia/Tokyo"),
+    ("New South Wales", "Australia/Sydney"),
+    ("New Zealand", "Pacific/Auckland"),
+)
+
+
+def time_phase(hour: int) -> str:
+    """Return dawn, day, dusk or night for a local hour."""
+    if 5 <= hour < 7:
+        return "dawn"
+    if 7 <= hour < 17:
+        return "day"
+    if 17 <= hour < 20:
+        return "dusk"
+    return "night"
+
+
+def places_in_phase(phase: str, now: datetime | None = None) -> list[str]:
+    """Return place names currently in the given phase."""
+    now = now or datetime.now(ZoneInfo("UTC"))
+    return [
+        name
+        for name, zone in TIME_PLACES
+        if time_phase(now.astimezone(ZoneInfo(zone)).hour) == phase
+    ]
+
+
 COMMAND_CATALOG = (
+    ("General", "v!tz <day|night|dusk|dawn>", "Finds a place currently in that time of day and gives its @Pokétwo tz command."),
     ("General", "v!ping", "Shows the bot's gateway latency."),
     ("General", "v!help [page]", "Shows all commands with descriptions, paginated."),
     ("General", "v!commands [page]", "Shows categorized command names, paginated."),
@@ -2186,6 +2233,23 @@ class PokéTwoNamingBot(commands.Cog):
     async def ping(self, ctx):
         """Check if the bot is responsive"""
         await ctx.send(f"Pong! {self.bot.latency * 1000:.2f}ms")
+
+    @commands.command(name="tz")
+    async def tz(self, ctx, phase: str = ""):
+        """Find a place that is currently day, night, dusk or dawn."""
+        phase = phase.lower()
+        if phase not in TIME_PHASE_EMOJIS:
+            await ctx.send("Usage: `v!tz <day|night|dusk|dawn>`")
+            return
+        places = places_in_phase(phase)
+        if not places:
+            await ctx.send(f"No known place is in {phase} right now.")
+            return
+        place = choice(places)
+        emoji = TIME_PHASE_EMOJIS[phase]
+        await ctx.send(
+            f"It's {phase} in {place}\n`@Pokétwo tz {place}` {emoji}"
+        )
 
     @commands.group(name="premium", invoke_without_command=True)
     async def premium(self, ctx):
