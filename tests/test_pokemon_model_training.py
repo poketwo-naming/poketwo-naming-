@@ -27,6 +27,22 @@ class PokemonModelTrainingTests(unittest.TestCase):
             "palafin-zero",
         )
 
+    def test_dudunsparce_forms_do_not_map_to_dunsparce(self):
+        identifiers = {
+            "dunsparce",
+            "dudunsparce-two-segment",
+            "dudunsparce-three-segment",
+        }
+
+        self.assertEqual(
+            resolve_class_identifier("Dudunsparce", identifiers),
+            "dudunsparce-two-segment",
+        )
+        self.assertEqual(
+            resolve_class_identifier("Three-Segment Dudunsparce", identifiers),
+            "dudunsparce-three-segment",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
