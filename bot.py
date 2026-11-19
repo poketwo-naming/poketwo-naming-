@@ -8,12 +8,12 @@ from hashlib import sha256
 from io import BytesIO
 import asyncio
 import json
-from math import acos, asin, cos, degrees, radians, sin, tan
 import os
 import re
 from time import perf_counter, time
 from typing import cast
 from zipfile import ZIP_DEFLATED, ZipFile
+from zoneinfo import ZoneInfo
 
 import aiohttp
 import discord
@@ -60,7 +60,7 @@ COMMAND_CATALOG = (
     (
         "General",
         "v!tz <day|night|dawn|dusk>",
-        "Finds one place currently in that solar phase and gives a Pokétwo command.",
+        "Finds one place currently in that local-time phase and gives a Pokétwo command.",
     ),
     ("General", "v!help [page]", "Shows all commands with descriptions, paginated."),
     ("General", "v!commands [page]", "Shows categorized command names, paginated."),
@@ -191,80 +191,31 @@ TYPE_EMOJIS = {
 }
 
 
-def solar_phase_at_location(
+def phase_at_location_time(
     now: datetime,
-    latitude: float,
-    longitude: float,
+    timezone_name: str,
 ) -> str:
-    """Return a location's solar phase, using civil twilight for dawn and dusk."""
+    """Return a place's Pokétwo time phase based on its local clock."""
     if now.tzinfo is None:
         now = now.replace(tzinfo=timezone.utc)
-    else:
-        now = now.astimezone(timezone.utc)
-
-    j2000 = datetime(2000, 1, 1, 12, tzinfo=timezone.utc)
-    days_since_j2000 = (now - j2000).total_seconds() / 86400
-    mean_longitude = (280.46646 + 0.98564736 * days_since_j2000) % 360
-    mean_anomaly = radians(
-        (357.52911 + 0.98560028 * days_since_j2000) % 360
-    )
-    ecliptic_longitude = radians(
-        (
-            mean_longitude
-            + 1.914602 * sin(mean_anomaly)
-            + 0.019993 * sin(2 * mean_anomaly)
-        )
-        % 360
-    )
-    obliquity = radians(23.439291 - 0.00000036 * days_since_j2000)
-    declination = asin(sin(obliquity) * sin(ecliptic_longitude))
-
-    y = tan(obliquity / 2) ** 2
-    longitude_radians = radians(mean_longitude)
-    eccentricity = 0.016708634
-    equation_of_time = 4 * degrees(
-        y * sin(2 * longitude_radians)
-        - 2 * eccentricity * sin(mean_anomaly)
-        + 4
-        * eccentricity
-        * y
-        * sin(mean_anomaly)
-        * cos(2 * longitude_radians)
-        - 0.5 * y**2 * sin(4 * longitude_radians)
-        - 1.25 * eccentricity**2 * sin(2 * mean_anomaly)
-    )
-    utc_minutes = (
-        now.hour * 60
-        + now.minute
-        + now.second / 60
-        + now.microsecond / 60_000_000
-    )
-    solar_minutes = (utc_minutes + equation_of_time + 4 * longitude) % 1440
-    hour_angle_degrees = solar_minutes / 4 - 180
-    hour_angle = radians(hour_angle_degrees)
-
-    latitude_radians = radians(latitude)
-    cosine_zenith = (
-        sin(latitude_radians) * sin(declination)
-        + cos(latitude_radians) * cos(declination) * cos(hour_angle)
-    )
-    solar_elevation = 90 - degrees(acos(max(-1.0, min(1.0, cosine_zenith))))
-    if solar_elevation >= 0:
+    local_hour = now.astimezone(ZoneInfo(timezone_name)).hour
+    if 5 <= local_hour < 7:
+        return "dawn"
+    if 7 <= local_hour < 17:
         return "day"
-    if solar_elevation <= -6:
-        return "night"
-    return "dawn" if hour_angle_degrees < 0 else "dusk"
+    if 17 <= local_hour < 19:
+        return "dusk"
+    return "night"
 
 
 @lru_cache(maxsize=1)
-def timezone_locations() -> tuple[tuple[str, float, float], ...]:
-    """Return common cities with coordinates for solar-phase searches."""
+def timezone_locations() -> tuple[tuple[str, str], ...]:
+    """Return common cities and their IANA timezones."""
     cities = GeonamesCache().get_cities().values()
     return tuple(
         (
             str(city["name"]),
-            float(city["latitude"]),
-            float(city["longitude"]),
+            str(city["timezone"]),
         )
         for city in sorted(
             cities,
@@ -273,17 +224,18 @@ def timezone_locations() -> tuple[tuple[str, float, float], ...]:
                 city["name"],
             ),
         )
+        if city.get("timezone")
     )
 
 
-def find_place_for_solar_phase(
+def find_place_for_phase(
     phase: str,
     now: datetime | None = None,
 ) -> str | None:
-    """Return one known place currently in the requested solar phase."""
+    """Return one known place currently in the requested local-time phase."""
     current_time = now or datetime.now(timezone.utc)
-    for place, latitude, longitude in timezone_locations():
-        if solar_phase_at_location(current_time, latitude, longitude) == phase:
+    for place, timezone_name in timezone_locations():
+        if phase_at_location_time(current_time, timezone_name) == phase:
             return place
     return None
 
@@ -2329,13 +2281,13 @@ class PokéTwoNamingBot(commands.Cog):
 
     @commands.command(name="tz")
     async def timezone_command(self, ctx, *, phase: str = ""):
-        """Find one place currently experiencing the requested solar phase."""
+        """Find one place currently experiencing the requested local-time phase."""
         phase = phase.strip().casefold()
         if phase not in TIMEZONE_PHASE_EMOJIS:
             await ctx.send("Use `v!tz day`, `v!tz night`, `v!tz dawn`, or `v!tz dusk`.")
             return
 
-        place = find_place_for_solar_phase(phase)
+        place = find_place_for_phase(phase)
         if place is None:
             await ctx.send(f"I couldn't find a place currently experiencing {phase}.")
             return

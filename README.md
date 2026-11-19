@@ -14,7 +14,7 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 | Command | Usage | Description |
 |---------|-------|-------------|
 | `v!ping` | `v!ping` | Check bot status and latency |
-| `v!tz <day\|night\|dawn\|dusk>` | `v!tz night` | Find one place currently in that solar phase and get a Pokétwo timezone command (dawn/dusk use civil twilight) |
+| `v!tz <day\|night\|dawn\|dusk>` | `v!tz night` | Find one place in that local-time phase and get a Pokétwo timezone command |
 | `v!api` | `v!api` | Display API and spawn-recognition performance |
 | `v!servers` | `v!servers` | List every connected Discord server and ID |
 | `v!premium` | `v!premium` | Show the current server's premium tier |
