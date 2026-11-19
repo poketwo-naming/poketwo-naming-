@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 import discord
 
-from bot import PokéTwoNamingBot
+from bot import GrabReservesView, PokéTwoNamingBot
 
 
 class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
@@ -77,6 +77,71 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Do not catch this Pokémon.", content)
         self.assertNotIn("Click to Copy", content)
         self.assertEqual(embed.title, "MissingNo detected")
+
+    def test_grab_parser_preserves_custom_emoji_and_all_forms(self):
+        message = SimpleNamespace(
+            guild=SimpleNamespace(id=123),
+            content=(
+                "<@456> <:party_pikachu:123456789> all Pikachu"
+            ),
+            embeds=[],
+            message_snapshots=[],
+        )
+
+        entries = self.cog.parse_grab_list(message, 123)
+
+        self.assertEqual(
+            entries,
+            [
+                (
+                    "456",
+                    "Pikachu",
+                    True,
+                    False,
+                    "<:party_pikachu:123456789>",
+                )
+            ],
+        )
+
+    async def test_grab_preview_hides_users_and_uses_source_emoji(self):
+        self.cog.resolve_pokemon_family = lambda name, include_regionals: [
+            "Pikachu",
+            "Cosplay Pikachu",
+        ]
+        view = GrabReservesView(
+            self.cog,
+            789,
+            101112,
+            [
+                (
+                    "456",
+                    "Pikachu",
+                    True,
+                    False,
+                    "<:party_pikachu:123456789>",
+                )
+            ],
+        )
+
+        self.assertNotIn("<@456>", view.build_embed().description)
+        self.assertEqual(
+            view.build_embed().description,
+            "Pikachu\nCosplay Pikachu",
+        )
+        view.custom_emoji = True
+        self.assertEqual(
+            view.build_embed().description,
+            "<:party_pikachu:123456789> Pikachu\n"
+            "<:party_pikachu:123456789> Cosplay Pikachu",
+        )
+        self.assertIn(
+            "<@456>",
+            view.format_line(
+                "456",
+                "Pikachu",
+                custom_emoji="<:party_pikachu:123456789>",
+            ),
+        )
 
 
 if __name__ == "__main__":
