@@ -1756,7 +1756,7 @@ class PokéTwoNamingBot(commands.Cog):
                 text += "\n" + (embed.description or "")
                 for field in embed.fields:
                     text += f"\n{field.name}\n{field.value}"
-        entries: list[tuple[str, str, bool, bool]] = []
+        entries: list[tuple[str, str, bool, bool, str]] = []
         for line in text.splitlines():
             mentions = list(re.finditer(r"<@!?(\d+)>", line))
             for index, mention in enumerate(mentions):
