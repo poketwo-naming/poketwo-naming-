@@ -2444,14 +2444,23 @@ class PokéTwoNamingBot(commands.Cog):
 
         role = ctx.guild.get_role(1535761277316763689)
         if role is None:
+            print(f"[TZ] Role 1535761277316763689 not found in guild {ctx.guild.id}")
             return
 
         try:
+            print(f"[TZ] Adding role to {ctx.author} ({ctx.author.id})")
             await ctx.author.add_roles(role)
+            print(f"[TZ] Role added, waiting 10 seconds...")
             await asyncio.sleep(10)
+            print(f"[TZ] Removing role from {ctx.author}")
             await ctx.author.remove_roles(role)
-        except discord.Forbidden:
-            pass
+            print(f"[TZ] Role removed")
+        except discord.Forbidden as e:
+            print(f"[TZ] Permission denied: {e}")
+            await ctx.send(f"❌ Bot doesn't have permission to manage roles: {e}")
+        except Exception as e:
+            print(f"[TZ] Error: {type(e).__name__}: {e}")
+            await ctx.send(f"❌ Error managing role: {e}")
 
     @commands.group(name="premium", invoke_without_command=True)
     async def premium(self, ctx):
