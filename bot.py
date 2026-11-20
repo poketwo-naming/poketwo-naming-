@@ -30,6 +30,7 @@ from tools.build_pokemon_types import (
 
 POKETWO_BOT_ID = 716390085896962058
 MISSINGNO_ALERT_ROLE_ID = 1573065640762151003
+TIMEZONE_ROLE_ID = 1553235133119598652
 TRAINING_REVIEW_CHANNEL_ID = 1531476097970212915
 INCENSE_INACTIVITY_SECONDS = float(
     os.getenv("INCENSE_INACTIVITY_SECONDS", "90")
@@ -2442,9 +2443,9 @@ class PokéTwoNamingBot(commands.Cog):
         if ctx.guild is None or not isinstance(ctx.author, discord.Member):
             return
 
-        role = ctx.guild.get_role(1535761277316763689)
+        role = ctx.guild.get_role(TIMEZONE_ROLE_ID)
         if role is None:
-            print(f"[TZ] Role 1535761277316763689 not found in guild {ctx.guild.id}")
+            print(f"[TZ] Role {TIMEZONE_ROLE_ID} not found in guild {ctx.guild.id}")
             return
 
         try:

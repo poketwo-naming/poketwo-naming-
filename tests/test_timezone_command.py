@@ -1,7 +1,9 @@
 import unittest
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
+
+import discord
 
 from bot import (
     PokéTwoNamingBot,
@@ -14,7 +16,7 @@ from bot import (
 class TimezoneCommandTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.cog = PokéTwoNamingBot.__new__(PokéTwoNamingBot)
-        self.ctx = SimpleNamespace(send=AsyncMock())
+        self.ctx = SimpleNamespace(send=AsyncMock(), guild=None)
 
     async def test_tz_returns_one_place_with_copy_command_and_phase_emoji(self):
         with patch("bot.find_place_for_phase", return_value="Tokyo"):
@@ -39,6 +41,32 @@ class TimezoneCommandTests(unittest.IsolatedAsyncioTestCase):
         self.ctx.send.assert_awaited_once_with(
             "Use `v!tz day`, `v!tz night`, `v!tz dawn`, or `v!tz dusk`."
         )
+
+    async def test_tz_adds_timezone_role_for_five_seconds(self):
+        role = object()
+        member = Mock(spec=discord.Member)
+        member.add_roles = AsyncMock()
+        member.remove_roles = AsyncMock()
+        self.ctx.author = member
+        self.ctx.guild = SimpleNamespace(
+            id=123,
+            get_role=Mock(return_value=role),
+        )
+
+        with (
+            patch("bot.find_place_for_phase", return_value="Tokyo"),
+            patch("bot.asyncio.sleep", new_callable=AsyncMock) as sleep,
+        ):
+            await PokéTwoNamingBot.timezone_command.callback(
+                self.cog,
+                self.ctx,
+                phase="night",
+            )
+
+        self.ctx.guild.get_role.assert_called_once_with(1553235133119598652)
+        member.add_roles.assert_awaited_once_with(role)
+        sleep.assert_awaited_once_with(5)
+        member.remove_roles.assert_awaited_once_with(role)
 
     def test_phase_uses_city_local_time_boundaries(self):
         timezone_name = "America/Sao_Paulo"
