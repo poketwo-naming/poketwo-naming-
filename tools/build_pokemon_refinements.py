@@ -39,6 +39,7 @@ DEFAULT_CLASSES = [
     "Noivern",
     "Oinkologne",
     "Pikipek",
+    "Rattata",
     "Sableye",
     "Trevenant",
     "Zygarde",

@@ -116,6 +116,23 @@ class SpawnImageRecognitionTests(unittest.TestCase):
                     recognizer.recognize(image.resize((384, 240)))[0], expected
                 )
 
+    def test_rattata_spawn_images(self):
+        source = Path("pokemon_images/training_data")
+        examples = (
+            (source / "Rattata" / "image.png", "Rattata"),
+            (source / "Alolan Rattata" / "1498361641966895127.jpg", "Alolan Rattata"),
+        )
+        if not all(path.exists() for path, _ in examples):
+            self.skipTest("Rattata training images are not available")
+        recognizer = PokemonImageRecognizer()
+        for path, expected in examples:
+            with self.subTest(path=path), Image.open(path) as image:
+                self.assertEqual(recognizer.recognize(image)[0], expected)
+                self.assertEqual(
+                    recognizer.recognize(image.resize((384, 240)))[0], expected
+                )
+                self.assertEqual(recognizer.recognize(ImageOps.mirror(image))[0], expected)
+
 
 if __name__ == "__main__":
     unittest.main()
