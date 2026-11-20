@@ -90,6 +90,7 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
         content, embed = self.cog.format_spawn_prediction("Umbreon", 98.0)
 
         self.assertIn("Best name: Blacky", content)
+        assert embed.description is not None
         self.assertIn("@Pokétwo#8236 c blacky", embed.description)
 
     def test_grab_parser_preserves_custom_emoji_and_all_forms(self):
