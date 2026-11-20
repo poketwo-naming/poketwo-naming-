@@ -1,9 +1,10 @@
 import math
 import unittest
+from pathlib import Path
 from unittest.mock import Mock
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 
 from pokemon_recognition import PokemonImageRecognizer
 
@@ -21,6 +22,7 @@ class PokemonRecognitionTests(unittest.TestCase):
             [[0.9, 0.0], [0.8, 0.0], [0.3, 0.0]], dtype=np.float32
         )
         self.recognizer.refinement_class_ids = set()
+        self.recognizer.refinement_labels = np.array([], dtype=np.int64)
         self.recognizer.focused_class_id_set = set()
         self.recognizer.calibration_coefficient = 2.0
         self.recognizer.calibration_intercept = -1.0
@@ -43,6 +45,22 @@ class PokemonRecognitionTests(unittest.TestCase):
         self.recognizer.refinement_labels = np.array([1, 1, 2])
         self.assert_prediction("Second", 0.15)
 
+    def test_close_reference_refines_an_unrelated_initial_class(self):
+        self.recognizer.refinement_class_ids = {1, 2}
+        self.recognizer.refinement_embeddings = np.array(
+            [[0.98, 0.0], [0.8, 0.0]], dtype=np.float32
+        )
+        self.recognizer.refinement_labels = np.array([1, 2])
+        self.assert_prediction("Second", 0.18)
+
+    def test_distant_reference_does_not_override_initial_class(self):
+        self.recognizer.refinement_class_ids = {1, 2}
+        self.recognizer.refinement_embeddings = np.array(
+            [[0.95, 0.0], [0.8, 0.0]], dtype=np.float32
+        )
+        self.recognizer.refinement_labels = np.array([1, 2])
+        self.assert_prediction("First", 0.1)
+
     def test_focused_prediction_and_confidence(self):
         self.recognizer.focused_class_id_set = {0}
         self.recognizer.focused_class_ids = np.array([1, 2])
@@ -51,6 +69,52 @@ class PokemonRecognitionTests(unittest.TestCase):
         )
         self.assert_prediction("Second", 0.2)
         self.assertEqual(self.recognizer.session.run.call_count, 2)
+
+
+class SpawnImageRecognitionTests(unittest.TestCase):
+    def test_nidoran_gender_on_spawn_images(self):
+        source = Path("pokemon_images/training_data")
+        male = source / "Nidoran♂" / "1568160619629117440.jpg"
+        if not male.exists():
+            male = source / "Nidoran" / male.name
+        examples = (
+            (male, "Nidoran♂"),
+            (source / "Nidoran" / "1524241235340951724.jpg", "Nidoran"),
+        )
+        if not all(path.exists() for path, _ in examples):
+            self.skipTest("Nidoran training images are not available")
+        recognizer = PokemonImageRecognizer()
+        for path, expected in examples:
+            with self.subTest(path=path), Image.open(path) as image:
+                self.assertEqual(recognizer.recognize(image)[0], expected)
+                self.assertEqual(recognizer.recognize(ImageOps.mirror(image))[0], expected)
+
+    def test_cofagrigus_spawn_image(self):
+        path = Path("pokemon_images/training_data/Cofagrigus/image.png")
+        if not path.exists():
+            self.skipTest("Cofagrigus training image is not available")
+        with Image.open(path) as image:
+            recognizer = PokemonImageRecognizer()
+            self.assertEqual(recognizer.recognize(image)[0], "Cofagrigus")
+            self.assertEqual(
+                recognizer.recognize(image.resize((384, 240)))[0], "Cofagrigus"
+            )
+
+    def test_geodude_spawn_images(self):
+        source = Path("pokemon_images/training_data")
+        examples = (
+            (source / "Geodude" / "image.png", "Geodude"),
+            (source / "Alolan Geodude" / "1495047848734232667.jpg", "Alolan Geodude"),
+        )
+        if not all(path.exists() for path, _ in examples):
+            self.skipTest("Geodude training images are not available")
+        recognizer = PokemonImageRecognizer()
+        for path, expected in examples:
+            with self.subTest(path=path), Image.open(path) as image:
+                self.assertEqual(recognizer.recognize(image)[0], expected)
+                self.assertEqual(
+                    recognizer.recognize(image.resize((384, 240)))[0], expected
+                )
 
 
 if __name__ == "__main__":

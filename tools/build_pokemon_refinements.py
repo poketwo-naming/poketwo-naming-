@@ -23,12 +23,16 @@ from pokemon_recognition import (  # noqa: E402
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 DEFAULT_CLASSES = [
+    "Alolan Geodude",
     "Alolan Meowth",
     "Alolan Rattata",
     "Blipbug",
     "Brionne",
+    "Cofagrigus",
+    "Geodude",
     "Jellicent",
     "Luxray",
+    "Malamar",
     "Munkidori",
     "Nidoran",
     "Nidoran♂",

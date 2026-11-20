@@ -12,6 +12,7 @@ IMAGE_SIZE = 224
 RESIZE_SIZE = 232
 MEAN = np.asarray([0.485, 0.456, 0.406], dtype=np.float32)[:, None, None]
 STD = np.asarray([0.229, 0.224, 0.225], dtype=np.float32)[:, None, None]
+REFINEMENT_MATCH_THRESHOLD = 0.96
 FOCUSED_CROP_CLASSES = (
     "Finizen",
     "Palafin",
@@ -135,21 +136,27 @@ class PokemonImageRecognizer:
             margin = float(
                 focused_scores[focused_order[0]] - focused_scores[focused_order[1]]
             )
-        elif best in self.refinement_class_ids:
+        elif len(self.refinement_labels):
             refinement_scores = np.einsum(
                 "ij,j->i", self.refinement_embeddings, embedding
             )
-            sorted_indexes = np.argsort(refinement_scores)[::-1]
-            refined_label = int(self.refinement_labels[sorted_indexes[0]])
-            predicted_name = str(self.classes[refined_label])
-            other_label_score = next(
-                float(refinement_scores[index])
-                for index in sorted_indexes
-                if self.refinement_labels[index] != refined_label
-            )
-            margin = float(
-                refinement_scores[sorted_indexes[0]] - other_label_score
-            )
+            if (
+                best in self.refinement_class_ids
+                or float(np.max(refinement_scores)) >= REFINEMENT_MATCH_THRESHOLD
+            ):
+                sorted_indexes = np.argsort(refinement_scores)[::-1]
+                refined_label = int(self.refinement_labels[sorted_indexes[0]])
+                predicted_name = str(self.classes[refined_label])
+                other_label_score = next(
+                    float(refinement_scores[index])
+                    for index in sorted_indexes
+                    if self.refinement_labels[index] != refined_label
+                )
+                margin = float(
+                    refinement_scores[sorted_indexes[0]] - other_label_score
+                )
+            else:
+                margin = float(scores[best] - scores[second_best])
         else:
             margin = float(scores[best] - scores[second_best])
         logit = self.calibration_coefficient * margin + self.calibration_intercept
