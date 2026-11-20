@@ -2439,6 +2439,20 @@ class PokéTwoNamingBot(commands.Cog):
             f"{TIMEZONE_PHASE_EMOJIS[phase]}"
         )
 
+        if ctx.guild is None or not isinstance(ctx.author, discord.Member):
+            return
+
+        role = ctx.guild.get_role(1535761277316763689)
+        if role is None:
+            return
+
+        try:
+            await ctx.author.add_roles(role)
+            await asyncio.sleep(10)
+            await ctx.author.remove_roles(role)
+        except discord.Forbidden:
+            pass
+
     @commands.group(name="premium", invoke_without_command=True)
     async def premium(self, ctx):
         """Display this server's premium tier."""
