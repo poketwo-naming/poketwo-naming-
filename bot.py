@@ -908,17 +908,12 @@ class GrabReservesView(discord.ui.View):
             if is_category:
                 entries.append((user_id, pokemon_name, True, custom_emoji))
                 continue
-            names = (
-                self.cog.resolve_pokemon_family(
-                    pokemon_name,
-                    include_regionals=False,
-                )
+            display_name = (
+                f"all {pokemon_name}"
                 if self.all_forms and requested_all_forms
-                else [pokemon_name]
+                else pokemon_name
             )
-            entries.extend(
-                (user_id, str(name), False, custom_emoji) for name in names
-            )
+            entries.append((user_id, display_name, False, custom_emoji))
         if self.alphabetical:
             entries.sort(key=lambda entry: (entry[1].casefold(), entry[0]))
         return entries
@@ -1165,7 +1160,9 @@ class GrabConfirmView(discord.ui.View):
             reserve_names = (
                 self.cog.guild_categories(guild.id).get(pokemon_name, [])
                 if is_category
-                else [pokemon_name]
+                else self.cog.resolve_pokemon_list(
+                    pokemon_name, include_all_regionals=False
+                )[0]
             )
             for reserve_name in reserve_names:
                 if self.h_mode:
@@ -1762,20 +1759,6 @@ class PokéTwoNamingBot(commands.Cog):
                     )
                 )
                 continue
-            normalized = normalize_pokemon_alias(value)
-            contained_matches = [
-                (len(alias), class_name)
-                for alias, class_name in self.pokemon_aliases.items()
-                if alias and alias in normalized
-            ]
-            if contained_matches:
-                pokemon_names.append(
-                    (
-                        str(max(contained_matches, key=lambda item: item[0])[1]),
-                        requested_all_forms,
-                        "".join(custom_emojis),
-                    )
-                )
         return list(dict.fromkeys(pokemon_names))
 
     def parse_grab_list(
@@ -1799,16 +1782,21 @@ class PokéTwoNamingBot(commands.Cog):
         entries: list[tuple[str, str, bool, bool, str]] = []
         for line in text.splitlines():
             mentions = list(re.finditer(r"<@!?(\d+)>", line))
+            previous_segment_assigned = False
             for index, mention in enumerate(mentions):
                 category_key = None
                 category_emoji = ""
                 prefix_start = (
                     mentions[index - 1].end() if index > 0 else 0
                 )
+                prefix = (
+                    "" if previous_segment_assigned
+                    else line[prefix_start : mention.start()]
+                )
                 if guild_id is not None:
                     prefix_segments = re.split(
                         r"\s*(?:\||—|–|;|/|,|\s-\s)\s*",
-                        line[prefix_start : mention.start()],
+                        prefix,
                     )
                     prefix_segments = [
                         cleaned
@@ -1849,7 +1837,7 @@ class PokéTwoNamingBot(commands.Cog):
                         entries.append(entry)
                 else:
                     pokemon_names = self.pokemon_names_from_grab_segment(
-                        line[prefix_start : mention.start()]
+                        prefix
                     )
                     for pokemon_name, requested_all_forms, custom_emoji in (
                         pokemon_names
@@ -1871,6 +1859,7 @@ class PokéTwoNamingBot(commands.Cog):
                 pokemon_names = self.pokemon_names_from_grab_segment(
                     line[mention.end() : end]
                 )
+                previous_segment_assigned = bool(pokemon_names)
                 for pokemon_name, requested_all_forms, custom_emoji in pokemon_names:
                     entry = (
                         mention.group(1),

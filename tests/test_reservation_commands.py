@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 import discord
 
-from bot import GrabEmojiModal, GrabReservesView, PokéTwoNamingBot
+from bot import GrabConfirmView, GrabEmojiModal, GrabReservesView, PokéTwoNamingBot
 
 
 class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
@@ -118,6 +118,95 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
+    def test_grab_parser_ignores_numbered_heading_and_keeps_users_separate(self):
+        self.cog.class_names.update({"archaludon": "Archaludon", "eevee": "Eevee"})
+        self.cog.pokemon_aliases = {"booster": "Flareon", "eevee": "Eevee"}
+        message = SimpleNamespace(
+            guild=SimpleNamespace(id=123),
+            content="Booster 1 - <@456> - archaludon\n<@456> - Eevee <@789> - Pikachu",
+            embeds=[],
+            message_snapshots=[],
+        )
+
+        self.assertEqual(
+            self.cog.parse_grab_list(message, 123),
+            [
+                ("456", "Archaludon", False, False, ""),
+                ("456", "Eevee", False, False, ""),
+                ("789", "Pikachu", False, False, ""),
+            ],
+        )
+        self.assertEqual(
+            self.cog.pokemon_names_from_grab_segment("Booster"),
+            [("Flareon", False, "")],
+        )
+
+    async def test_grab_import_reserves_multiple_users_from_list(self):
+        self.cog.class_names.update({
+            name.casefold(): name
+            for name in ("Buizel", "Miltank", "Mawile", "Absol", "Ditto", "Komala")
+        })
+        message = SimpleNamespace(
+            guild=SimpleNamespace(id=123),
+            content=(
+                "Rare- <@101> - buizel - <@102> miltank\n"
+                "Res 2 - <@103> Mawile <@104> absol\n"
+                "Res 3 - <@105> - ditto <@106> komala"
+            ),
+            embeds=[],
+            message_snapshots=[],
+        )
+
+        entries = self.cog.parse_grab_list(message, 123)
+        self.assertEqual(
+            entries,
+            [
+                ("101", "Buizel", False, False, ""),
+                ("102", "Miltank", False, False, ""),
+                ("103", "Mawile", False, False, ""),
+                ("104", "Absol", False, False, ""),
+                ("105", "Ditto", False, False, ""),
+                ("106", "Komala", False, False, ""),
+            ],
+        )
+        class FakeChannel(discord.abc.Messageable):
+            async def _get_channel(self):
+                raise NotImplementedError
+
+        channel = FakeChannel()
+        channel.send = AsyncMock()
+        guild = SimpleNamespace(
+            id=123,
+            get_member=lambda user_id: SimpleNamespace(id=user_id),
+        )
+        interaction = cast(
+            discord.Interaction,
+            SimpleNamespace(
+                channel=channel,
+                guild=guild,
+                response=SimpleNamespace(edit_message=AsyncMock()),
+            ),
+        )
+        self.cog.bot_state["reserves"]["123"] = {}
+        grab_view = GrabReservesView(self.cog, 789, 101112, entries)
+        confirm_view = GrabConfirmView(
+            self.cog, 789, 101112, grab_view.expanded_entries(), False
+        )
+
+        await confirm_view.confirm.callback(interaction)
+
+        self.assertEqual(
+            self.cog.bot_state["reserves"]["123"],
+            {
+                "Buizel": ["101"],
+                "Miltank": ["102"],
+                "Mawile": ["103"],
+                "Absol": ["104"],
+                "Ditto": ["105"],
+                "Komala": ["106"],
+            },
+        )
+
     async def test_grab_preview_hides_users_and_uses_source_emoji(self):
         self.cog.resolve_pokemon_family = (
             lambda name, include_regionals=True: [
@@ -144,15 +233,16 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("<@456>", initial_description)
         self.assertEqual(
             initial_description,
-            "Pikachu\nCosplay Pikachu",
+            "all Pikachu",
         )
         view.custom_emoji = "<:my_pikachu:987654321>"
         emoji_description = view.build_embed().description or ""
         self.assertEqual(
             emoji_description,
-            "<:my_pikachu:987654321> Pikachu\n"
-            "<:my_pikachu:987654321> Cosplay Pikachu",
+            "<:my_pikachu:987654321> all Pikachu",
         )
+        view.all_forms = False
+        self.assertEqual(view.copy_text(), "<:my_pikachu:987654321> Pikachu")
         self.assertIn(
             "<@456>",
             view.format_line(
@@ -184,6 +274,39 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
             self.fail("Custom emoji modal was not opened.")
         modal = await_call.args[0]
         self.assertIsInstance(modal, GrabEmojiModal)
+
+    async def test_grab_confirmation_adds_all_forms_with_one_command(self):
+        class FakeChannel(discord.abc.Messageable):
+            async def _get_channel(self):
+                raise NotImplementedError
+
+        channel = FakeChannel()
+        channel.send = AsyncMock()
+        guild = SimpleNamespace(id=123)
+        interaction = cast(
+            discord.Interaction,
+            SimpleNamespace(
+                channel=channel,
+                guild=guild,
+                response=SimpleNamespace(edit_message=AsyncMock()),
+            ),
+        )
+        self.cog.class_names["cosplay pikachu"] = "Cosplay Pikachu"
+        self.cog.add_reserve_direct = AsyncMock(return_value=True)
+        view = GrabConfirmView(
+            self.cog, 789, 101112, [("456", "all Pikachu", False, "")], False
+        )
+
+        await view.confirm.callback(interaction)
+
+        self.assertEqual(
+            [call.args[1] for call in self.cog.add_reserve_direct.await_args_list],
+            ["Cosplay Pikachu", "Pikachu"],
+        )
+        channel.send.assert_awaited_once_with(
+            "v!r add all Pikachu <@456>\n"
+            "Reserve **all Pikachu** added to <@456>."
+        )
 
     async def test_exchange_expands_all_forms_in_replied_list(self):
         self.cog.class_names = {
