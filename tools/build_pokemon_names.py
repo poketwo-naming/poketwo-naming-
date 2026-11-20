@@ -34,6 +34,7 @@ CUSTOM_SPECIES = {
 }
 CATCH_NAME_OVERRIDES = {
     "Eevee": "ibui",
+    "Umbreon": "Blacky",
 }
 OFFICIAL_CATCH_LANGUAGE_IDS = {2, 5, 6, 7, 8, 9, 14}
 

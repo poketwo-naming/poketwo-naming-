@@ -1,4 +1,6 @@
+import json
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock
@@ -78,6 +80,17 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Do not catch this Pokémon.", content)
         self.assertNotIn("Click to Copy", content)
         self.assertEqual(embed.title, "MissingNo detected")
+
+    def test_umbreon_prediction_uses_working_catch_name(self):
+        with Path("pokemon_best_names.json").open(encoding="utf-8") as source:
+            best_names = json.load(source)
+        self.cog.pokemon_types = {"Umbreon": []}
+        self.cog.pokemon_best_names = best_names
+
+        content, embed = self.cog.format_spawn_prediction("Umbreon", 98.0)
+
+        self.assertIn("Best name: Blacky", content)
+        self.assertIn("@Pokétwo#8236 c blacky", embed.description)
 
     def test_grab_parser_preserves_custom_emoji_and_all_forms(self):
         message = SimpleNamespace(
