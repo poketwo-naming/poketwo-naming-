@@ -61,7 +61,7 @@ COMMAND_CATALOG = (
     (
         "General",
         "v!support",
-        "Shows how to support ViMillion's running and development costs.",
+        "Shows how to support Vivillon's running and development costs.",
     ),
     (
         "General",
@@ -2460,9 +2460,9 @@ class PokéTwoNamingBot(commands.Cog):
     async def support(self, ctx):
         """Show the optional GoFundMe support link."""
         embed = discord.Embed(
-            title="Support ViMillion",
+            title="Support Vivillon",
             description=(
-                "🦋 Running and developing ViMillion costs money. Donations are "
+                "🦋 Running and developing Vivillon costs money. Donations are "
                 "completely optional, but every bit of support helps keep the bot "
                 "running. Thank you!"
             ),

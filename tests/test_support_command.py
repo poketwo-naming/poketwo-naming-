@@ -16,10 +16,10 @@ class SupportCommandTests(unittest.IsolatedAsyncioTestCase):
 
         ctx.reply.assert_awaited_once()
         sent = ctx.reply.await_args.kwargs
-        self.assertEqual(sent["embed"].title, "Support ViMillion")
+        self.assertEqual(sent["embed"].title, "Support Vivillon")
         self.assertEqual(
             sent["embed"].description,
-            "🦋 Running and developing ViMillion costs money. Donations are "
+            "🦋 Running and developing Vivillon costs money. Donations are "
             "completely optional, but every bit of support helps keep the bot "
             "running. Thank you!",
         )
