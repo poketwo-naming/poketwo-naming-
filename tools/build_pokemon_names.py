@@ -22,6 +22,9 @@ from tools.build_pokemon_types import (
 BEST_NAMES_OUTPUT = Path("pokemon_best_names.json")
 ALIASES_OUTPUT = Path("pokemon_aliases.json")
 SPECIES_OUTPUT = Path("pokemon_species.json")
+EXTRA_ALIASES = {
+    "Braviary": ("Woguru",),
+}
 CUSTOM_SPECIES = {
     "Chef Dente": "greedent",
     "MissingNo": "MissingNo",
@@ -161,6 +164,7 @@ def build_localized_data() -> tuple[
                 [
                     class_name,
                     best_names[class_name],
+                    *EXTRA_ALIASES.get(class_name, ()),
                     *names,
                     *(romanized_name(name) for name in names),
                 ]

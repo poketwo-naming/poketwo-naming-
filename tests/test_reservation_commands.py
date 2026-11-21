@@ -65,6 +65,22 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
             "No members have reserved this Pokémon.",
         )
 
+    async def test_collection_add_accepts_woguru_for_braviary(self):
+        self.cog.class_names["braviary"] = "Braviary"
+        self.cog.pokemon_aliases = self.cog.load_pokemon_aliases()
+        self.cog.bot_state["collections"] = {}
+        self.ctx.author = SimpleNamespace(id=456)
+
+        for name in ("woguru", "Wōguru"):
+            await PokéTwoNamingBot.add_collection.callback(
+                self.cog, self.ctx, pokemon_input=name
+            )
+
+        self.assertEqual(
+            self.cog.bot_state["collections"]["123"]["456"], ["Braviary"]
+        )
+        self.assertNotIn("Unknown Pokémon", self.ctx.send.await_args.args[0])
+
     def test_missingno_prediction_includes_reserve_ping(self):
         self.cog.bot_state["reserves"]["123"]["MissingNo"] = ["456"]
         self.cog.pokemon_types = {"MissingNo": []}
