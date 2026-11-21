@@ -23,6 +23,7 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 | `v!r add <pokemon,...> <@user>` | `v!r add Pikachu, Eevee @user` | Reserve multiple Pokémon for a member (restricted) |
 | `v!r add all <pokemon,...> <@user>` | `v!r add all Arceus, Eevee @user` | Reserve all matching forms (restricted) |
 | `v!r remove <pokemon,...|category> [@user]` | `v!r remove rare @user` | Remove Pokémon or all reserved members of a category (restricted) |
+| `v!r e <@user>` | Reply to a reserve list with `v!r e @user` | Confirm an exchange of the user's reserves to members in the list (restricted) |
 | `v!r search <pokemon>` | `v!r search Pikachu` | Show who has a Pokémon reserved in an embed |
 | `v!r list [@user]` | `v!r list @user` | List all server reserves or one member's reserves |
 | `v!reserve list [@user]` | `v!reserve list @user` | Long-form reserve list command |
@@ -67,7 +68,10 @@ recognized spawn image instead of misleading base-species artwork.
 For `v!grab` and `h!grab`, a category name before a user mention (for example,
 `rare - @user - Pikachu`) appears as one `rare - @user` preview entry; confirming
 adds every Pokémon in that category to the user. The All forms toggle only
-expands an entry when its original text starts with `all <Pokémon name>`.
+expands an entry when its original text requests all forms. Grab and reserve
+exchange include regional forms for `all <Pokémon name>` (for example,
+`all Articuno` includes Galarian Articuno). Exchange skips forms the original
+user does not have reserved.
 
 MissingNo detection immediately denies Pokétwo's Send Messages permission in
 the current channel, asks staff not to catch it, and pings role

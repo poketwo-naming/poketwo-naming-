@@ -1161,9 +1161,7 @@ class GrabConfirmView(discord.ui.View):
             reserve_names = (
                 self.cog.guild_categories(guild.id).get(pokemon_name, [])
                 if is_category
-                else self.cog.resolve_pokemon_list(
-                    pokemon_name, include_all_regionals=False
-                )[0]
+                else self.cog.resolve_pokemon_list(pokemon_name)[0]
             )
             for reserve_name in reserve_names:
                 if self.h_mode:
@@ -2808,10 +2806,7 @@ class PokéTwoNamingBot(commands.Cog):
             elif requested_all_forms:
                 entries.extend(
                     (user_id, str(family_member))
-                    for family_member in self.resolve_pokemon_family(
-                        pokemon_name,
-                        include_regionals=False,
-                    )
+                    for family_member in self.resolve_pokemon_family(pokemon_name)
                 )
             else:
                 entries.append((user_id, pokemon_name))

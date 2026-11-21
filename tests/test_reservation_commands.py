@@ -291,21 +291,24 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
                 response=SimpleNamespace(edit_message=AsyncMock()),
             ),
         )
-        self.cog.class_names["cosplay pikachu"] = "Cosplay Pikachu"
+        self.cog.class_names.update({
+            "articuno": "Articuno",
+            "galarian articuno": "Galarian Articuno",
+        })
         self.cog.add_reserve_direct = AsyncMock(return_value=True)
         view = GrabConfirmView(
-            self.cog, 789, 101112, [("456", "all Pikachu", False, "")], False
+            self.cog, 789, 101112, [("456", "all Articuno", False, "")], False
         )
 
         await view.confirm.callback(interaction)
 
         self.assertEqual(
             [call.args[1] for call in self.cog.add_reserve_direct.await_args_list],
-            ["Cosplay Pikachu", "Pikachu"],
+            ["Articuno", "Galarian Articuno"],
         )
         channel.send.assert_awaited_once_with(
-            "v!r add all Pikachu <@456>\n"
-            "Reserve **all Pikachu** added to <@456>."
+            "v!r add all Articuno <@456>\n"
+            "Reserve **all Articuno** added to <@456>."
         )
 
     async def test_exchange_expands_all_forms_in_replied_list(self):
@@ -336,6 +339,78 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             view.entries,
             [("456", "Cosplay Pikachu"), ("456", "Pikachu")],
+        )
+
+    async def test_exchange_all_forms_includes_regional_forms_and_moves_reserves(self):
+        self.cog.class_names = {
+            name.casefold(): name
+            for name in (
+                "Articuno",
+                "Galarian Articuno",
+                "Marshadow",
+                "Zenith Marshadow",
+                "Pikachu",
+                "Zapdos",
+                "Galarian Zapdos",
+            )
+        }
+        source = SimpleNamespace(
+            guild=SimpleNamespace(id=123),
+            content="",
+            embeds=[],
+            message_snapshots=[
+                SimpleNamespace(
+                    content=(
+                        "<@456> - all articuno\n"
+                        "<@456> - all marshadow\n"
+                        "<@456> - pikachu\n"
+                        "<@456> - zapdos"
+                    ),
+                    embeds=[],
+                )
+            ],
+        )
+        self.cog.referenced_grab_message = AsyncMock(return_value=source)
+        self.cog.bot_state["reserves"]["123"] = {
+            name: ["789"] for name in self.cog.class_names.values()
+        }
+        ctx = SimpleNamespace(
+            guild=SimpleNamespace(id=123),
+            author=SimpleNamespace(id=101),
+            send=AsyncMock(),
+        )
+
+        await self.cog.exchange_reserves(ctx, "<@789>")
+
+        view = ctx.send.await_args.kwargs["view"]
+        self.assertEqual(
+            view.entries,
+            [
+                ("456", "Articuno"),
+                ("456", "Galarian Articuno"),
+                ("456", "Marshadow"),
+                ("456", "Zenith Marshadow"),
+                ("456", "Pikachu"),
+                ("456", "Zapdos"),
+            ],
+        )
+        self.assertIn("Articuno, Galarian Articuno", view.build_embed().description)
+        interaction = cast(
+            discord.Interaction,
+            SimpleNamespace(
+                user=SimpleNamespace(id=101),
+                response=SimpleNamespace(edit_message=AsyncMock()),
+            ),
+        )
+
+        await view.confirm.callback(interaction)
+
+        self.assertEqual(
+            self.cog.bot_state["reserves"]["123"],
+            {
+                name: ["789"] if name == "Galarian Zapdos" else ["456"]
+                for name in self.cog.class_names.values()
+            },
         )
 
 
