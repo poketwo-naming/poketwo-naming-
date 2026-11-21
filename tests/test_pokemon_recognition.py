@@ -70,6 +70,36 @@ class PokemonRecognitionTests(unittest.TestCase):
         self.assert_prediction("Second", 0.2)
         self.assertEqual(self.recognizer.session.run.call_count, 2)
 
+    def test_palafin_mark_overrides_finizen_prediction(self):
+        self.recognizer.classes = np.array(["Finizen", "Palafin", "Third"])
+        self.recognizer.focused_class_id_set = {0, 1}
+        self.recognizer.focused_class_ids = np.array([0, 1])
+        self.recognizer.focused_centroids = np.array(
+            [[1.0, 0.0], [0.8, 0.0]], dtype=np.float32
+        )
+        image = Image.new("RGB", (224, 224))
+        for x in range(100, 112):
+            for y in range(100, 112):
+                image.putpixel((x, y), (255, 0, 120))
+
+        name, confidence, _ = self.recognizer.recognize(image)
+
+        self.assertEqual(name, "Palafin")
+        self.assertLess(confidence, 50)
+
+    def test_missing_palafin_mark_overrides_palafin_prediction(self):
+        self.recognizer.classes = np.array(["Finizen", "Palafin", "Third"])
+        self.recognizer.focused_class_id_set = {0, 1}
+        self.recognizer.focused_class_ids = np.array([0, 1])
+        self.recognizer.focused_centroids = np.array(
+            [[0.8, 0.0], [1.0, 0.0]], dtype=np.float32
+        )
+
+        name, confidence, _ = self.recognizer.recognize(self.image)
+
+        self.assertEqual(name, "Finizen")
+        self.assertLess(confidence, 50)
+
 
 class SpawnImageRecognitionTests(unittest.TestCase):
     def test_nidoran_gender_on_spawn_images(self):

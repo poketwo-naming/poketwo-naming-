@@ -13,6 +13,7 @@ RESIZE_SIZE = 232
 MEAN = np.asarray([0.485, 0.456, 0.406], dtype=np.float32)[:, None, None]
 STD = np.asarray([0.229, 0.224, 0.225], dtype=np.float32)[:, None, None]
 REFINEMENT_MATCH_THRESHOLD = 0.96
+PALAFIN_MARK_PIXEL_THRESHOLD = 46
 FOCUSED_CROP_CLASSES = (
     "Finizen",
     "Palafin",
@@ -52,6 +53,23 @@ def _preprocess_focused_rgb(image: Image.Image) -> np.ndarray:
     top = (image.height - crop_side) // 2
     focused = image.crop((left, top, left + crop_side, top + crop_side))
     return _preprocess_rgb(focused)
+
+
+def _has_palafin_mark(image: Image.Image) -> bool:
+    scale = RESIZE_SIZE / min(image.size)
+    resized = image.resize(
+        (round(image.width * scale), round(image.height * scale)),
+        Image.Resampling.BILINEAR,
+    )
+    left = (resized.width - IMAGE_SIZE) // 2
+    top = (resized.height - IMAGE_SIZE) // 2
+    pixels = np.asarray(
+        resized.crop((left, top, left + IMAGE_SIZE, top + IMAGE_SIZE)),
+        dtype=np.int16,
+    )
+    red, green, blue = pixels.transpose(2, 0, 1)
+    mark_pixels = (red > green + 15) & (blue > green + 10) & (red > 80)
+    return int(np.count_nonzero(mark_pixels)) >= PALAFIN_MARK_PIXEL_THRESHOLD
 
 
 def preprocess_focused(image: Image.Image) -> np.ndarray:
@@ -159,6 +177,11 @@ class PokemonImageRecognizer:
                 margin = float(scores[best] - scores[second_best])
         else:
             margin = float(scores[best] - scores[second_best])
+        if predicted_name in ("Finizen", "Palafin"):
+            mark_name = "Palafin" if _has_palafin_mark(image) else "Finizen"
+            if mark_name != predicted_name:
+                predicted_name = mark_name
+                margin = -margin
         logit = self.calibration_coefficient * margin + self.calibration_intercept
         confidence = float(100 / (1 + np.exp(-np.clip(logit, -30, 30))))
         return predicted_name, confidence, perf_counter() - started

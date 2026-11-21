@@ -136,6 +136,9 @@ without retraining. Pass extra folder names to add more classes:
 python tools/build_pokemon_refinements.py
 ```
 
+For Finizen and Palafin, recognition also checks the small pink/red mark to
+distinguish their otherwise similar images.
+
 Commit `pokemon_image_refinements.npz` afterwards.
 
 ## Installation
