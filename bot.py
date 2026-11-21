@@ -1281,7 +1281,14 @@ class PokéTwoNamingBot(commands.Cog):
         canonical = self.class_names.get(stripped.casefold())
         if canonical is not None:
             return canonical
-        return self.pokemon_aliases.get(normalize_pokemon_alias(stripped))
+        normalized = normalize_pokemon_alias(stripped)
+        nidoran_genders = {
+            "nidoranmale": "nidoran♂",
+            "nidoranfemale": "nidoran",
+        }
+        if normalized in nidoran_genders:
+            return self.class_names.get(nidoran_genders[normalized])
+        return self.pokemon_aliases.get(normalized)
 
     def resolve_pokemon_family(
         self,

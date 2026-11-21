@@ -56,6 +56,9 @@ when that Pokémon is recognized. Existing single-member reserves remain valid.
 `v!r add` and `v!r remove` are restricted to administrators and members with the
 configured restricted role. Removing a category removes those Pokémon reserves
 for all reserving members, or only the mentioned member when `@user` is supplied.
+For collections and reserves, `Nidoran male` selects Nidoran♂ and
+`Nidoran female` selects Nidoran♀. Use `v!cl add all Nidoran` or
+`v!r add all Nidoran @user` to add both.
 
 Normal naming output uses a transparent official Pokémon artwork thumbnail
 from PokéAPI, selected for the predicted Pokémon form. The spawn image is still

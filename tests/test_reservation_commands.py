@@ -81,6 +81,48 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertNotIn("Unknown Pokémon", self.ctx.send.await_args.args[0])
 
+    async def test_nidoran_gender_and_all_in_collections_and_reserves(self):
+        with Path("pokemon_species.json").open(encoding="utf-8") as source:
+            self.cog.class_names = {
+                name.casefold(): name for name in json.load(source)
+            }
+        self.cog.pokemon_aliases = self.cog.load_pokemon_aliases()
+        self.ctx.author = SimpleNamespace(id=456)
+        member = SimpleNamespace(id=789, mention="<@789>")
+        self.ctx.guild.get_member = lambda user_id: member if user_id == 789 else None
+
+        for entered, expected in (
+            ("nidoran male", ["Nidoran♂"]),
+            ("NIDORAN FEMALE", ["Nidoran"]),
+            ("Nidoran", ["Nidoran"]),
+            ("Nidoran♂", ["Nidoran♂"]),
+            ("all nidoran", ["Nidoran", "Nidoran♂"]),
+        ):
+            with self.subTest(entered=entered):
+                self.cog.bot_state["collections"] = {}
+                self.cog.bot_state["reserves"]["123"] = {}
+                await PokéTwoNamingBot.add_collection.callback(
+                    self.cog, self.ctx, pokemon_input=entered
+                )
+                await self.cog.add_reserve(self.ctx, entry=f"{entered} <@789>")
+
+                self.assertEqual(
+                    self.cog.bot_state["collections"]["123"]["456"], expected
+                )
+                self.assertEqual(
+                    self.cog.bot_state["reserves"]["123"],
+                    {name: ["789"] for name in expected},
+                )
+                for name in ("Nidoran", "Nidoran♂"):
+                    self.assertEqual(
+                        self.cog.collection_owners_for_spawn(123, name),
+                        ["456"] if name in expected else [],
+                    )
+                    self.assertEqual(
+                        self.cog.reserve_user_ids(123, name),
+                        ["789"] if name in expected else [],
+                    )
+
     def test_missingno_prediction_includes_reserve_ping(self):
         self.cog.bot_state["reserves"]["123"]["MissingNo"] = ["456"]
         self.cog.pokemon_types = {"MissingNo": []}
