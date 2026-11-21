@@ -60,6 +60,11 @@ COMMAND_CATALOG = (
     ("General", "v!ping", "Shows the bot's gateway latency."),
     (
         "General",
+        "v!support",
+        "Shows how to support ViMillion's running and development costs.",
+    ),
+    (
+        "General",
         "v!tz <day|night|dawn|dusk>",
         "Finds one place currently in that local-time phase and gives a Pokétwo command.",
     ),
@@ -2450,6 +2455,27 @@ class PokéTwoNamingBot(commands.Cog):
     async def ping(self, ctx):
         """Check if the bot is responsive"""
         await ctx.send(f"Pong! {self.bot.latency * 1000:.2f}ms")
+
+    @commands.command(name="support")
+    async def support(self, ctx):
+        """Show the optional GoFundMe support link."""
+        embed = discord.Embed(
+            title="Support ViMillion",
+            description=(
+                "🦋 Running and developing ViMillion costs money. Donations are "
+                "completely optional, but every bit of support helps keep the bot "
+                "running. Thank you!"
+            ),
+        )
+        view = discord.ui.View(timeout=None)
+        view.add_item(
+            discord.ui.Button(
+                label="Donate on GoFundMe",
+                url="https://gofund.me/40e29e0bf",
+                style=discord.ButtonStyle.link,
+            )
+        )
+        await ctx.reply(embed=embed, view=view)
 
     @commands.command(name="tz")
     async def timezone_command(self, ctx, *, phase: str = ""):
