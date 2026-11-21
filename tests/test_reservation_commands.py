@@ -2,12 +2,19 @@ import json
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
+from typing import Protocol, cast
 from unittest.mock import AsyncMock
 
 import discord
+from discord.ext import commands
 
 from bot import GrabConfirmView, GrabEmojiModal, GrabReservesView, PokéTwoNamingBot
+
+
+class CollectionCallback(Protocol):
+    async def __call__(
+        self, cog: PokéTwoNamingBot, ctx: commands.Context, *, pokemon_input: str
+    ) -> None: ...
 
 
 class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
@@ -32,6 +39,12 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
                 get_member=lambda user_id: None,
             ),
             send=AsyncMock(),
+        )
+
+    async def add_to_collection(self, pokemon_input: str):
+        callback = cast(CollectionCallback, PokéTwoNamingBot.add_collection.callback)
+        await callback(
+            self.cog, cast(commands.Context, self.ctx), pokemon_input=pokemon_input
         )
 
     async def test_remove_category_removes_all_category_reservations(self):
@@ -72,9 +85,7 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
         self.ctx.author = SimpleNamespace(id=456)
 
         for name in ("woguru", "Wōguru"):
-            await PokéTwoNamingBot.add_collection.callback(
-                self.cog, self.ctx, pokemon_input=name
-            )
+            await self.add_to_collection(name)
 
         self.assertEqual(
             self.cog.bot_state["collections"]["123"]["456"], ["Braviary"]
@@ -101,9 +112,7 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(entered=entered):
                 self.cog.bot_state["collections"] = {}
                 self.cog.bot_state["reserves"]["123"] = {}
-                await PokéTwoNamingBot.add_collection.callback(
-                    self.cog, self.ctx, pokemon_input=entered
-                )
+                await self.add_to_collection(entered)
                 await self.cog.add_reserve(self.ctx, entry=f"{entered} <@789>")
 
                 self.assertEqual(
