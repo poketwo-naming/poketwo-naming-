@@ -71,7 +71,9 @@ recognized spawn image instead of misleading base-species artwork.
 
 For `v!grab` and `h!grab`, a category name before a user mention (for example,
 `rare - @user - Pikachu`) appears as one `rare - @user` preview entry; confirming
-adds every Pokémon in that category to the user. The All forms toggle only
+adds every Pokémon in that category to the user. A space before a separating
+hyphen is enough (for example, `@user ditto -pikachu`); unrecognized names are
+skipped without discarding other valid names. The All forms toggle only
 expands an entry when its original text requests all forms. Grab and reserve
 exchange include regional forms for `all <Pokémon name>` (for example,
 `all Articuno` includes Galarian Articuno). Exchange skips forms the original

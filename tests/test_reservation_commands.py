@@ -208,6 +208,27 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
             [("Flareon", False, "")],
         )
 
+    def test_grab_parser_accepts_separator_without_space_after_hyphen(self):
+        self.cog.class_names.update({"ditto": "Ditto", "ho-oh": "Ho-Oh"})
+        message = SimpleNamespace(
+            guild=SimpleNamespace(id=123),
+            content=(
+                "Rare - <@456> ditto -notapokemon\n"
+                "Res 2 - <@789> Ho-Oh -pikachu"
+            ),
+            embeds=[],
+            message_snapshots=[],
+        )
+
+        self.assertEqual(
+            self.cog.parse_grab_list(message, 123),
+            [
+                ("456", "Ditto", False, False, ""),
+                ("789", "Ho-Oh", False, False, ""),
+                ("789", "Pikachu", False, False, ""),
+            ],
+        )
+
     async def test_grab_import_reserves_multiple_users_from_list(self):
         self.cog.class_names.update({
             name.casefold(): name

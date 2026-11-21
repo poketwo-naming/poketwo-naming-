@@ -1739,7 +1739,7 @@ class PokéTwoNamingBot(commands.Cog):
         text: str,
     ) -> list[tuple[str, bool, str]]:
         """Resolve Pokémon while retaining all-form intent and source emojis."""
-        chunks = re.split(r"\s*(?:\||—|–|\n|;|/|,|\s-\s)\s*", text)
+        chunks = re.split(r"\s*(?:\||—|–|\n|;|/|,|\s-\s*)\s*", text)
         pokemon_names = []
         for chunk in chunks:
             custom_emojis = re.findall(r"<a?:[^:>]+:\d+>", chunk)
