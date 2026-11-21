@@ -1,7 +1,7 @@
 """
 Pokétwo Naming Bot - Core bot functionality for naming Pokémon
 """
-from collections import deque
+from collections import OrderedDict, deque
 from datetime import datetime, timezone
 from functools import lru_cache
 from hashlib import sha256
@@ -1213,6 +1213,9 @@ class PokéTwoNamingBot(commands.Cog):
         self.http_session = None
         self.spawn_response_times = deque(maxlen=100)
         self.inference_times = deque(maxlen=100)
+        self.image_download_times = deque(maxlen=100)
+        self.message_send_times = deque(maxlen=100)
+        self.spawn_prediction_cache: OrderedDict[bytes, tuple[str, float]] = OrderedDict()
         self.store_times = deque(maxlen=100)
         self.last_spawn_metrics = None
         self.recognized_spawn_count = 0
@@ -2112,9 +2115,8 @@ class PokéTwoNamingBot(commands.Cog):
             return
 
         try:
-            pokemon_name, confidence, inference_seconds = await asyncio.to_thread(
-                self.recognize_spawn_image,
-                image_data,
+            pokemon_name, confidence, inference_seconds = (
+                await self.recognize_cached_spawn_image(image_data)
             )
         except (UnidentifiedImageError, OSError) as error:
             print(f"Could not read Pokétwo spawn image: {error}")
@@ -2192,11 +2194,11 @@ class PokéTwoNamingBot(commands.Cog):
                     quality=85,
                 )
             review_buffer.seek(0)
-            await message.channel.send(
-                embed=embed,
-                file=discord.File(review_buffer, filename="spawn-review.webp"),
-                view=SpawnReviewView(self, pokemon_name, image_data),
-            )
+            send_kwargs = {
+                "embed": embed,
+                "file": discord.File(review_buffer, filename="spawn-review.webp"),
+                "view": SpawnReviewView(self, pokemon_name, image_data),
+            }
         else:
             content, embed = self.format_spawn_prediction(
                 pokemon_name,
@@ -2210,11 +2212,11 @@ class PokéTwoNamingBot(commands.Cog):
             )
             if os.path.isfile(custom_sprite_path):
                 embed.set_thumbnail(url="attachment://pokemon.png")
-                await message.channel.send(
-                    content=content,
-                    embed=embed,
-                    file=discord.File(custom_sprite_path, filename="pokemon.png"),
-                )
+                send_kwargs = {
+                    "content": content,
+                    "embed": embed,
+                    "file": discord.File(custom_sprite_path, filename="pokemon.png"),
+                }
             elif pokemon_name in CUSTOM_SPRITE_IDENTIFIERS:
                 thumbnail_buffer = BytesIO()
                 with Image.open(BytesIO(image_data)) as image:
@@ -2225,14 +2227,14 @@ class PokéTwoNamingBot(commands.Cog):
                     )
                 thumbnail_buffer.seek(0)
                 embed.set_thumbnail(url="attachment://pokemon.webp")
-                await message.channel.send(
-                    content=content,
-                    embed=embed,
-                    file=discord.File(
+                send_kwargs = {
+                    "content": content,
+                    "embed": embed,
+                    "file": discord.File(
                         thumbnail_buffer,
                         filename="pokemon.webp",
                     ),
-                )
+                }
             else:
                 sprite_id = self.pokemon_sprite_ids.get(pokemon_name)
                 if sprite_id is not None:
@@ -2243,10 +2245,11 @@ class PokéTwoNamingBot(commands.Cog):
                             f"{sprite_id}.png"
                         )
                     )
-                await message.channel.send(
-                    content=content,
-                    embed=embed,
-                )
+                send_kwargs = {"content": content, "embed": embed}
+
+        send_started = perf_counter()
+        await message.channel.send(**send_kwargs)
+        send_seconds = perf_counter() - send_started
 
         if pokemon_name.casefold() == "missingno":
             staff_mention = f"<@&{MISSINGNO_ALERT_ROLE_ID}>"
@@ -2262,12 +2265,34 @@ class PokéTwoNamingBot(commands.Cog):
         total_seconds = perf_counter() - started
         self.spawn_response_times.append(total_seconds)
         self.inference_times.append(inference_seconds)
+        self.image_download_times.append(download_seconds)
+        self.message_send_times.append(send_seconds)
         self.last_spawn_metrics = {
             "download": download_seconds,
             "inference": inference_seconds,
+            "send": send_seconds,
             "total": total_seconds,
         }
         self.recognized_spawn_count += 1
+
+    async def recognize_cached_spawn_image(
+        self, image_data: bytes
+    ) -> tuple[str, float, float]:
+        """Reuse predictions only for byte-identical spawn images."""
+        started = perf_counter()
+        image_hash = sha256(image_data).digest()
+        cached = self.spawn_prediction_cache.get(image_hash)
+        if cached is not None:
+            self.spawn_prediction_cache.move_to_end(image_hash)
+            return cached[0], cached[1], perf_counter() - started
+        pokemon_name, confidence, inference_seconds = await asyncio.to_thread(
+            self.recognize_spawn_image, image_data
+        )
+        self.spawn_prediction_cache[image_hash] = (pokemon_name, confidence)
+        self.spawn_prediction_cache.move_to_end(image_hash)
+        if len(self.spawn_prediction_cache) > 1024:
+            self.spawn_prediction_cache.popitem(last=False)
+        return pokemon_name, confidence, inference_seconds
 
     def recognize_spawn_image(self, image_data: bytes):
         """Recognize an image without blocking the Discord event loop."""
@@ -3316,6 +3341,22 @@ class PokéTwoNamingBot(commands.Cog):
             (
                 "Inference Latest",
                 f"{timing(self.inference_times, 'latest') * 1000:.0f} ms",
+            ),
+            (
+                "Download Avg",
+                f"{timing(self.image_download_times) * 1000:.0f} ms",
+            ),
+            (
+                "Download Latest",
+                f"{timing(self.image_download_times, 'latest') * 1000:.0f} ms",
+            ),
+            (
+                "Send Avg",
+                f"{timing(self.message_send_times) * 1000:.0f} ms",
+            ),
+            (
+                "Send Latest",
+                f"{timing(self.message_send_times, 'latest') * 1000:.0f} ms",
             ),
             (
                 "Response Fastest",

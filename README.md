@@ -99,8 +99,11 @@ spawn in that channel. Override the inactivity window with
 `INCENSE_INACTIVITY_SECONDS`.
 
 The image encoder uses one CPU inference thread to reduce overhead, while
-classification and focused-image checks remain enabled. `v!api` reports recent
-recognition and response timings; actual speed depends on the host and network.
+classification and focused-image checks remain enabled. Predictions for the
+latest 1,024 byte-identical spawn images are cached in memory until restart.
+`v!api` reports recent download, inference, Discord send, and response timings;
+cached predictions count as inference time too. Actual speed depends on the
+host and network.
 
 The bot uses the Pokémon-named folders in `pokemon_images/training_data` to build
 the recognition model. Rebuild it after changing the training images:

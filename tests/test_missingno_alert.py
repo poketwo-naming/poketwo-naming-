@@ -1,4 +1,5 @@
 import unittest
+from collections import OrderedDict, deque
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -21,6 +22,9 @@ class MissingNoAlertTests(unittest.IsolatedAsyncioTestCase):
         self.cog.restricted_role_ids = Mock(return_value={987654321})
         self.cog.spawn_response_times = []
         self.cog.inference_times = []
+        self.cog.image_download_times = deque(maxlen=100)
+        self.cog.message_send_times = deque(maxlen=100)
+        self.cog.spawn_prediction_cache = OrderedDict()
         self.cog.recognized_spawn_count = 0
         self.channel = SimpleNamespace(id=1, send=AsyncMock())
         self.message = SimpleNamespace(

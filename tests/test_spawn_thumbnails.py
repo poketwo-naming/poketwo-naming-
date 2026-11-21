@@ -1,4 +1,6 @@
 import unittest
+from collections import OrderedDict, deque
+from hashlib import sha256
 from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
@@ -6,7 +8,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import discord
 from PIL import Image
 
-from bot import PokéTwoNamingBot
+from bot import TRAINING_REVIEW_CHANNEL_ID, PokéTwoNamingBot
 
 
 class SpawnThumbnailTests(unittest.IsolatedAsyncioTestCase):
@@ -19,7 +21,8 @@ class SpawnThumbnailTests(unittest.IsolatedAsyncioTestCase):
         self.cog._get_spawn_image = AsyncMock(
             return_value=(self.image_data, 0.01)
         )
-        self.cog.recognize_spawn_image = Mock()
+        self.recognize = Mock()
+        self.cog.recognize_spawn_image = self.recognize
         self.cog.shiny_hunters_for_spawn = Mock(return_value=[])
         self.cog.format_spawn_prediction = Mock(
             side_effect=lambda *args: ("prediction", discord.Embed())
@@ -28,8 +31,11 @@ class SpawnThumbnailTests(unittest.IsolatedAsyncioTestCase):
             "Mosslax": 143,
             "Ride Cyclizar": 967,
         }
-        self.cog.spawn_response_times = []
-        self.cog.inference_times = []
+        self.cog.spawn_response_times = deque(maxlen=100)
+        self.cog.inference_times = deque(maxlen=100)
+        self.cog.image_download_times = deque(maxlen=100)
+        self.cog.message_send_times = deque(maxlen=100)
+        self.cog.spawn_prediction_cache = OrderedDict()
         self.cog.recognized_spawn_count = 0
         self.channel = SimpleNamespace(id=1, send=AsyncMock())
         self.message = SimpleNamespace(
@@ -41,7 +47,8 @@ class SpawnThumbnailTests(unittest.IsolatedAsyncioTestCase):
         for pokemon_name in ("Mosslax", "Ride Cyclizar"):
             with self.subTest(pokemon_name=pokemon_name):
                 self.channel.send.reset_mock()
-                self.cog.recognize_spawn_image.return_value = (
+                self.cog.spawn_prediction_cache.clear()
+                self.recognize.return_value = (
                     pokemon_name,
                     99.0,
                     0.02,
@@ -56,6 +63,79 @@ class SpawnThumbnailTests(unittest.IsolatedAsyncioTestCase):
                     "attachment://pokemon.webp",
                 )
                 self.assertEqual(sent["file"].filename, "pokemon.webp")
+
+    async def test_normal_spawn_records_network_timings(self):
+        self.recognize.return_value = ("Pikachu", 99.0, 0.02)
+        self.cog.pokemon_sprite_ids["Pikachu"] = 25
+        with patch("bot.os.path.isfile", return_value=False):
+            await self.cog.handle_poketwo_spawn(self.message)
+
+        sent = self.channel.send.await_args.kwargs
+        self.assertIn("/25.png", sent["embed"].thumbnail.url)
+        self.assertEqual(list(self.cog.image_download_times), [0.01])
+        self.assertEqual(len(self.cog.message_send_times), 1)
+        assert self.cog.last_spawn_metrics is not None
+        self.assertEqual(self.cog.last_spawn_metrics["send"], self.cog.message_send_times[0])
+
+    async def test_low_confidence_spawn_still_sends_review(self):
+        self.channel.id = TRAINING_REVIEW_CHANNEL_ID
+        self.recognize.return_value = ("Pikachu", 20.0, 0.02)
+        self.cog.pokemon_types = {"Pikachu": []}
+        self.cog.reserve_user_ids = Mock(return_value=[])
+        self.cog.collection_owners_for_spawn = Mock(return_value=[])
+
+        await self.cog.handle_poketwo_spawn(self.message)
+
+        sent = self.channel.send.await_args.kwargs
+        self.assertEqual(sent["embed"].title, "Is this Pokémon correct?")
+        self.assertEqual(sent["file"].filename, "spawn-review.webp")
+        self.assertEqual(sent["view"].pokemon_name, "Pikachu")
+        self.assertEqual(len(self.cog.message_send_times), 1)
+
+    async def test_identical_images_reuse_prediction_but_changed_images_do_not(self):
+        self.recognize.side_effect = [
+            ("Pikachu", 99.0, 0.02),
+            ("Eevee", 88.0, 0.03),
+        ]
+
+        first = await self.cog.recognize_cached_spawn_image(b"first")
+        repeated = await self.cog.recognize_cached_spawn_image(b"first")
+        changed = await self.cog.recognize_cached_spawn_image(b"second")
+
+        self.assertEqual(first[:2], repeated[:2])
+        self.assertEqual(changed[:2], ("Eevee", 88.0))
+        self.assertEqual(self.recognize.call_count, 2)
+
+    async def test_prediction_cache_evicts_least_recently_used_image(self):
+        for index in range(1024):
+            image_hash = sha256(str(index).encode()).digest()
+            self.cog.spawn_prediction_cache[image_hash] = ("Pikachu", 99.0)
+        await self.cog.recognize_cached_spawn_image(b"0")
+        self.recognize.return_value = ("Eevee", 88.0, 0.02)
+
+        await self.cog.recognize_cached_spawn_image(b"new")
+
+        self.assertEqual(len(self.cog.spawn_prediction_cache), 1024)
+        self.assertIn(sha256(b"0").digest(), self.cog.spawn_prediction_cache)
+        self.assertNotIn(sha256(b"1").digest(), self.cog.spawn_prediction_cache)
+
+    async def test_api_shows_download_and_send_times(self):
+        self.cog.bot = SimpleNamespace(user=None, guilds=[])
+        self.cog.store_times = deque(maxlen=100)
+        self.cog.json_load_seconds = 0.0
+        self.cog.model_load_seconds = 0.0
+        self.cog.active_incense_count = Mock(return_value=0)
+        self.cog.image_download_times.extend([0.1, 0.2])
+        self.cog.message_send_times.extend([0.3, 0.4])
+        ctx = SimpleNamespace(send=AsyncMock())
+
+        await PokéTwoNamingBot.api_status.callback(self.cog, ctx)
+
+        fields = {field.name: field.value for field in ctx.send.await_args.kwargs["embed"].fields}
+        self.assertEqual(fields["Download Avg"], "150 ms")
+        self.assertEqual(fields["Download Latest"], "200 ms")
+        self.assertEqual(fields["Send Avg"], "350 ms")
+        self.assertEqual(fields["Send Latest"], "400 ms")
 
 
 if __name__ == "__main__":
