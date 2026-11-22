@@ -7,6 +7,7 @@ from functools import lru_cache
 from hashlib import sha256
 from io import BytesIO
 import asyncio
+import csv
 import json
 import os
 import re
@@ -68,6 +69,7 @@ COMMAND_CATALOG = (
         "v!tz <day|night|dawn|dusk>",
         "Finds one place currently in that local-time phase and gives a Pokétwo command.",
     ),
+    ("General", "v!sr <pokemon>", "Shows a Pokémon's spawn rate and artwork."),
     ("General", "v!help [page]", "Shows all commands with descriptions, paginated."),
     ("General", "v!commands [page]", "Shows categorized command names, paginated."),
     (
@@ -1243,6 +1245,7 @@ class PokéTwoNamingBot(commands.Cog):
         self.class_names = {name.casefold(): name for name in self.recognizer.classes}
         self.pokemon_types = self.load_pokemon_types()
         self.pokemon_sprite_ids = self.load_pokemon_sprite_ids()
+        self.pokemon_spawn_chances = self.load_pokemon_spawn_chances()
         self.pokemon_best_names = self.load_pokemon_best_names()
         self.pokemon_aliases = self.load_pokemon_aliases()
         self.pokemon_species = self.load_pokemon_species()
@@ -1294,6 +1297,15 @@ class PokéTwoNamingBot(commands.Cog):
         """Load PokéAPI IDs used for transparent official artwork thumbnails."""
         with open("pokemon_sprite_ids.json", "r", encoding="utf-8") as f:
             return json.load(f)
+
+    def load_pokemon_spawn_chances(self):
+        """Load the Pokétwo spawn odds keyed by case-insensitive Pokémon name."""
+        with open("poketwo_spawn_chances.csv", newline="", encoding="utf-8-sig") as f:
+            return {
+                row["Pokemon"].strip().casefold(): row
+                for row in csv.DictReader(f)
+                if row["Pokemon"].strip()
+            }
 
     def resolve_pokemon_name(self, name: str) -> str | None:
         """Resolve English, localized, or romanized Pokémon input."""
@@ -2523,6 +2535,48 @@ class PokéTwoNamingBot(commands.Cog):
     async def ping(self, ctx):
         """Check if the bot is responsive"""
         await ctx.send(f"Pong! {self.bot.latency * 1000:.2f}ms")
+
+    @commands.command(name="sr")
+    async def spawn_rate_command(self, ctx, *, pokemon_name: str = ""):
+        """Show a Pokémon's Pokétwo spawn rate and artwork."""
+        pokemon_input = pokemon_name.strip()
+        if not pokemon_input:
+            await ctx.send("Usage: `v!sr <pokemon>`")
+            return
+
+        spawn_data = self.pokemon_spawn_chances.get(pokemon_input.casefold())
+        if spawn_data is None:
+            resolved_name = self.resolve_pokemon_name(pokemon_input)
+            if resolved_name is not None:
+                spawn_data = self.pokemon_spawn_chances.get(
+                    resolved_name.casefold()
+                )
+        if spawn_data is None:
+            await ctx.send(f"❌ Unknown Pokémon: `{pokemon_input}`")
+            return
+
+        pokemon_name = spawn_data["Pokemon"]
+        embed = discord.Embed(
+            title=pokemon_name,
+            color=discord.Color.blurple(),
+        )
+        embed.add_field(
+            name="Spawn rate",
+            value=(
+                f"{spawn_data['Chance']} "
+                f"({spawn_data['Chance percentage']})"
+            ),
+            inline=False,
+        )
+        sprite_id = self.pokemon_sprite_ids.get(pokemon_name, spawn_data["Dex"])
+        embed.set_thumbnail(
+            url=(
+                "https://raw.githubusercontent.com/PokeAPI/sprites/master/"
+                "sprites/pokemon/other/official-artwork/"
+                f"{sprite_id}.png"
+            )
+        )
+        await ctx.send(embed=embed)
 
     @commands.command(name="support")
     async def support(self, ctx):

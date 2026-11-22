@@ -16,6 +16,7 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 | `v!ping` | `v!ping` | Check bot status and latency |
 | `v!support` | `v!support` | Show the optional GoFundMe support link |
 | `v!tz <day\|night\|dawn\|dusk>` | `v!tz night` | Find one place in that local-time phase and get a Pokétwo timezone command |
+| `v!sr <pokemon>` | `v!sr Pikachu` | Show a Pokémon's spawn rate and artwork |
 | `v!api` | `v!api` | Display API and spawn-recognition performance |
 | `v!servers` | `v!servers` | List every connected Discord server and ID |
 | `v!premium` | `v!premium` | Show the current server's premium tier |
