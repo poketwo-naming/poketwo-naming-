@@ -14,6 +14,7 @@ import os
 import re
 from time import perf_counter, time
 from typing import cast
+from urllib.parse import quote
 from zipfile import ZIP_DEFLATED, ZipFile
 from zoneinfo import ZoneInfo
 
@@ -44,6 +45,10 @@ TRAINING_COLLECTION_FILE = "pokemon_images/new_training_images.json"
 MODEL_READ_VERSION = "V2.0.0"
 TRAINING_REVIEWER_USER_IDS = {217819108329259008}
 BOT_STATE_FILE = os.getenv("BOT_STATE_FILE", "bot_state.json")
+CUSTOM_SPRITE_BASE_URL = (
+    "https://raw.githubusercontent.com/"
+    "poketwo-naming/poketwo-naming-/main/pokemon_sprites"
+)
 PREMIUM_MAIN_GUILD_ID = 1530949341013868635
 REVIEW_CONFIDENCE_THRESHOLD = float(
     os.getenv("REVIEW_CONFIDENCE_THRESHOLD", "50")
@@ -2397,30 +2402,37 @@ class PokéTwoNamingBot(commands.Cog):
                 f"{pokemon_name}.png",
             )
             if os.path.isfile(custom_sprite_path):
-                embed.set_thumbnail(url="attachment://pokemon.png")
+                sprite_filename = quote(f"{pokemon_name}.png")
+                embed.set_thumbnail(
+                    url=f"{CUSTOM_SPRITE_BASE_URL}/{sprite_filename}",
+                )
                 send_kwargs = {
                     "content": content,
                     "embed": embed,
-                    "file": discord.File(custom_sprite_path, filename="pokemon.png"),
                 }
             elif pokemon_name in CUSTOM_SPRITE_IDENTIFIERS:
-                thumbnail_buffer = BytesIO()
-                with Image.open(BytesIO(image_data)) as image:
-                    image.convert("RGB").save(
-                        thumbnail_buffer,
-                        format="WEBP",
-                        quality=85,
-                    )
-                thumbnail_buffer.seek(0)
-                embed.set_thumbnail(url="attachment://pokemon.webp")
-                send_kwargs = {
-                    "content": content,
-                    "embed": embed,
-                    "file": discord.File(
-                        thumbnail_buffer,
-                        filename="pokemon.webp",
-                    ),
-                }
+                spawn_image_url = self.spawn_image_url(message)
+                if spawn_image_url is not None:
+                    embed.set_thumbnail(url=spawn_image_url)
+                    send_kwargs = {"content": content, "embed": embed}
+                else:
+                    thumbnail_buffer = BytesIO()
+                    with Image.open(BytesIO(image_data)) as image:
+                        image.convert("RGB").save(
+                            thumbnail_buffer,
+                            format="WEBP",
+                            quality=85,
+                        )
+                    thumbnail_buffer.seek(0)
+                    embed.set_thumbnail(url="attachment://pokemon.webp")
+                    send_kwargs = {
+                        "content": content,
+                        "embed": embed,
+                        "file": discord.File(
+                            thumbnail_buffer,
+                            filename="pokemon.webp",
+                        ),
+                    }
             else:
                 sprite_id = self.pokemon_sprite_ids.get(pokemon_name)
                 if sprite_id is not None:
@@ -2486,6 +2498,20 @@ class PokéTwoNamingBot(commands.Cog):
         with Image.open(BytesIO(image_data)) as image:
             return self.recognizer.recognize(image)
 
+    @staticmethod
+    def spawn_image_url(message):
+        """Return the original Discord URL for a spawn image."""
+        for attachment in getattr(message, "attachments", []):
+            if (attachment.content_type or "").startswith("image/"):
+                return attachment.url
+
+        for embed in getattr(message, "embeds", []):
+            if embed.image and embed.image.url:
+                return embed.image.url
+            if embed.thumbnail and embed.thumbnail.url:
+                return embed.thumbnail.url
+        return None
+
     async def _get_spawn_image(self, message):
         """Return the spawn image bytes and download duration."""
         started = perf_counter()
@@ -2493,15 +2519,7 @@ class PokéTwoNamingBot(commands.Cog):
             if (attachment.content_type or "").startswith("image/"):
                 return await attachment.read(), perf_counter() - started
 
-        image_url = None
-        for embed in message.embeds:
-            if embed.image and embed.image.url:
-                image_url = embed.image.url
-                break
-            if embed.thumbnail and embed.thumbnail.url:
-                image_url = embed.thumbnail.url
-                break
-
+        image_url = self.spawn_image_url(message)
         if image_url is None:
             return None, perf_counter() - started
 

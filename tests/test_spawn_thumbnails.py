@@ -65,6 +65,43 @@ class SpawnThumbnailTests(unittest.IsolatedAsyncioTestCase):
                 )
                 self.assertEqual(sent["file"].filename, "pokemon.webp")
 
+    async def test_custom_variant_reuses_spawn_url_without_uploading_file(self):
+        self.message.attachments = []
+        self.message.embeds = [
+            SimpleNamespace(
+                image=SimpleNamespace(url="https://cdn.example/spawn.png"),
+                thumbnail=SimpleNamespace(url=None),
+            )
+        ]
+        self.recognize.return_value = ("Mosslax", 99.0, 0.02)
+
+        with patch("bot.os.path.isfile", return_value=False):
+            await self.cog.handle_poketwo_spawn(self.message)
+
+        sent = self.channel.send.await_args.kwargs
+        self.assertEqual(
+            sent["embed"].thumbnail.url,
+            "https://cdn.example/spawn.png",
+        )
+        self.assertNotIn("file", sent)
+
+    async def test_local_custom_sprite_uses_remote_url_without_uploading_file(self):
+        self.recognize.return_value = ("Peakychu", 99.0, 0.02)
+
+        with patch("bot.os.path.isfile", return_value=True):
+            await self.cog.handle_poketwo_spawn(self.message)
+
+        sent = self.channel.send.await_args.kwargs
+        self.assertEqual(
+            sent["embed"].thumbnail.url,
+            (
+                "https://raw.githubusercontent.com/"
+                "poketwo-naming/poketwo-naming-/main/"
+                "pokemon_sprites/Peakychu.png"
+            ),
+        )
+        self.assertNotIn("file", sent)
+
     async def test_normal_spawn_records_network_timings(self):
         self.recognize.return_value = ("Pikachu", 99.0, 0.02)
         self.cog.pokemon_sprite_ids["Pikachu"] = 25
