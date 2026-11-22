@@ -89,7 +89,8 @@ prevent the report. With no prediction, only a reserve of the name in the catch
 is used and the report notes that the form is unverified. Predictions are
 recognition guesses, not guarantees. Submitted reports mention the catcher and
 reporter in channel `1532512015703085147`, with the catch link and trade thread
-`1538294047095922748`.
+`1538294047095922748`. If a report fails unexpectedly, Vivillon replies with an
+error and logs the exception for troubleshooting.
 
 Reserve categories `gmax`, `eevos`, and `paradox` cost 35,000 PC; `rare`,
 `regional`, and `events` cost 45,000 PC. The higher price applies when

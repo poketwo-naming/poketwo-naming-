@@ -9,6 +9,7 @@ from io import BytesIO
 import asyncio
 import csv
 import json
+import logging
 import os
 import re
 from time import perf_counter, time
@@ -2685,11 +2686,11 @@ class PokéTwoNamingBot(commands.Cog):
             return None
         return pokemon_name, reserved_user_ids
 
-    def report_species_id(self, pokemon_name: str) -> int | None:
-        """Return a Pokémon's species number, including supported event forms."""
+    def report_species_id(self, pokemon_name: str) -> int | str | None:
+        """Return a Pokémon's species identifier, including event forms."""
         species_id = getattr(self, "pokemon_species", {}).get(pokemon_name)
         if species_id is not None:
-            return int(species_id)
+            return species_id
         spawn_data = self.pokemon_spawn_chances.get(pokemon_name.casefold())
         if spawn_data is not None:
             return int(spawn_data["Dex"])
@@ -3072,6 +3073,15 @@ class PokéTwoNamingBot(commands.Cog):
             await ctx.send("❌ I could not send the report; check the bot logs.")
             return
         await ctx.send("✅ Your stolen-reserve report was submitted.")
+
+    @report_stolen_reserve.error
+    async def report_stolen_reserve_error(self, ctx, error):
+        """Make unexpected report failures visible to the user and in logs."""
+        logging.getLogger(__name__).error(
+            "Stolen-reserve report failed",
+            exc_info=(type(error), error, error.__traceback__),
+        )
+        await ctx.send("❌ The report could not be completed. Check the bot logs.")
 
     @commands.command(name="ping")
     async def ping(self, ctx):

@@ -1,8 +1,10 @@
+import json
 import unittest
 from types import SimpleNamespace
 from typing import Protocol, cast
 from unittest.mock import AsyncMock
 
+import numpy as np
 from discord.ext import commands
 
 from bot import POKETWO_BOT_ID, PokéTwoNamingBot
@@ -188,6 +190,17 @@ class ReserveReportTests(unittest.IsolatedAsyncioTestCase):
             "✅ Your stolen-reserve report was submitted."
         )
 
+    async def test_unexpected_report_error_is_logged_and_reported(self):
+        error = commands.CommandInvokeError(ValueError("test failure"))
+
+        with self.assertLogs("bot", level="ERROR") as logs:
+            await self.cog.report_stolen_reserve_error(self.ctx, error)
+
+        self.assertIn("test failure", "\n".join(logs.output))
+        self.ctx.send.assert_awaited_once_with(
+            "❌ The report could not be completed. Check the bot logs."
+        )
+
     async def test_unlinked_catch_uses_exact_vivillon_reserve_and_report_format(self):
         self.cog.class_names = {"eevee": "Eevee", "partner eevee": "Partner Eevee"}
         self.cog.pokemon_species = {"Eevee": 133, "Partner Eevee": 133}
@@ -220,6 +233,27 @@ class ReserveReportTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("everyone", allowed_mentions["parse"])
         self.assertNotIn("roles", allowed_mentions["parse"])
         self.report_spawn_evidence.assert_not_awaited()
+        self.ctx.send.assert_awaited_once_with(
+            "✅ Your stolen-reserve report was submitted."
+        )
+
+    async def test_unlinked_eevee_report_with_actual_species_data(self):
+        with np.load("pokemon_image_model.npz", allow_pickle=False) as model:
+            self.cog.class_names = {
+                name.casefold(): name for name in model["classes"]
+            }
+        with open("pokemon_species.json", encoding="utf-8") as file:
+            self.cog.pokemon_species = json.load(file)
+        self.cog.pokemon_spawn_chances = self.cog.load_pokemon_spawn_chances()
+        self.cog.bot_state["reserves"]["123"] = {"Eevee": ["456"]}
+        self.catch.content = (
+            "Congratulations <@999>! You caught a Level 10 Eevee ♂ (44.09%)!"
+        )
+        self.catch.reference = None
+
+        await self.submit_report()
+
+        self.report_channel.send.assert_awaited_once()
         self.ctx.send.assert_awaited_once_with(
             "✅ Your stolen-reserve report was submitted."
         )
