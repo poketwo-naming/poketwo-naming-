@@ -2738,6 +2738,23 @@ class PokéTwoNamingBot(commands.Cog):
             return None
         return await ctx.channel.fetch_message(message_id)
 
+    async def referenced_spawn_message(self, ctx, catch_message):
+        """Follow a catch's reference chain until its Pokétwo spawn is found."""
+        reference = getattr(catch_message, "reference", None)
+        seen_message_ids = set()
+        for _ in range(5):
+            message = await self.referenced_message(ctx, reference)
+            if message is None or message.id in seen_message_ids:
+                return None
+            seen_message_ids.add(message.id)
+            if (
+                message.author.id == POKETWO_BOT_ID
+                and self.is_spawn_message(message)
+            ):
+                return message
+            reference = getattr(message, "reference", None)
+        return None
+
     async def report_spawn_evidence(self, channel, spawn) -> list:
         """Collect other bots' reserve evidence replying to one Pokétwo spawn."""
         evidence = []
@@ -2876,10 +2893,7 @@ class PokéTwoNamingBot(commands.Cog):
             return
 
         try:
-            spawn_message = await self.referenced_message(
-                ctx,
-                getattr(catch_message, "reference", None),
-            )
+            spawn_message = await self.referenced_spawn_message(ctx, catch_message)
         except discord.NotFound:
             spawn_message = None
         except discord.Forbidden:

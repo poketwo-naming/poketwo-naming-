@@ -168,8 +168,14 @@ class ReserveReportTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(channel.history_kwargs["limit"], 500)
         self.assertNotIn("before", channel.history_kwargs)
 
-    async def test_report_includes_catch_link_thread_and_fixed_price(self):
+    async def test_report_follows_catch_command_to_spawn(self):
         self.cog.bot_state["categories"]["123"] = {"rare": ["Pikachu"]}
+        catch_command = SimpleNamespace(
+            id=102,
+            author=SimpleNamespace(id=456),
+            reference=SimpleNamespace(resolved=self.spawn),
+        )
+        self.catch.reference = SimpleNamespace(resolved=catch_command)
 
         await self.submit_report()
 
