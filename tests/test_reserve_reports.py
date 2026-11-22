@@ -234,7 +234,7 @@ class ReserveReportTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("<@999> trade <@456> in <#1538294047095922748>", report)
         self.assertIn("https://discord.com/channels/123/200/101", report)
         self.assertIn("form", report.casefold())
-        self.assertIn("Other naming-bot reserves could not be verified.", report)
+        self.assertNotIn("Other naming-bot reserves could not be verified.", report)
         allowed_mentions = self.report_channel.send.await_args.kwargs[
             "allowed_mentions"
         ].to_dict()

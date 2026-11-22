@@ -3038,12 +3038,11 @@ class PokéTwoNamingBot(commands.Cog):
                 f"https://discord.com/channels/{ctx.guild.id}/"
                 f"{catch_message.channel.id}/{catch_message.id}"
             )
-            notes = []
-            if form_unverified:
-                notes.append("The catch's form could not be verified.")
-            if spawn_message is None:
-                notes.append("Other naming-bot reserves could not be verified.")
-            note_text = f"\n{' '.join(notes)}" if notes else ""
+            note_text = (
+                "\nThe catch's form could not be verified."
+                if form_unverified
+                else ""
+            )
             await report_channel.send(
                 f"<@{catcher_id}> hey you stole a reserved Pokémon\n"
                 f"Pokémon: {pokemon_name}\n"
