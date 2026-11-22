@@ -163,6 +163,15 @@ class SpawnImageRecognitionTests(unittest.TestCase):
                 )
                 self.assertEqual(recognizer.recognize(ImageOps.mirror(image))[0], expected)
 
+    def test_reported_rattata_spawn_image(self):
+        path = Path("pokemon_images/training_data/Rattata/image copy.png")
+        if not path.exists():
+            self.skipTest("Reported Rattata spawn image is not available")
+        recognizer = PokemonImageRecognizer()
+        with Image.open(path) as image:
+            for variant in (image, image.resize((384, 240)), ImageOps.mirror(image)):
+                self.assertEqual(recognizer.recognize(variant)[0], "Rattata")
+
 
 if __name__ == "__main__":
     unittest.main()
