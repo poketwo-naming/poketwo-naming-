@@ -48,6 +48,7 @@ class SupportCommandTests(unittest.IsolatedAsyncioTestCase):
         welcome, support = sent["embeds"]
         self.assertIn("Thank you for inviting Vivillon", welcome.description)
         self.assertIn("Pokétwo spawns", welcome.description)
+        self.assertIn("Use `v!help` to see what all of my commands do.", welcome.description)
         self.assertIn("https://discord.gg/butterflygarden", welcome.description)
         self.assertIn("open a ticket", welcome.description)
         self.assertIn("issues or questions", welcome.description)

@@ -2175,6 +2175,7 @@ class PokéTwoNamingBot(commands.Cog):
                 "to be here.\n\n"
                 "Vivillon identifies Pokétwo spawns and shows their names to help "
                 "you catch them.\n\n"
+                "Use `v!help` to see what all of my commands do.\n\n"
                 "To enable naming in your server, join the "
                 "[Butterfly Garden main server](https://discord.gg/butterflygarden) "
                 "and open a ticket. If you have any issues or questions, you can "
