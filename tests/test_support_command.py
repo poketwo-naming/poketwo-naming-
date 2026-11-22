@@ -1,6 +1,6 @@
 import unittest
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock, patch
 
 import discord
 
@@ -28,6 +28,75 @@ class SupportCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(button, discord.ui.Button)
         self.assertEqual(button.label, "Donate on GoFundMe")
         self.assertEqual(button.url, "https://gofund.me/40e29e0bf")
+
+    async def test_guild_join_sends_welcome_then_support_in_system_channel(self):
+        cog = PokéTwoNamingBot.__new__(PokéTwoNamingBot)
+        permissions = SimpleNamespace(
+            view_channel=True, send_messages=True, embed_links=True
+        )
+        channel = SimpleNamespace(
+            permissions_for=Mock(return_value=permissions), send=AsyncMock()
+        )
+        guild = SimpleNamespace(
+            id=123, me=object(), system_channel=channel, text_channels=[channel]
+        )
+
+        await cog.on_guild_join(guild)
+
+        sent = channel.send.await_args.kwargs
+        self.assertEqual(len(sent["embeds"]), 2)
+        welcome, support = sent["embeds"]
+        self.assertIn("Pokétwo spawns", welcome.description)
+        self.assertIn("https://discord.gg/butterflygarden", welcome.description)
+        self.assertIn("open a ticket", welcome.description)
+        self.assertEqual(support.title, "Support Vivillon")
+        self.assertEqual(sent["view"].children[0].url, "https://gofund.me/40e29e0bf")
+        channel.send.assert_awaited_once()
+
+    async def test_guild_join_falls_back_when_system_channel_fails(self):
+        cog = PokéTwoNamingBot.__new__(PokéTwoNamingBot)
+        permissions = SimpleNamespace(
+            view_channel=True, send_messages=True, embed_links=True
+        )
+        error = discord.Forbidden(
+            SimpleNamespace(status=403, reason="Forbidden"), "Missing permissions"
+        )
+        system = SimpleNamespace(
+            id=1, permissions_for=Mock(return_value=permissions),
+            send=AsyncMock(side_effect=error),
+        )
+        fallback = SimpleNamespace(
+            id=2, permissions_for=Mock(return_value=permissions), send=AsyncMock()
+        )
+        guild = SimpleNamespace(
+            id=123, me=object(), system_channel=system,
+            text_channels=[system, fallback],
+        )
+
+        with patch("builtins.print"):
+            await cog.on_guild_join(guild)
+
+        system.send.assert_awaited_once()
+        fallback.send.assert_awaited_once()
+
+    async def test_guild_join_logs_when_no_channel_has_permissions(self):
+        cog = PokéTwoNamingBot.__new__(PokéTwoNamingBot)
+        channel = SimpleNamespace(
+            permissions_for=Mock(return_value=SimpleNamespace(
+                view_channel=True, send_messages=True, embed_links=False
+            )),
+            send=AsyncMock(),
+        )
+        guild = SimpleNamespace(
+            id=123, me=object(), system_channel=None, text_channels=[channel]
+        )
+
+        with patch("builtins.print") as log:
+            await cog.on_guild_join(guild)
+
+        channel.send.assert_not_awaited()
+        log.assert_called_once()
+        self.assertIn("guild 123", log.call_args.args[0])
 
 
 if __name__ == "__main__":

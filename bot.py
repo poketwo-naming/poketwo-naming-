@@ -2154,6 +2154,51 @@ class PokéTwoNamingBot(commands.Cog):
         return sum(channel_id in channel_ids for channel_id in self.active_incenses)
 
     @commands.Cog.listener()
+    async def on_guild_join(self, guild):
+        """Introduce naming and support in an accessible server channel."""
+        welcome = discord.Embed(
+            title="Welcome to Vivillon",
+            description=(
+                "Vivillon identifies Pokétwo spawns and shows their names to help "
+                "you catch them.\n\n"
+                "To enable naming in your server, join the "
+                "[Butterfly Garden main server](https://discord.gg/butterflygarden) "
+                "and open a ticket."
+            ),
+        )
+        support_embed, support_view = self.build_support_message()
+        channels = list(guild.text_channels)
+        if guild.system_channel is not None:
+            channels = [guild.system_channel] + [
+                channel for channel in channels if channel != guild.system_channel
+            ]
+        if guild.me is None:
+            print(
+                f"Could not send welcome message in guild {guild.id}: "
+                "bot member unavailable."
+            )
+            return
+        for channel in channels:
+            permissions = channel.permissions_for(guild.me)
+            if not (
+                permissions.view_channel
+                and permissions.send_messages
+                and permissions.embed_links
+            ):
+                continue
+            try:
+                await channel.send(embeds=[welcome, support_embed], view=support_view)
+                return
+            except discord.HTTPException as error:
+                print(
+                    f"Could not send welcome message in channel {channel.id}: {error}"
+                )
+        print(
+            f"Could not send welcome message in guild {guild.id}: "
+            "no usable text channel."
+        )
+
+    @commands.Cog.listener()
     async def on_message(self, message):
         """Listen for Pokétwo spawn messages"""
         # Ignore bot's own messages
@@ -3056,9 +3101,9 @@ class PokéTwoNamingBot(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.command(name="support")
-    async def support(self, ctx):
-        """Show the optional GoFundMe support link."""
+    @staticmethod
+    def build_support_message():
+        """Build the support embed and its donation button."""
         embed = discord.Embed(
             title="Support Vivillon",
             description=(
@@ -3075,6 +3120,12 @@ class PokéTwoNamingBot(commands.Cog):
                 style=discord.ButtonStyle.link,
             )
         )
+        return embed, view
+
+    @commands.command(name="support")
+    async def support(self, ctx):
+        """Show the optional GoFundMe support link."""
+        embed, view = self.build_support_message()
         await ctx.reply(embed=embed, view=view)
 
     @commands.command(name="tz")
