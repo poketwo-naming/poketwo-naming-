@@ -61,6 +61,9 @@ Every `v!` command also works with a capital `V!` prefix.
 | `v!help [page]` | `v!help 1` | Paginated command explanations |
 | `v!commands [page]` | `v!commands 1` | Categorized command list |
 
+In grabbed lists, `Booster` is treated as a heading rather than Flareon's
+localized name when a Pokémon follows the member mention.
+
 In channel `1531476097970212915`, spawn guesses below 50% confidence include
 **Yes/No** review buttons. Yes saves the image under the predicted Pokémon
 folder. No opens a modal for the correct Pokémon name, creating that folder

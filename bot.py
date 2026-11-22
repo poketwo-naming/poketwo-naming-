@@ -1900,6 +1900,14 @@ class PokéTwoNamingBot(commands.Cog):
                     "" if previous_segment_assigned
                     else line[prefix_start : mention.start()]
                 )
+                end = (
+                    mentions[index + 1].start()
+                    if index + 1 < len(mentions)
+                    else len(line)
+                )
+                following_pokemon = self.pokemon_names_from_grab_segment(
+                    line[mention.end() : end]
+                )
                 if guild_id is not None:
                     prefix_segments = re.split(
                         r"\s*(?:\||—|–|;|/|,|\s-\s)\s*",
@@ -1942,7 +1950,15 @@ class PokéTwoNamingBot(commands.Cog):
                     )
                     if entry not in entries:
                         entries.append(entry)
-                else:
+                elif not (
+                    following_pokemon
+                    and re.fullmatch(
+                        r"\s*\*{0,2}booster(?:\s+\d+)?\*{0,2}"
+                        r"\s*[-–—:]\s*",
+                        prefix,
+                        flags=re.IGNORECASE,
+                    )
+                ):
                     pokemon_names = self.pokemon_names_from_grab_segment(
                         prefix
                     )
@@ -1958,16 +1974,8 @@ class PokéTwoNamingBot(commands.Cog):
                         )
                         if entry not in entries:
                             entries.append(entry)
-                end = (
-                    mentions[index + 1].start()
-                    if index + 1 < len(mentions)
-                    else len(line)
-                )
-                pokemon_names = self.pokemon_names_from_grab_segment(
-                    line[mention.end() : end]
-                )
-                previous_segment_assigned = bool(pokemon_names)
-                for pokemon_name, requested_all_forms, custom_emoji in pokemon_names:
+                previous_segment_assigned = bool(following_pokemon)
+                for pokemon_name, requested_all_forms, custom_emoji in following_pokemon:
                     entry = (
                         mention.group(1),
                         str(pokemon_name),

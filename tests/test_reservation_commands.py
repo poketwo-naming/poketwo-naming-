@@ -208,6 +208,29 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
             [("Flareon", False, "")],
         )
 
+    def test_grab_parser_does_not_add_flareon_for_booster_heading(self):
+        self.cog.class_names.update({"yamper": "Yamper", "flareon": "Flareon"})
+        self.cog.pokemon_aliases = {"booster": "Flareon"}
+        message = SimpleNamespace(
+            guild=SimpleNamespace(id=123),
+            content=(
+                "**Booster** — <@456> - Yamper\n"
+                "Booster 2 — <@789> - Yamper\n"
+                "Booster — <@1234>"
+            ),
+            embeds=[],
+            message_snapshots=[],
+        )
+
+        self.assertEqual(
+            self.cog.parse_grab_list(message, 123),
+            [
+                ("456", "Yamper", False, False, ""),
+                ("789", "Yamper", False, False, ""),
+                ("1234", "Flareon", False, False, ""),
+            ],
+        )
+
     def test_grab_parser_accepts_separator_without_space_after_hyphen(self):
         self.cog.class_names.update({"ditto": "Ditto", "ho-oh": "Ho-Oh"})
         message = SimpleNamespace(
