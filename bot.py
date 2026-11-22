@@ -2159,11 +2159,14 @@ class PokéTwoNamingBot(commands.Cog):
         welcome = discord.Embed(
             title="Welcome to Vivillon",
             description=(
+                "Thank you for inviting Vivillon to your server! I'm grateful "
+                "to be here.\n\n"
                 "Vivillon identifies Pokétwo spawns and shows their names to help "
                 "you catch them.\n\n"
                 "To enable naming in your server, join the "
                 "[Butterfly Garden main server](https://discord.gg/butterflygarden) "
-                "and open a ticket."
+                "and open a ticket. If you have any issues or questions, you can "
+                "also open a ticket there for help."
             ),
         )
         support_embed, support_view = self.build_support_message()

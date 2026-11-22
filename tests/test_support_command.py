@@ -46,9 +46,12 @@ class SupportCommandTests(unittest.IsolatedAsyncioTestCase):
         sent = channel.send.await_args.kwargs
         self.assertEqual(len(sent["embeds"]), 2)
         welcome, support = sent["embeds"]
+        self.assertIn("Thank you for inviting Vivillon", welcome.description)
         self.assertIn("Pokétwo spawns", welcome.description)
         self.assertIn("https://discord.gg/butterflygarden", welcome.description)
         self.assertIn("open a ticket", welcome.description)
+        self.assertIn("issues or questions", welcome.description)
+        self.assertIn("open a ticket there for help", welcome.description)
         self.assertEqual(support.title, "Support Vivillon")
         self.assertEqual(sent["view"].children[0].url, "https://gofund.me/40e29e0bf")
         channel.send.assert_awaited_once()

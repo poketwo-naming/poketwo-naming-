@@ -12,8 +12,9 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 When Vivillon joins a server, it posts a naming introduction and the optional
 support embed in the system channel or another accessible text channel. To
 enable naming, join [Butterfly Garden](https://discord.gg/butterflygarden)
-(server ID `1530949341013868635`) and open a ticket. The bot needs permission
-to view the channel, send messages, and embed links to post the introduction.
+(server ID `1530949341013868635`) and open a ticket. You can also open a ticket
+there for issues or questions. The bot needs permission to view the channel,
+send messages, and embed links to post the introduction.
 
 ## Commands
 
