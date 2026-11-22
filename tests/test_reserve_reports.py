@@ -18,6 +18,14 @@ class ReportCommandCallback(Protocol):
     ) -> None: ...
 
 
+class ReportErrorCallback(Protocol):
+    async def __call__(
+        self,
+        ctx: commands.Context,
+        error: commands.CommandError,
+    ) -> None: ...
+
+
 class ReserveReportTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.cog = PokéTwoNamingBot.__new__(PokéTwoNamingBot)
@@ -192,9 +200,10 @@ class ReserveReportTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_unexpected_report_error_is_logged_and_reported(self):
         error = commands.CommandInvokeError(ValueError("test failure"))
+        callback = cast(ReportErrorCallback, self.cog.report_stolen_reserve_error)
 
         with self.assertLogs("bot", level="ERROR") as logs:
-            await self.cog.report_stolen_reserve_error(self.ctx, error)
+            await callback(cast(commands.Context, self.ctx), error)
 
         self.assertIn("test failure", "\n".join(logs.output))
         self.ctx.send.assert_awaited_once_with(
