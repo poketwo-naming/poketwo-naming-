@@ -162,11 +162,12 @@ class ReserveReportTests(unittest.IsolatedAsyncioTestCase):
             self.cog,
             channel,
             self.spawn,
+            self.catch,
         )
 
         self.assertEqual(evidence, [("Pikachu", {"456"})])
         self.assertEqual(channel.history_kwargs["limit"], 500)
-        self.assertNotIn("before", channel.history_kwargs)
+        self.assertEqual(channel.history_kwargs["before"], self.catch)
 
     async def test_report_follows_catch_command_to_spawn(self):
         self.cog.bot_state["categories"]["123"] = {"rare": ["Pikachu"]}
@@ -186,6 +187,99 @@ class ReserveReportTests(unittest.IsolatedAsyncioTestCase):
         self.ctx.send.assert_awaited_once_with(
             "✅ Your stolen-reserve report was submitted."
         )
+
+    async def test_unlinked_catch_uses_exact_vivillon_reserve_and_report_format(self):
+        self.cog.class_names = {"eevee": "Eevee", "partner eevee": "Partner Eevee"}
+        self.cog.pokemon_species = {"Eevee": 133, "Partner Eevee": 133}
+        self.cog.pokemon_spawn_chances = {
+            "eevee": {
+                "Pokemon": "Eevee",
+                "Chance": "1/899",
+                "Chance percentage": "0.1112%",
+                "Dex": "133",
+            }
+        }
+        self.cog.bot_state["reserves"]["123"] = {"Eevee": ["456"]}
+        self.catch.content = "Congratulations <@999>! You caught a Level 10 Eevee!"
+        self.catch.reference = None
+
+        await self.submit_report()
+
+        report = self.report_channel.send.await_args.args[0]
+        self.assertIn("<@999> hey you stole a reserved Pokémon", report)
+        self.assertIn("Pokémon: Eevee", report)
+        self.assertIn("PC: 15,000 PC", report)
+        self.assertIn("<@999> trade <@456> in <#1538294047095922748>", report)
+        self.assertIn("https://discord.com/channels/123/200/101", report)
+        self.assertIn("form", report.casefold())
+        self.assertIn("Other naming-bot reserves could not be verified.", report)
+        allowed_mentions = self.report_channel.send.await_args.kwargs[
+            "allowed_mentions"
+        ].to_dict()
+        self.assertEqual(allowed_mentions["users"], [999, 456])
+        self.assertNotIn("everyone", allowed_mentions["parse"])
+        self.assertNotIn("roles", allowed_mentions["parse"])
+        self.report_spawn_evidence.assert_not_awaited()
+        self.ctx.send.assert_awaited_once_with(
+            "✅ Your stolen-reserve report was submitted."
+        )
+
+    async def test_reporter_without_reserve_cannot_report_unlinked_catch(self):
+        self.catch.reference = None
+        self.ctx.author.id = 789
+
+        await self.submit_report()
+
+        self.report_channel.send.assert_not_awaited()
+        self.assertIn("reserve", self.ctx.send.await_args.args[0].casefold())
+
+    async def test_unlinked_base_catch_does_not_use_form_only_reserve(self):
+        self.cog.class_names.update({
+            "applin": "Applin",
+            "enchanted applin": "Enchanted Applin",
+        })
+        self.cog.pokemon_species.update({"Applin": 840, "Enchanted Applin": 840})
+        self.cog.pokemon_spawn_chances["applin"] = {
+            "Pokemon": "Applin",
+            "Chance": "1/899",
+            "Chance percentage": "0.1112%",
+            "Dex": "840",
+        }
+        self.cog.bot_state["reserves"]["123"] = {"Enchanted Applin": ["456"]}
+        self.catch.content = "Congratulations <@999>! You caught an Applin!"
+        self.catch.reference = None
+
+        await self.submit_report()
+
+        self.report_channel.send.assert_not_awaited()
+        self.assertIn("reserve", self.ctx.send.await_args.args[0].casefold())
+
+    async def test_report_fetches_uncached_destination_channel(self):
+        self.catch.reference = None
+        self.cog.bot.get_channel = lambda channel_id: None
+        self.cog.bot.fetch_channel = AsyncMock(return_value=self.report_channel)
+
+        await self.submit_report()
+
+        self.cog.bot.fetch_channel.assert_awaited_once_with(1532512015703085147)
+        self.report_channel.send.assert_awaited_once()
+
+    async def test_reserved_catcher_cannot_be_reported(self):
+        self.catch.reference = None
+        self.cog.bot_state["reserves"]["123"]["Pikachu"].append("999")
+
+        await self.submit_report()
+
+        self.report_channel.send.assert_not_awaited()
+        self.assertIn("reserved", self.ctx.send.await_args.args[0].casefold())
+
+    async def test_naming_bot_evidence_can_show_catcher_is_reserved(self):
+        self.report_spawn_evidence.return_value = [("Pikachu", {"999"})]
+
+        await self.submit_report()
+
+        self.report_channel.send.assert_not_awaited()
+        self.assertIn("reserved", self.ctx.send.await_args.args[0].casefold())
 
     async def test_report_accepts_spawn_after_poketwo_edits_its_text(self):
         edited_spawn = SimpleNamespace(

@@ -2805,12 +2805,13 @@ class PokéTwoNamingBot(commands.Cog):
             reference = getattr(message, "reference", None)
         return None
 
-    async def report_spawn_evidence(self, channel, spawn) -> list:
+    async def report_spawn_evidence(self, channel, spawn, catch_message) -> list:
         """Collect other bots' reserve evidence replying to one Pokétwo spawn."""
         evidence = []
         async for message in channel.history(
             limit=500,
             after=spawn,
+            before=catch_message,
             oldest_first=True,
         ):
             reference = getattr(message, "reference", None)
@@ -2955,20 +2956,14 @@ class PokéTwoNamingBot(commands.Cog):
             print(f"Could not fetch the related Pokétwo spawn: {error}")
             await ctx.send("❌ I could not read the spawn for that catch.")
             return
-        if (
-            spawn_message is None
-            or spawn_message.author.id != POKETWO_BOT_ID
-        ):
-            await ctx.send(
-                "❌ I could not find the Pokétwo spawn linked to that catch."
-            )
-            return
-
+        evidence = []
         try:
-            evidence = await self.report_spawn_evidence(
-                ctx.channel,
-                spawn_message,
-            )
+            if spawn_message is not None:
+                evidence = await self.report_spawn_evidence(
+                    ctx.channel,
+                    spawn_message,
+                    catch_message,
+                )
         except discord.Forbidden:
             await ctx.send(
                 "❌ I need permission to read the catch channel's message history."
@@ -2980,6 +2975,7 @@ class PokéTwoNamingBot(commands.Cog):
             return
 
         catch_text = "\n".join(self.report_message_lines(catch_message))
+        form_unverified = False
         if (
             self.report_species_has_custom_forms(pokemon_name)
             and self.report_name_is_species_base(pokemon_name)
@@ -2990,28 +2986,33 @@ class PokéTwoNamingBot(commands.Cog):
                 for name, _user_ids in evidence
                 if self.same_report_species(name, pokemon_name)
             }
-            if len(identified_forms) != 1:
+            if len(identified_forms) > 1:
                 await ctx.send(
                     "❌ I could not identify one matching form from naming-bot "
                     "replies; no report was sent."
                 )
                 return
-            pokemon_name = next(iter(identified_forms.values()))
+            if identified_forms:
+                pokemon_name = next(iter(identified_forms.values()))
+            else:
+                form_unverified = True
 
         reporter_id = str(ctx.author.id)
-        has_vivillon_reserve = reporter_id in self.reserve_user_ids(
-            ctx.guild.id,
-            pokemon_name,
+        reserved_user_ids = set(
+            self.reserve_user_ids(ctx.guild.id, pokemon_name)
         )
-        has_naming_bot_reserve = any(
-            name.casefold() == pokemon_name.casefold()
-            and reporter_id in user_ids
-            for name, user_ids in evidence
-        )
-        if not (has_vivillon_reserve or has_naming_bot_reserve):
+        for name, user_ids in evidence:
+            if name.casefold() == pokemon_name.casefold():
+                reserved_user_ids.update(user_ids)
+        if reporter_id not in reserved_user_ids:
             await ctx.send(
                 "❌ You need a current Vivillon reserve or a reserve ping on "
-                "that spawn from another naming bot to report this catch."
+                "the linked spawn from another naming bot to report this catch."
+            )
+            return
+        if catcher_id in reserved_user_ids:
+            await ctx.send(
+                "❌ The catcher also has this Pokémon reserved; no report was sent."
             )
             return
 
@@ -3036,13 +3037,27 @@ class PokéTwoNamingBot(commands.Cog):
                 f"https://discord.com/channels/{ctx.guild.id}/"
                 f"{catch_message.channel.id}/{catch_message.id}"
             )
+            notes = []
+            if form_unverified:
+                notes.append("The catch's form could not be verified.")
+            if spawn_message is None:
+                notes.append("Other naming-bot reserves could not be verified.")
+            note_text = f"\n{' '.join(notes)}" if notes else ""
             await report_channel.send(
-                f"**Stolen reserve report**\n"
-                f"Pokémon: **{pokemon_name}** · Price: **{price:,} PC**\n"
-                f"Reported by: <@{ctx.author.id}> · Caught by: <@{catcher_id}>\n"
-                f"Catch: {catch_link}\n"
-                f"Trade thread: <#{RESERVE_TRADE_THREAD_ID}>",
-                allowed_mentions=discord.AllowedMentions.none(),
+                f"<@{catcher_id}> hey you stole a reserved Pokémon\n"
+                f"Pokémon: {pokemon_name}\n"
+                f"PC: {price:,} PC\n"
+                f"<@{catcher_id}> trade <@{reporter_id}> "
+                f"in <#{RESERVE_TRADE_THREAD_ID}>\n"
+                f"Go to catch: {catch_link}{note_text}",
+                allowed_mentions=discord.AllowedMentions(
+                    users=[
+                        discord.Object(id=int(catcher_id)),
+                        discord.Object(id=int(reporter_id)),
+                    ],
+                    roles=False,
+                    everyone=False,
+                ),
             )
         except discord.Forbidden:
             await ctx.send(

@@ -77,14 +77,19 @@ For collections and reserves, `Nidoran male` selects Nidoran♂ and
 To report a stolen reserve, reply to Pokétwo's catch announcement with
 `v!report`. The reporter must have a current Vivillon reserve for that Pokémon
 or be mentioned in another naming bot's reserve ping on the corresponding
-spawn. For Vivillon to use another naming bot's message as evidence, that
-message must reply to the Pokétwo spawn, start with the Pokémon name, and include
-user mentions on a `Reserve pings:` or `Reserved:` line (in its content or
-embed). If the catch names only a species with custom forms, naming-bot replies
-must identify one matching form; missing or conflicting form evidence prevents
-the report. This form identification is a recognition guess, not a guarantee.
-Submitted reports go to channel `1532512015703085147` and include the catch link
-and trade thread `1538294047095922748`.
+spawn. A report is rejected if the catcher also has a known reserve. If no
+spawn is linked to the catch, Vivillon checks its own current reserves against
+the name in the catch; other naming-bot reserves cannot be verified.
+For Vivillon to use another naming bot's message as evidence, that message
+must reply to the linked Pokétwo spawn before the catch, start with the Pokémon
+name, and include user mentions on a `Reserve pings:` or `Reserved:` line
+(in its content or embed). If a catch names only a species with custom forms,
+one matching naming-bot prediction identifies the form; conflicting predictions
+prevent the report. With no prediction, only a reserve of the name in the catch
+is used and the report notes that the form is unverified. Predictions are
+recognition guesses, not guarantees. Submitted reports mention the catcher and
+reporter in channel `1532512015703085147`, with the catch link and trade thread
+`1538294047095922748`.
 
 Reserve categories `gmax`, `eevos`, and `paradox` cost 35,000 PC; `rare`,
 `regional`, and `events` cost 45,000 PC. The higher price applies when
