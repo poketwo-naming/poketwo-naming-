@@ -187,6 +187,25 @@ class ReserveReportTests(unittest.IsolatedAsyncioTestCase):
             "✅ Your stolen-reserve report was submitted."
         )
 
+    async def test_report_accepts_spawn_after_poketwo_edits_its_text(self):
+        edited_spawn = SimpleNamespace(
+            id=self.spawn.id,
+            author=SimpleNamespace(id=POKETWO_BOT_ID),
+            content="This Pokémon was caught!",
+            embeds=[],
+            reference=None,
+        )
+        self.catch.reference = SimpleNamespace(
+            resolved=edited_spawn,
+        )
+
+        await self.submit_report()
+
+        self.report_channel.send.assert_awaited_once()
+        self.ctx.send.assert_awaited_once_with(
+            "✅ Your stolen-reserve report was submitted."
+        )
+
     async def test_custom_species_requires_one_matching_form_prediction(self):
         self.cog.class_names.update({
             "applin": "Applin",

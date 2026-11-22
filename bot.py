@@ -2787,7 +2787,12 @@ class PokéTwoNamingBot(commands.Cog):
         return await ctx.channel.fetch_message(message_id)
 
     async def referenced_spawn_message(self, ctx, catch_message):
-        """Follow a catch's reference chain until its Pokétwo spawn is found."""
+        """Follow a catch's reference chain until its Pokétwo spawn is found.
+
+        Pokétwo can edit a spawn after it has been caught, removing the text
+        that identifies it as a spawn. The message's position in the reply
+        chain is therefore the reliable signal here.
+        """
         reference = getattr(catch_message, "reference", None)
         seen_message_ids = set()
         for _ in range(5):
@@ -2795,10 +2800,7 @@ class PokéTwoNamingBot(commands.Cog):
             if message is None or message.id in seen_message_ids:
                 return None
             seen_message_ids.add(message.id)
-            if (
-                message.author.id == POKETWO_BOT_ID
-                and self.is_spawn_message(message)
-            ):
+            if message.author.id == POKETWO_BOT_ID:
                 return message
             reference = getattr(message, "reference", None)
         return None
@@ -2956,7 +2958,6 @@ class PokéTwoNamingBot(commands.Cog):
         if (
             spawn_message is None
             or spawn_message.author.id != POKETWO_BOT_ID
-            or not self.is_spawn_message(spawn_message)
         ):
             await ctx.send(
                 "❌ I could not find the Pokétwo spawn linked to that catch."
