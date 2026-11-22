@@ -17,6 +17,7 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 | `v!support` | `v!support` | Show the optional GoFundMe support link |
 | `v!tz <day\|night\|dawn\|dusk>` | `v!tz night` | Find one place in that local-time phase and get a Pokétwo timezone command |
 | `v!sr <pokemon>` | `v!sr Pikachu` | Show a Pokémon's spawn rate and artwork |
+| `v!report` | Reply to a Pokétwo catch announcement with `v!report` | Submit a stolen-reserve report when reserve evidence is available |
 | `v!api` | `v!api` | Display API and spawn-recognition performance |
 | `v!servers` | `v!servers` | List every connected Discord server and ID |
 | `v!premium` | `v!premium` | Show the current server's premium tier |
@@ -65,6 +66,30 @@ for all reserving members, or only the mentioned member when `@user` is supplied
 For collections and reserves, `Nidoran male` selects Nidoran♂ and
 `Nidoran female` selects Nidoran♀. Use `v!cl add all Nidoran` or
 `v!r add all Nidoran @user` to add both.
+
+To report a stolen reserve, reply to Pokétwo's catch announcement with
+`v!report`. The reporter must have a current Vivillon reserve for that Pokémon
+or be mentioned in another naming bot's reserve ping on the corresponding
+spawn. For Vivillon to use another naming bot's message as evidence, that
+message must reply to the Pokétwo spawn, start with the Pokémon name, and include
+user mentions on a `Reserve pings:` or `Reserved:` line (in its content or
+embed). If the catch names only a species with custom forms, naming-bot replies
+must identify one matching form; missing or conflicting form evidence prevents
+the report. This form identification is a recognition guess, not a guarantee.
+Submitted reports go to channel `1532512015703085147` and include the catch link
+and trade thread `1538294047095922748`.
+
+Reserve categories `gmax`, `eevos`, and `paradox` cost 35,000 PC; `rare`,
+`regional`, and `events` cost 45,000 PC. The higher price applies when
+categories overlap, and these category prices take precedence over spawn-rate
+prices. Gigantamax catches cost 35,000 PC. Enchanted/Rotten Applin,
+Oracle/Witch Meowscarada, Medusa/Statue Simipour, and Elixir/Cauldron Reuniclus
+cost 45,000 PC. Other Pokémon use their nearest spawn-rate tier, interpolated
+between listed prices and rounded to the nearest 2,500 PC, with a 2,500-PC
+minimum and 50,000-PC maximum. Rates use the denominator in the
+[Pokétwo chance CSV](https://gist.githubusercontent.com/WitherredAway/1bc525b05f4cd52555a2a18c331e0cf9/raw/a9c321427ad935b1de74660c0116731a001140ac/pokemon_chances.csv);
+live rates may differ. Custom forms use their own listed rate when present, or
+their species' rate otherwise. Reports are not sent when a rate is unavailable.
 
 Normal naming output uses a transparent official Pokémon artwork thumbnail
 from PokéAPI, selected for the predicted Pokémon form. The spawn image is still
@@ -190,8 +215,11 @@ Commit `pokemon_image_refinements.npz` afterwards.
 
 1. Go to OAuth2 → URL Generator
 2. Select `bot` scope
-3. Select permissions: `Send Messages`, `Read Messages`, `Embed Links`
+3. Select permissions: `Send Messages`, `Read Message History`, `Embed Links`
 4. Copy and open the generated URL
+
+For stolen-reserve reports, also allow the bot to read message history in the
+catch channel and send messages in channel `1532512015703085147`.
 
 ## Bot Hosting
 

@@ -33,6 +33,8 @@ POKETWO_BOT_ID = 716390085896962058
 MISSINGNO_ALERT_ROLE_ID = 1573065640762151003
 TIMEZONE_ROLE_ID = 1553235133119598652
 TRAINING_REVIEW_CHANNEL_ID = 1531476097970212915
+RESERVE_REPORT_CHANNEL_ID = 1532512015703085147
+RESERVE_TRADE_THREAD_ID = 1538294047095922748
 INCENSE_INACTIVITY_SECONDS = float(
     os.getenv("INCENSE_INACTIVITY_SECONDS", "90")
 )
@@ -57,6 +59,45 @@ TIMEZONE_PHASE_EMOJIS = {
     "dawn": "🌅",
     "dusk": "🌇",
 }
+RESERVE_CATEGORY_PRICES = {
+    "gmax": 35_000,
+    "eevos": 35_000,
+    "paradox": 35_000,
+    "rare": 45_000,
+    "regional": 45_000,
+    "events": 45_000,
+}
+EVENT_FORM_PRICES = {
+    "Enchanted Applin": 45_000,
+    "Rotten Applin": 45_000,
+    "Oracle Meowscarada": 45_000,
+    "Witch Meowscarada": 45_000,
+    "Medusa Simipour": 45_000,
+    "Statue Simipour": 45_000,
+    "Elixir Reuniclus": 45_000,
+    "Cauldron Reuniclus": 45_000,
+}
+EVENT_FORM_BASES = {
+    "Enchanted Applin": "Applin",
+    "Rotten Applin": "Applin",
+    "Oracle Meowscarada": "Meowscarada",
+    "Witch Meowscarada": "Meowscarada",
+    "Medusa Simipour": "Simipour",
+    "Statue Simipour": "Simipour",
+    "Elixir Reuniclus": "Reuniclus",
+    "Cauldron Reuniclus": "Reuniclus",
+}
+SPAWN_RATE_PRICES = (
+    (255, 2_500),
+    (337, 5_000),
+    (674, 10_000),
+    (899, 15_000),
+    (1_349, 20_000),
+    (3_596, 30_000),
+    (5_394, 35_000),
+    (15_196, 40_000),
+    (30_000, 50_000),
+)
 COMMAND_CATALOG = (
     ("General", "v!ping", "Shows the bot's gateway latency."),
     (
@@ -70,6 +111,11 @@ COMMAND_CATALOG = (
         "Finds one place currently in that local-time phase and gives a Pokétwo command.",
     ),
     ("General", "v!sr <pokemon>", "Shows a Pokémon's spawn rate and artwork."),
+    (
+        "Reservations",
+        "v!report",
+        "Replies to a Pokétwo catch announcement to report a stolen reserve.",
+    ),
     ("General", "v!help [page]", "Shows all commands with descriptions, paginated."),
     ("General", "v!commands [page]", "Shows categorized command names, paginated."),
     (
@@ -2530,6 +2576,424 @@ class PokéTwoNamingBot(commands.Cog):
         for name, members in categories.items():
             embed.add_field(name=name, value=f"{len(members)} Pokémon", inline=False)
         await ctx.send(embed=embed)
+
+    def report_pokemon_names(self) -> list[str]:
+        """Return Pokémon names usable when reading catch and naming-bot messages."""
+        names = set(self.class_names.values())
+        names.update(
+            row["Pokemon"]
+            for row in self.pokemon_spawn_chances.values()
+            if row.get("Pokemon")
+        )
+        names.update(EVENT_FORM_PRICES)
+        for guild_categories in self.bot_state.get("categories", {}).values():
+            for members in guild_categories.values():
+                names.update(str(name) for name in members)
+        return sorted(names, key=len, reverse=True)
+
+    def report_pokemon_from_first_line(self, line: str) -> str | None:
+        """Resolve a naming-bot message's leading Pokémon name."""
+        first_line = re.sub(r"^[\s>*`_~]+", "", line).strip()
+        for name in self.report_pokemon_names():
+            if not first_line.casefold().startswith(name.casefold()):
+                continue
+            if len(first_line) == len(name) or not first_line[len(name)].isalnum():
+                return name
+        return None
+
+    def report_message_lines(self, message) -> list[str]:
+        """Flatten message and embed text while preserving its first-line order."""
+        lines: list[str] = []
+        lines.extend((message.content or "").splitlines())
+        for embed in message.embeds:
+            lines.extend((embed.title or "").splitlines())
+            lines.extend((embed.description or "").splitlines())
+            for field in embed.fields:
+                lines.extend(
+                    f"{field.name}: {field.value}".splitlines()
+                )
+        return lines
+
+    def report_naming_bot_evidence(self, message) -> tuple[str, set[str]] | None:
+        """Read a Pokémon and reserve mentions from a naming-bot reply."""
+        lines = self.report_message_lines(message)
+        first_line = next((line.strip() for line in lines if line.strip()), "")
+        pokemon_name = self.report_pokemon_from_first_line(first_line)
+        if pokemon_name is None:
+            return None
+
+        reserved_user_ids = set()
+        for line in lines:
+            reserve_line = re.match(
+                r"^\s*(?:reserve\s+pings|reserved)\s*:\s*(.*)$",
+                line,
+                flags=re.IGNORECASE,
+            )
+            if reserve_line is not None:
+                reserved_user_ids.update(
+                    re.findall(r"<@!?(\d+)>", reserve_line.group(1))
+                )
+        if not reserved_user_ids:
+            return None
+        return pokemon_name, reserved_user_ids
+
+    def report_species_id(self, pokemon_name: str) -> int | None:
+        """Return a Pokémon's species number, including supported event forms."""
+        species_id = getattr(self, "pokemon_species", {}).get(pokemon_name)
+        if species_id is not None:
+            return int(species_id)
+        spawn_data = self.pokemon_spawn_chances.get(pokemon_name.casefold())
+        if spawn_data is not None:
+            return int(spawn_data["Dex"])
+        base_name = next(
+            (
+                base
+                for form, base in EVENT_FORM_BASES.items()
+                if form.casefold() == pokemon_name.casefold()
+            ),
+            None,
+        )
+        if base_name is not None:
+            base_data = self.pokemon_spawn_chances.get(base_name.casefold())
+            if base_data is not None:
+                return int(base_data["Dex"])
+        return None
+
+    def report_species_has_custom_forms(self, pokemon_name: str) -> bool:
+        """Return whether the named species has known custom or regional forms."""
+        species_id = self.report_species_id(pokemon_name)
+        if species_id is None:
+            return False
+        if any(
+            form.casefold() != pokemon_name.casefold()
+            and self.report_species_id(form) == species_id
+            for form in self.class_names.values()
+        ):
+            return True
+        return pokemon_name.casefold() in {
+            "applin",
+            "meowscarada",
+            "simipour",
+            "reuniclus",
+        }
+
+    def report_name_is_species_base(self, pokemon_name: str) -> bool:
+        """Return whether a caught name identifies only the base species."""
+        if any(
+            form.casefold() == pokemon_name.casefold()
+            for form in EVENT_FORM_BASES
+        ):
+            return False
+        spawn_data = self.pokemon_spawn_chances.get(pokemon_name.casefold())
+        if spawn_data is not None:
+            return spawn_data["Pokemon"].casefold() == pokemon_name.casefold()
+        species_id = self.report_species_id(pokemon_name)
+        if species_id is None:
+            return False
+        return any(
+            int(row["Dex"]) == species_id
+            and row["Pokemon"].casefold() == pokemon_name.casefold()
+            for row in self.pokemon_spawn_chances.values()
+        )
+
+    def same_report_species(self, first: str, second: str) -> bool:
+        """Compare two reported Pokémon names by their Pokédex species."""
+        if first.casefold() == second.casefold():
+            return True
+        first_id = self.report_species_id(first)
+        return first_id is not None and first_id == self.report_species_id(second)
+
+    def report_pokemon_from_catch(self, catch_message) -> tuple[str, str] | None:
+        """Extract a catcher ID and Pokémon name from a Pokétwo catch message."""
+        text = "\n".join(self.report_message_lines(catch_message))
+        caught_match = re.search(r"\bcaught\b", text, flags=re.IGNORECASE)
+        if caught_match is None:
+            return None
+        catcher_mentions = re.findall(
+            r"<@!?(\d+)>",
+            text[: caught_match.start()],
+        )
+        if not catcher_mentions:
+            return None
+
+        caught_text = text[caught_match.end() :]
+        for name in self.report_pokemon_names():
+            if re.search(
+                rf"(?<![\w]){re.escape(name)}(?![\w])",
+                caught_text,
+                flags=re.IGNORECASE,
+            ):
+                return catcher_mentions[-1], name
+        return None
+
+    async def referenced_message(self, ctx, reference):
+        """Resolve a Discord message reference from cache or channel history."""
+        if reference is None:
+            return None
+        resolved = getattr(reference, "resolved", None)
+        if resolved is not None and hasattr(resolved, "id"):
+            return resolved
+        message_id = getattr(reference, "message_id", None)
+        if message_id is None:
+            return None
+        return await ctx.channel.fetch_message(message_id)
+
+    async def report_spawn_evidence(self, channel, spawn) -> list:
+        """Collect other bots' reserve evidence replying to one Pokétwo spawn."""
+        evidence = []
+        async for message in channel.history(
+            limit=500,
+            after=spawn,
+            oldest_first=True,
+        ):
+            reference = getattr(message, "reference", None)
+            if getattr(reference, "message_id", None) != spawn.id:
+                continue
+            author = getattr(message, "author", None)
+            if (
+                author is None
+                or not getattr(author, "bot", False)
+                or author.id == self.bot.user.id
+            ):
+                continue
+            parsed = self.report_naming_bot_evidence(message)
+            if parsed is not None:
+                evidence.append(parsed)
+        return evidence
+
+    def spawn_rate_report_price(self, pokemon_name: str) -> int | None:
+        """Interpolate the reported spawn-rate tiers in 2,500-PC increments."""
+        spawn_data = self.pokemon_spawn_chances.get(pokemon_name.casefold())
+        if spawn_data is None:
+            species_id = self.report_species_id(pokemon_name)
+            if species_id is not None:
+                spawn_data = next(
+                    (
+                        row
+                        for row in self.pokemon_spawn_chances.values()
+                        if int(row["Dex"]) == species_id
+                    ),
+                    None,
+                )
+        if spawn_data is None:
+            return None
+        denominator_match = re.fullmatch(r"\s*1\s*/\s*(\d+)\s*", spawn_data["Chance"])
+        if denominator_match is None:
+            return None
+        denominator = int(denominator_match.group(1))
+        if denominator <= SPAWN_RATE_PRICES[0][0]:
+            return SPAWN_RATE_PRICES[0][1]
+        for (lower_rate, lower_price), (upper_rate, upper_price) in zip(
+            SPAWN_RATE_PRICES,
+            SPAWN_RATE_PRICES[1:],
+        ):
+            if denominator <= upper_rate:
+                interpolated_price = lower_price + (
+                    (denominator - lower_rate)
+                    * (upper_price - lower_price)
+                    / (upper_rate - lower_rate)
+                )
+                return int((interpolated_price + 1_250) // 2_500) * 2_500
+        return SPAWN_RATE_PRICES[-1][1]
+
+    def reserve_report_price(
+        self,
+        guild_id: int,
+        pokemon_name: str,
+        catch_text: str,
+    ) -> int | None:
+        """Use fixed category/form prices before the calculated spawn-rate price."""
+        spawn_rate_price = self.spawn_rate_report_price(pokemon_name)
+        if spawn_rate_price is None:
+            return None
+        fixed_prices = [
+            price
+            for category, members in self.guild_categories(guild_id).items()
+            if category.casefold() in RESERVE_CATEGORY_PRICES
+            and any(
+                str(member).casefold() == pokemon_name.casefold()
+                for member in members
+            )
+            for price in (RESERVE_CATEGORY_PRICES[category.casefold()],)
+        ]
+        event_form_price = next(
+            (
+                price
+                for form, price in EVENT_FORM_PRICES.items()
+                if form.casefold() == pokemon_name.casefold()
+            ),
+            None,
+        )
+        if event_form_price is not None:
+            fixed_prices.append(event_form_price)
+        if re.search(r"\bgigantamax\b", f"{pokemon_name} {catch_text}", re.IGNORECASE):
+            fixed_prices.append(35_000)
+        return max(fixed_prices) if fixed_prices else spawn_rate_price
+
+    @commands.command(name="report")
+    async def report_stolen_reserve(self, ctx):
+        """Report a stolen reserve by replying to a Pokétwo catch announcement."""
+        if ctx.guild is None:
+            await ctx.send("❌ Reports can only be submitted inside a server.")
+            return
+        try:
+            catch_message = await self.referenced_message(
+                ctx,
+                getattr(ctx.message, "reference", None),
+            )
+        except discord.NotFound:
+            catch_message = None
+        except discord.Forbidden:
+            await ctx.send(
+                "❌ I need permission to read the catch channel's message history."
+            )
+            return
+        except discord.HTTPException as error:
+            print(f"Could not fetch the replied-to catch for a report: {error}")
+            await ctx.send("❌ I could not read that catch announcement.")
+            return
+        if (
+            catch_message is None
+            or catch_message.author.id != POKETWO_BOT_ID
+            or not re.search(
+                r"\bcaught\b",
+                "\n".join(self.report_message_lines(catch_message)),
+                flags=re.IGNORECASE,
+            )
+        ):
+            await ctx.send(
+                "Reply to a Pokétwo catch announcement with `v!report`."
+            )
+            return
+
+        caught = self.report_pokemon_from_catch(catch_message)
+        if caught is None:
+            await ctx.send("❌ I could not identify the catcher and Pokémon.")
+            return
+        catcher_id, pokemon_name = caught
+        if catcher_id == str(ctx.author.id):
+            await ctx.send("❌ You cannot report your own catch.")
+            return
+
+        try:
+            spawn_message = await self.referenced_message(
+                ctx,
+                getattr(catch_message, "reference", None),
+            )
+        except discord.NotFound:
+            spawn_message = None
+        except discord.Forbidden:
+            await ctx.send(
+                "❌ I need permission to read the catch channel's message history."
+            )
+            return
+        except discord.HTTPException as error:
+            print(f"Could not fetch the related Pokétwo spawn: {error}")
+            await ctx.send("❌ I could not read the spawn for that catch.")
+            return
+        if (
+            spawn_message is None
+            or spawn_message.author.id != POKETWO_BOT_ID
+            or not self.is_spawn_message(spawn_message)
+        ):
+            await ctx.send(
+                "❌ I could not find the Pokétwo spawn linked to that catch."
+            )
+            return
+
+        try:
+            evidence = await self.report_spawn_evidence(
+                ctx.channel,
+                spawn_message,
+            )
+        except discord.Forbidden:
+            await ctx.send(
+                "❌ I need permission to read the catch channel's message history."
+            )
+            return
+        except discord.HTTPException as error:
+            print(f"Could not read naming-bot reserve evidence: {error}")
+            await ctx.send("❌ I could not read reserve evidence for that spawn.")
+            return
+
+        catch_text = "\n".join(self.report_message_lines(catch_message))
+        if (
+            self.report_species_has_custom_forms(pokemon_name)
+            and self.report_name_is_species_base(pokemon_name)
+            and not re.search(r"\bgigantamax\b", catch_text, re.IGNORECASE)
+        ):
+            identified_forms = {
+                name.casefold(): name
+                for name, _user_ids in evidence
+                if self.same_report_species(name, pokemon_name)
+            }
+            if len(identified_forms) != 1:
+                await ctx.send(
+                    "❌ I could not identify one matching form from naming-bot "
+                    "replies; no report was sent."
+                )
+                return
+            pokemon_name = next(iter(identified_forms.values()))
+
+        reporter_id = str(ctx.author.id)
+        has_vivillon_reserve = reporter_id in self.reserve_user_ids(
+            ctx.guild.id,
+            pokemon_name,
+        )
+        has_naming_bot_reserve = any(
+            name.casefold() == pokemon_name.casefold()
+            and reporter_id in user_ids
+            for name, user_ids in evidence
+        )
+        if not (has_vivillon_reserve or has_naming_bot_reserve):
+            await ctx.send(
+                "❌ You need a current Vivillon reserve or a reserve ping on "
+                "that spawn from another naming bot to report this catch."
+            )
+            return
+
+        price = self.reserve_report_price(
+            ctx.guild.id,
+            pokemon_name,
+            catch_text,
+        )
+        if price is None:
+            await ctx.send(
+                "❌ I could not find a spawn rate for this Pokémon; no report was sent."
+            )
+            return
+
+        report_channel = self.bot.get_channel(RESERVE_REPORT_CHANNEL_ID)
+        try:
+            if report_channel is None:
+                report_channel = await self.bot.fetch_channel(
+                    RESERVE_REPORT_CHANNEL_ID
+                )
+            catch_link = (
+                f"https://discord.com/channels/{ctx.guild.id}/"
+                f"{catch_message.channel.id}/{catch_message.id}"
+            )
+            await report_channel.send(
+                f"**Stolen reserve report**\n"
+                f"Pokémon: **{pokemon_name}** · Price: **{price:,} PC**\n"
+                f"Reported by: <@{ctx.author.id}> · Caught by: <@{catcher_id}>\n"
+                f"Catch: {catch_link}\n"
+                f"Trade thread: <#{RESERVE_TRADE_THREAD_ID}>",
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+        except discord.Forbidden:
+            await ctx.send(
+                "❌ I need permission to send messages in the reserve report channel."
+            )
+            return
+        except discord.NotFound:
+            await ctx.send("❌ The reserve report channel could not be found.")
+            return
+        except discord.HTTPException as error:
+            print(f"Could not send stolen-reserve report: {error}")
+            await ctx.send("❌ I could not send the report; check the bot logs.")
+            return
+        await ctx.send("✅ Your stolen-reserve report was submitted.")
 
     @commands.command(name="ping")
     async def ping(self, ctx):
