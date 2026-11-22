@@ -24,6 +24,7 @@ class MissingNoAlertTests(unittest.IsolatedAsyncioTestCase):
         self.cog.inference_times = []
         self.cog.image_download_times = deque(maxlen=100)
         self.cog.message_send_times = deque(maxlen=100)
+        self.cog.spawn_metrics = deque(maxlen=100)
         self.cog.spawn_prediction_cache = OrderedDict()
         self.cog.recognized_spawn_count = 0
         self.channel = SimpleNamespace(id=1, send=AsyncMock())

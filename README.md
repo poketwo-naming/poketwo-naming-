@@ -28,6 +28,7 @@ Every `v!` command also works with a capital `V!` prefix.
 | `v!sr <pokemon>` | `v!sr Pikachu` | Show a Pokémon's spawn rate and artwork |
 | `v!report` | Reply to a Pokétwo catch announcement with `v!report` | Submit a stolen-reserve report when reserve evidence is available |
 | `v!api` | `v!api` | Display API and spawn-recognition performance |
+| `v!apislow` | `v!apislow` | Break down the slowest recent spawn response |
 | `v!servers` | `v!servers` | List every connected Discord server and ID |
 | `v!premium` | `v!premium` | Show the current server's premium tier |
 | `v!premium add <tier> <server_id>` | `v!premium add gold 123456789` | Owner-only tier grant from the main server |
@@ -161,6 +162,10 @@ latest 1,024 byte-identical spawn images are cached in memory until restart.
 `v!api` reports recent download, inference, Discord send, and response timings;
 cached predictions count as inference time too. Actual speed depends on the
 host and network.
+`v!apislow` shows download, inference, Discord send, other, and total time for
+the slowest of the latest 100 completed recognitions since restart. Other time
+includes scheduling, response preparation, and any MissingNo pause and alert.
+The timing starts when spawn handling begins, after message tracking.
 
 The bot uses the Pokémon-named folders in `pokemon_images/training_data` to build
 the recognition model. Rebuild it after changing the training images:

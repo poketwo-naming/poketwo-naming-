@@ -124,6 +124,11 @@ COMMAND_CATALOG = (
         "v!api",
         "Shows global incense, recognition, inference, and response metrics.",
     ),
+    (
+        "Recognition",
+        "v!apislow",
+        "Breaks down the slowest recent spawn response.",
+    ),
     ("Recognition", "v!servers", "Lists every server where the bot is connected."),
     (
         "Channel Controls",
@@ -1284,6 +1289,7 @@ class PokéTwoNamingBot(commands.Cog):
         self.inference_times = deque(maxlen=100)
         self.image_download_times = deque(maxlen=100)
         self.message_send_times = deque(maxlen=100)
+        self.spawn_metrics = deque(maxlen=100)
         self.spawn_prediction_cache: OrderedDict[bytes, tuple[str, float]] = OrderedDict()
         self.store_times = deque(maxlen=100)
         self.last_spawn_metrics = None
@@ -2453,6 +2459,7 @@ class PokéTwoNamingBot(commands.Cog):
             "send": send_seconds,
             "total": total_seconds,
         }
+        self.spawn_metrics.append(self.last_spawn_metrics)
         self.recognized_spawn_count += 1
 
     async def recognize_cached_spawn_image(
@@ -4082,6 +4089,29 @@ class PokéTwoNamingBot(commands.Cog):
         await ctx.send(
             f"✅ Cleared **{len(collection)}** Pokémon from your collection."
         )
+
+    @commands.command(name="apislow")
+    async def api_slowest(self, ctx):
+        """Break down the slowest of the latest 100 spawn responses."""
+        if not self.spawn_metrics:
+            await ctx.send("No spawn response timings have been recorded yet.")
+            return
+
+        slowest = max(self.spawn_metrics, key=lambda metrics: metrics["total"])
+        other = slowest["total"] - (
+            slowest["download"] + slowest["inference"] + slowest["send"]
+        )
+        embed = discord.Embed(title="Slowest Response Breakdown", color=0x000000)
+        for name, seconds in (
+            ("Download", slowest["download"]),
+            ("Inference", slowest["inference"]),
+            ("Discord send", slowest["send"]),
+            ("Other", other),
+            ("Total", slowest["total"]),
+        ):
+            embed.add_field(name=name, value=f"{seconds * 1000:.0f} ms", inline=True)
+        embed.set_footer(text="Window: latest 100 recognitions")
+        await ctx.send(embed=embed)
 
     @commands.command(name="api")
     async def api_status(self, ctx):

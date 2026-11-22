@@ -35,6 +35,7 @@ class SpawnThumbnailTests(unittest.IsolatedAsyncioTestCase):
         self.cog.inference_times = deque(maxlen=100)
         self.cog.image_download_times = deque(maxlen=100)
         self.cog.message_send_times = deque(maxlen=100)
+        self.cog.spawn_metrics = deque(maxlen=100)
         self.cog.spawn_prediction_cache = OrderedDict()
         self.cog.recognized_spawn_count = 0
         self.channel = SimpleNamespace(id=1, send=AsyncMock())
@@ -76,6 +77,7 @@ class SpawnThumbnailTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.cog.message_send_times), 1)
         assert self.cog.last_spawn_metrics is not None
         self.assertEqual(self.cog.last_spawn_metrics["send"], self.cog.message_send_times[0])
+        self.assertEqual(list(self.cog.spawn_metrics), [self.cog.last_spawn_metrics])
 
     async def test_low_confidence_spawn_still_sends_review(self):
         self.channel.id = TRAINING_REVIEW_CHANNEL_ID
@@ -136,6 +138,44 @@ class SpawnThumbnailTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(fields["Download Latest"], "200 ms")
         self.assertEqual(fields["Send Avg"], "350 ms")
         self.assertEqual(fields["Send Latest"], "400 ms")
+
+    async def test_apislow_reports_breakdown_of_slowest_recent_response(self):
+        self.cog.spawn_metrics.append(
+            {"download": 1.0, "inference": 1.0, "send": 1.0, "total": 9.0}
+        )
+        self.cog.spawn_metrics.extend(
+            [{"download": 0.1, "inference": 0.02, "send": 0.3, "total": 0.5}]
+            * 99
+        )
+        self.cog.spawn_metrics.append(
+            {"download": 0.2, "inference": 0.025, "send": 5.6, "total": 5.905}
+        )
+        ctx = SimpleNamespace(send=AsyncMock())
+
+        await PokéTwoNamingBot.api_slowest.callback(self.cog, ctx)
+
+        embed = ctx.send.await_args.kwargs["embed"]
+        fields = {field.name: field.value for field in embed.fields}
+        self.assertEqual(
+            fields,
+            {
+                "Download": "200 ms",
+                "Inference": "25 ms",
+                "Discord send": "5600 ms",
+                "Other": "80 ms",
+                "Total": "5905 ms",
+            },
+        )
+        self.assertEqual(embed.footer.text, "Window: latest 100 recognitions")
+
+    async def test_apislow_reports_when_no_response_has_been_recorded(self):
+        ctx = SimpleNamespace(send=AsyncMock())
+
+        await PokéTwoNamingBot.api_slowest.callback(self.cog, ctx)
+
+        ctx.send.assert_awaited_once_with(
+            "No spawn response timings have been recorded yet."
+        )
 
 
 if __name__ == "__main__":
