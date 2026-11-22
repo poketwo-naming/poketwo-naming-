@@ -1,8 +1,19 @@
 import unittest
 from types import SimpleNamespace
+from typing import Protocol, cast
 from unittest.mock import AsyncMock
 
+from discord.ext import commands
+
 from bot import POKETWO_BOT_ID, PokéTwoNamingBot
+
+
+class ReportCommandCallback(Protocol):
+    async def __call__(
+        self,
+        cog: PokéTwoNamingBot,
+        ctx: commands.Context,
+    ) -> None: ...
 
 
 class ReserveReportTests(unittest.IsolatedAsyncioTestCase):
@@ -34,12 +45,17 @@ class ReserveReportTests(unittest.IsolatedAsyncioTestCase):
             reference=SimpleNamespace(resolved=self.spawn),
             channel=SimpleNamespace(id=200),
         )
-        self.cog.is_spawn_message = lambda message: True
-        self.cog.report_spawn_evidence = AsyncMock(return_value=[])
+        self.cog.is_spawn_message = lambda message: message is not None
+        self.report_spawn_evidence = AsyncMock(return_value=[])
+        self.cog.report_spawn_evidence = self.report_spawn_evidence
         self.report_channel = SimpleNamespace(send=AsyncMock())
         self.cog.bot = SimpleNamespace(
             user=SimpleNamespace(id=77),
-            get_channel=lambda channel_id: self.report_channel,
+            get_channel=lambda channel_id: (
+                self.report_channel
+                if channel_id == 1532512015703085147
+                else None
+            ),
         )
         self.ctx = SimpleNamespace(
             guild=SimpleNamespace(id=123),
@@ -50,6 +66,13 @@ class ReserveReportTests(unittest.IsolatedAsyncioTestCase):
             channel=SimpleNamespace(),
             send=AsyncMock(),
         )
+
+    async def submit_report(self):
+        callback = cast(
+            ReportCommandCallback,
+            PokéTwoNamingBot.report_stolen_reserve.callback,
+        )
+        await callback(self.cog, cast(commands.Context, self.ctx))
 
     def test_reads_reserve_mentions_from_embedded_field(self):
         message = SimpleNamespace(
@@ -148,7 +171,7 @@ class ReserveReportTests(unittest.IsolatedAsyncioTestCase):
     async def test_report_includes_catch_link_thread_and_fixed_price(self):
         self.cog.bot_state["categories"]["123"] = {"rare": ["Pikachu"]}
 
-        await PokéTwoNamingBot.report_stolen_reserve.callback(self.cog, self.ctx)
+        await self.submit_report()
 
         report = self.report_channel.send.await_args.args[0]
         self.assertIn("45,000 PC", report)
@@ -181,11 +204,11 @@ class ReserveReportTests(unittest.IsolatedAsyncioTestCase):
             "Enchanted Applin": ["456"]
         }
         self.catch.content = "Congratulations <@999>! You caught an Applin!"
-        self.cog.report_spawn_evidence.return_value = [
+        self.report_spawn_evidence.return_value = [
             ("Enchanted Applin", {"456"})
         ]
 
-        await PokéTwoNamingBot.report_stolen_reserve.callback(self.cog, self.ctx)
+        await self.submit_report()
 
         self.assertIn("Enchanted Applin", self.report_channel.send.await_args.args[0])
 
@@ -215,7 +238,7 @@ class ReserveReportTests(unittest.IsolatedAsyncioTestCase):
             "Congratulations <@999>! You caught an Enchanted Applin!"
         )
 
-        await PokéTwoNamingBot.report_stolen_reserve.callback(self.cog, self.ctx)
+        await self.submit_report()
 
         self.assertIn(
             "Enchanted Applin",
@@ -242,12 +265,12 @@ class ReserveReportTests(unittest.IsolatedAsyncioTestCase):
             }
         }
         self.catch.content = "Congratulations <@999>! You caught an Applin!"
-        self.cog.report_spawn_evidence.return_value = [
+        self.report_spawn_evidence.return_value = [
             ("Enchanted Applin", {"456"}),
             ("Rotten Applin", {"789"}),
         ]
 
-        await PokéTwoNamingBot.report_stolen_reserve.callback(self.cog, self.ctx)
+        await self.submit_report()
 
         self.report_channel.send.assert_not_awaited()
         self.assertIn(
@@ -258,7 +281,7 @@ class ReserveReportTests(unittest.IsolatedAsyncioTestCase):
     async def test_missing_spawn_rate_prevents_report(self):
         self.cog.pokemon_spawn_chances = {}
 
-        await PokéTwoNamingBot.report_stolen_reserve.callback(self.cog, self.ctx)
+        await self.submit_report()
 
         self.report_channel.send.assert_not_awaited()
         self.assertIn("no report was sent", self.ctx.send.await_args.args[0])
