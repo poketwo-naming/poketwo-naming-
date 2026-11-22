@@ -125,11 +125,13 @@ exchange include regional forms for `all <Pokémon name>` (for example,
 `all Articuno` includes Galarian Articuno). Exchange skips forms the original
 user does not have reserved.
 
-When Pokétwo confirms an incense purchase with `Incense has been bought`, this
-bot pauses Pokétwo in that channel. Use `v!poff` to disable this behavior in the
-server, or `v!pon` to re-enable it. `v!p` manually pauses the current channel;
-`v!resume` resumes it, and restricted staff can use `v!r all` to resume every
-tracked paused channel in the server.
+When Pokétwo confirms an incense purchase with `Incense has been bought` or
+`You purchased an Incense for 50 shards!`, this bot pauses Pokétwo in that
+channel and confirms the pause, or reports if it could not pause. This blocks
+Pokétwo from sending messages; it does not send an incense pause command. Use
+`v!poff` to disable this behavior in the server, or `v!pon` to re-enable it.
+`v!p` manually pauses the current channel; `v!resume` resumes it, and restricted
+staff can use `v!r all` to resume every tracked paused channel in the server.
 
 MissingNo detection immediately denies Pokétwo's Send Messages permission in
 the current channel, asks staff not to catch it, and pings role

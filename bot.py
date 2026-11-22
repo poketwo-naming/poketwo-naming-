@@ -2260,7 +2260,13 @@ class PokéTwoNamingBot(commands.Cog):
                 )
             )
         text = " ".join(text_parts).casefold()
-        return re.search(r"\bincense\s+has\s+been\s+bought\b", text) is not None
+        return any(
+            re.search(pattern, text) is not None
+            for pattern in (
+                r"\bincense\s+has\s+been\s+bought\b",
+                r"\byou\s+purchased\s+an?\s+incense\s+for\s+\d+\s+shards?\b",
+            )
+        )
 
     async def maybe_pause_after_incense_purchase(self, message):
         """Pause Pokétwo after a confirmed incense purchase unless disabled."""
@@ -2270,15 +2276,28 @@ class PokéTwoNamingBot(commands.Cog):
             or not self.is_incense_purchase_confirmation(message)
         ):
             return
-        if not await self.pause_poketwo_channel(
-            message.channel,
-            reason="Pokétwo confirmed an incense purchase",
-        ):
+        try:
+            paused = await self.pause_poketwo_channel(
+                message.channel,
+                reason="Pokétwo confirmed an incense purchase",
+            )
+        except discord.HTTPException as error:
+            print(
+                f"Could not automatically pause Pokétwo in channel "
+                f"{message.channel.id}: {error}"
+            )
+            paused = False
+        if not paused:
             await message.channel.send(
                 "❌ I could not automatically pause Pokétwo. "
                 "Please check that I have **Manage Channels** permission "
                 "and that Pokétwo is still in this server."
             )
+            return
+        await message.channel.send(
+            "✅ Pokétwo has been paused in this channel after the incense purchase. "
+            "Use `v!resume` to resume it."
+        )
 
     @staticmethod
     def is_spawn_message(message) -> bool:

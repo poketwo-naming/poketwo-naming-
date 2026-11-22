@@ -2,7 +2,9 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
-from bot import PokéTwoNamingBot
+import discord
+
+from bot import POKETWO_BOT_ID, PokéTwoNamingBot
 
 
 class IncensePauseTests(unittest.IsolatedAsyncioTestCase):
@@ -14,7 +16,7 @@ class IncensePauseTests(unittest.IsolatedAsyncioTestCase):
         }
         self.cog.save_bot_state = Mock()
         self.cog.pause_poketwo_channel = AsyncMock(return_value=True)
-        self.channel = SimpleNamespace(send=AsyncMock())
+        self.channel = SimpleNamespace(id=1, send=AsyncMock())
         self.message = SimpleNamespace(
             content="Incense has been bought.",
             embeds=[],
@@ -29,6 +31,60 @@ class IncensePauseTests(unittest.IsolatedAsyncioTestCase):
             self.channel,
             reason="Pokétwo confirmed an incense purchase",
         )
+        self.channel.send.assert_awaited_once_with(
+            "✅ Pokétwo has been paused in this channel after the incense purchase. "
+            "Use `v!resume` to resume it."
+        )
+
+    async def test_screenshot_purchase_confirmation_from_poketwo_pauses(self):
+        self.message.content = "You purchased an Incense for 50 shards!"
+        self.message.author = SimpleNamespace(id=POKETWO_BOT_ID)
+        self.cog.bot = SimpleNamespace(user=SimpleNamespace(id=999))
+        self.cog.track_incense = Mock()
+        self.cog.premium_tier = Mock(return_value=None)
+
+        await self.cog.on_message(self.message)
+
+        self.cog.pause_poketwo_channel.assert_awaited_once()
+        self.channel.send.assert_awaited_once()
+
+    async def test_purchase_confirmation_in_embed_pauses(self):
+        self.message.content = ""
+        self.message.embeds = [
+            SimpleNamespace(
+                title=None,
+                description="You purchased an Incense for 50 shards!",
+                footer=None,
+            )
+        ]
+
+        await self.cog.maybe_pause_after_incense_purchase(self.message)
+
+        self.cog.pause_poketwo_channel.assert_awaited_once()
+        self.channel.send.assert_awaited_once()
+
+    async def test_failed_pause_reports_failure_not_success(self):
+        self.cog.pause_poketwo_channel.return_value = False
+
+        await self.cog.maybe_pause_after_incense_purchase(self.message)
+
+        self.channel.send.assert_awaited_once()
+        self.assertIn(
+            "could not automatically pause", self.channel.send.await_args.args[0]
+        )
+
+    async def test_discord_permission_error_reports_failure(self):
+        response = SimpleNamespace(status=403, reason="Forbidden")
+        self.cog.pause_poketwo_channel.side_effect = discord.Forbidden(
+            response, "Missing Permissions"
+        )
+
+        await self.cog.maybe_pause_after_incense_purchase(self.message)
+
+        self.channel.send.assert_awaited_once()
+        self.assertIn(
+            "could not automatically pause", self.channel.send.await_args.args[0]
+        )
 
     async def test_disabled_auto_pause_does_not_pause_channel(self):
         self.cog.bot_state["incense_auto_pause"]["123"] = False
@@ -36,6 +92,7 @@ class IncensePauseTests(unittest.IsolatedAsyncioTestCase):
         await self.cog.maybe_pause_after_incense_purchase(self.message)
 
         self.cog.pause_poketwo_channel.assert_not_awaited()
+        self.channel.send.assert_not_awaited()
 
     async def test_unconfirmed_message_does_not_pause_channel(self):
         self.message.content = "Incense is active."
@@ -43,6 +100,17 @@ class IncensePauseTests(unittest.IsolatedAsyncioTestCase):
         await self.cog.maybe_pause_after_incense_purchase(self.message)
 
         self.cog.pause_poketwo_channel.assert_not_awaited()
+        self.channel.send.assert_not_awaited()
+
+    async def test_another_bot_cannot_trigger_pause(self):
+        self.message.content = "You purchased an Incense for 50 shards!"
+        self.message.author = SimpleNamespace(id=456)
+        self.cog.bot = SimpleNamespace(user=SimpleNamespace(id=999))
+
+        await self.cog.on_message(self.message)
+
+        self.cog.pause_poketwo_channel.assert_not_awaited()
+        self.channel.send.assert_not_awaited()
 
     async def test_poff_and_pon_update_server_preference(self):
         ctx = SimpleNamespace(
