@@ -18,6 +18,8 @@ send messages, and embed links to post the introduction.
 
 ## Commands
 
+Every `v!` command also works with a capital `V!` prefix.
+
 | Command | Usage | Description |
 |---------|-------|-------------|
 | `v!ping` | `v!ping` | Check bot status and latency |
