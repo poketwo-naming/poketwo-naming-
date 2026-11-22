@@ -20,7 +20,11 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 | `v!servers` | `v!servers` | List every connected Discord server and ID |
 | `v!premium` | `v!premium` | Show the current server's premium tier |
 | `v!premium add <tier> <server_id>` | `v!premium add gold 123456789` | Owner-only tier grant from the main server |
-| `v!resume` | `v!resume` | Resume a channel paused after a MissingNo spawn |
+| `v!resume` | `v!resume` | Resume Pokétwo in the current channel (restricted) |
+| `v!r all` | `v!r all` | Resume Pokétwo in every tracked paused channel in this server (restricted) |
+| `v!pause` / `v!p` | `v!p` | Pause Pokétwo in the current channel (restricted) |
+| `v!poff` | `v!poff` | Disable automatic pausing after confirmed incense purchases in this server (restricted) |
+| `v!pon` | `v!pon` | Re-enable automatic pausing after confirmed incense purchases in this server (restricted) |
 | `v!r add <pokemon,...> <@user>` | `v!r add Pikachu, Eevee @user` | Reserve multiple Pokémon for a member (restricted) |
 | `v!r add all <pokemon,...> <@user>` | `v!r add all Arceus, Eevee @user` | Reserve all matching forms (restricted) |
 | `v!r remove <pokemon,...|category> [@user]` | `v!r remove rare @user` | Remove Pokémon or all reserved members of a category (restricted) |
@@ -79,13 +83,19 @@ exchange include regional forms for `all <Pokémon name>` (for example,
 `all Articuno` includes Galarian Articuno). Exchange skips forms the original
 user does not have reserved.
 
+When Pokétwo confirms an incense purchase with `Incense has been bought`, this
+bot pauses Pokétwo in that channel. Use `v!poff` to disable this behavior in the
+server, or `v!pon` to re-enable it. `v!p` manually pauses the current channel;
+`v!resume` resumes it, and restricted staff can use `v!r all` to resume every
+tracked paused channel in the server.
+
 MissingNo detection immediately denies Pokétwo's Send Messages permission in
 the current channel, asks staff not to catch it, and pings role
 `<@&1573065640762151003>`. Administrators configure a restricted staff role
-with `v!permission <role_id>`; that role can use `v!resume` to restore Pokétwo's
-previous permissions. The bot requires **Manage Channels** permission for this
-pause/resume feature. A MissingNo reserve still receives a ping in the naming
-output.
+with `v!permission <role_id>`; that role can use the restricted pause/resume
+commands to restore Pokétwo's previous permissions. The bot requires
+**Manage Channels** permission for this pause/resume feature. A MissingNo
+reserve still receives a ping in the naming output.
 
 Spawn recognition and MissingNo handling require Bronze, Silver, or Gold
 premium access. Other informational and configuration commands remain usable.

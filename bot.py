@@ -77,9 +77,24 @@ COMMAND_CATALOG = (
     ),
     ("Recognition", "v!servers", "Lists every server where the bot is connected."),
     (
-        "Reservations",
+        "Channel Controls",
         "v!resume",
-        "Resumes Pokétwo in a channel paused after MissingNo. Restricted.",
+        "Resumes Pokétwo in the current channel. Restricted.",
+    ),
+    (
+        "Channel Controls",
+        "v!r all",
+        "Resumes Pokétwo in every tracked paused channel in this server. Restricted.",
+    ),
+    (
+        "Channel Controls",
+        "v!pause (alias: v!p)",
+        "Pauses Pokétwo in the current channel. Restricted.",
+    ),
+    (
+        "Channel Controls",
+        "v!poff / v!pon",
+        "Disable or enable automatic pausing after confirmed incense purchases. Restricted.",
     ),
     (
         "Reservations",
@@ -1558,6 +1573,7 @@ class PokéTwoNamingBot(commands.Cog):
         default_state = {
             "restricted_roles": {},
             "paused_channels": {},
+            "incense_auto_pause": {},
             "reserves": {},
             "active_incenses": {},
             "shiny_hunts": {},
@@ -1589,6 +1605,7 @@ class PokéTwoNamingBot(commands.Cog):
             state = default_state
         state.setdefault("restricted_roles", {})
         state.setdefault("paused_channels", {})
+        state.setdefault("incense_auto_pause", {})
         state.setdefault("reserves", {})
         state.setdefault("active_incenses", {})
         state.setdefault("shiny_hunts", {})
@@ -1703,10 +1720,16 @@ class PokéTwoNamingBot(commands.Cog):
 
     def has_restricted_permission(self, ctx) -> bool:
         """Check whether a member can use commands marked restricted."""
+        if ctx.guild is None:
+            return False
         if self.is_administrator(ctx):
             return True
         role_ids = self.restricted_role_ids(ctx.guild.id)
         return any(role.id in role_ids for role in ctx.author.roles)
+
+    def incense_auto_pause_enabled(self, guild_id: int) -> bool:
+        """Return whether confirmed incense purchases auto-pause in a server."""
+        return self.bot_state["incense_auto_pause"].get(str(guild_id), True)
 
     def restricted_role_ids(self, guild_id) -> set[int]:
         """Return all role IDs allowed to use restricted commands."""
@@ -2085,6 +2108,7 @@ class PokéTwoNamingBot(commands.Cog):
         # Check if message is from Pokétwo bot
         if message.author.id == POKETWO_BOT_ID:
             self.track_incense(message)
+            await self.maybe_pause_after_incense_purchase(message)
             if message.guild and self.premium_tier(message.guild.id) is None:
                 return
             if self.is_spawn_message(message) and self.channel_within_incense_capacity(
@@ -2100,6 +2124,43 @@ class PokéTwoNamingBot(commands.Cog):
             return
         if after.author.id == POKETWO_BOT_ID:
             self.track_incense(after)
+            await self.maybe_pause_after_incense_purchase(after)
+
+    @staticmethod
+    def is_incense_purchase_confirmation(message) -> bool:
+        """Return whether a Pokétwo message confirms that incense was bought."""
+        text_parts = [message.content or ""]
+        for embed in message.embeds:
+            text_parts.extend(
+                filter(
+                    None,
+                    [
+                        embed.title,
+                        embed.description,
+                        embed.footer.text if embed.footer else None,
+                    ],
+                )
+            )
+        text = " ".join(text_parts).casefold()
+        return re.search(r"\bincense\s+has\s+been\s+bought\b", text) is not None
+
+    async def maybe_pause_after_incense_purchase(self, message):
+        """Pause Pokétwo after a confirmed incense purchase unless disabled."""
+        if (
+            message.guild is None
+            or not self.incense_auto_pause_enabled(message.guild.id)
+            or not self.is_incense_purchase_confirmation(message)
+        ):
+            return
+        if not await self.pause_poketwo_channel(
+            message.channel,
+            reason="Pokétwo confirmed an incense purchase",
+        ):
+            await message.channel.send(
+                "❌ I could not automatically pause Pokétwo. "
+                "Please check that I have **Manage Channels** permission "
+                "and that Pokétwo is still in this server."
+            )
 
     @staticmethod
     def is_spawn_message(message) -> bool:
@@ -2343,6 +2404,13 @@ class PokéTwoNamingBot(commands.Cog):
 
     async def pause_missingno_channel(self, channel):
         """Deny only Pokétwo permission to send in a MissingNo channel."""
+        return await self.pause_poketwo_channel(
+            channel,
+            reason="MissingNo spawned; waiting for staff to resume",
+        )
+
+    async def pause_poketwo_channel(self, channel, reason: str) -> bool:
+        """Deny Pokétwo permission to send in a channel and save its prior overwrite."""
         if not channel.guild or not channel.permissions_for(channel.guild.me).manage_channels:
             return False
         poketwo = channel.guild.get_member(POKETWO_BOT_ID)
@@ -2368,7 +2436,7 @@ class PokéTwoNamingBot(commands.Cog):
         await channel.set_permissions(
             poketwo,
             overwrite=overwrite,
-            reason="MissingNo spawned; waiting for staff to resume",
+            reason=reason,
         )
         return True
 
@@ -2735,46 +2803,108 @@ class PokéTwoNamingBot(commands.Cog):
             f"✅ Cleared your **{label}** shiny hunt."
         )
 
-    @commands.command(name="resume")
-    async def resume_poketwo_channel(self, ctx):
-        """Restore Pokétwo's previous permissions after a MissingNo spawn."""
-        if not self.has_restricted_permission(ctx):
-            await ctx.send("❌ You do not have permission to resume this channel.")
-            return
-        saved = self.bot_state["paused_channels"].get(str(ctx.channel.id))
+    async def restore_poketwo_channel(self, channel) -> str:
+        """Restore Pokétwo's saved channel permissions."""
+        saved = self.bot_state["paused_channels"].get(str(channel.id))
         if saved is None:
-            await ctx.send("This channel is not paused for MissingNo.")
-            return
-        if not ctx.channel.permissions_for(ctx.guild.me).manage_channels:
-            await ctx.send("❌ I need **Manage Channels** permission to resume it.")
-            return
-        poketwo = ctx.guild.get_member(POKETWO_BOT_ID)
+            return "not_paused"
+        if not channel.permissions_for(channel.guild.me).manage_channels:
+            return "missing_permissions"
+        poketwo = channel.guild.get_member(POKETWO_BOT_ID)
         if poketwo is None:
             try:
-                poketwo = await ctx.guild.fetch_member(POKETWO_BOT_ID)
+                poketwo = await channel.guild.fetch_member(POKETWO_BOT_ID)
             except discord.NotFound:
-                await ctx.send("❌ Pokétwo is no longer in this server.")
-                return
+                return "poketwo_missing"
 
         if saved["existed"]:
             previous = discord.PermissionOverwrite.from_pair(
                 discord.Permissions(int(saved["allow"])),
                 discord.Permissions(int(saved["deny"])),
             )
-            await ctx.channel.set_permissions(
+            await channel.set_permissions(
                 poketwo,
                 overwrite=previous,
-                reason="Staff resumed Pokétwo after MissingNo",
+                reason="Staff resumed Pokétwo",
             )
         else:
-            await ctx.channel.set_permissions(
+            await channel.set_permissions(
                 poketwo,
                 overwrite=None,
-                reason="Staff resumed Pokétwo after MissingNo",
+                reason="Staff resumed Pokétwo",
             )
-        del self.bot_state["paused_channels"][str(ctx.channel.id)]
+        del self.bot_state["paused_channels"][str(channel.id)]
         self.save_bot_state()
+        return "resumed"
+
+    @commands.command(name="resume")
+    async def resume_poketwo_channel(self, ctx):
+        """Restore Pokétwo's previous permissions in the current channel."""
+        if ctx.guild is None:
+            await ctx.send("This command can only be used inside a server.")
+            return
+        if not self.has_restricted_permission(ctx):
+            await ctx.send("❌ You do not have permission to resume this channel.")
+            return
+        result = await self.restore_poketwo_channel(ctx.channel)
+        if result == "not_paused":
+            await ctx.send("This channel is not paused by me.")
+            return
+        if result == "missing_permissions":
+            await ctx.send("❌ I need **Manage Channels** permission to resume it.")
+            return
+        if result == "poketwo_missing":
+            await ctx.send("❌ Pokétwo is no longer in this server.")
+            return
         await ctx.send("✅ Channel resumed. Pokétwo can send messages again.")
+
+    @commands.command(name="pause", aliases=["p"])
+    async def pause_poketwo_channel_command(self, ctx):
+        """Pause Pokétwo in the current channel for restricted staff."""
+        if ctx.guild is None:
+            await ctx.send("This command can only be used inside a server.")
+            return
+        if not self.has_restricted_permission(ctx):
+            await ctx.send("❌ You do not have permission to pause this channel.")
+            return
+        if not await self.pause_poketwo_channel(
+            ctx.channel,
+            reason="Staff paused Pokétwo",
+        ):
+            await ctx.send(
+                "❌ I could not pause Pokétwo. Check that I have **Manage Channels** "
+                "permission and that Pokétwo is still in this server."
+            )
+            return
+        await ctx.send("✅ Channel paused. Pokétwo can no longer send messages here.")
+
+    @commands.command(name="poff")
+    async def disable_incense_auto_pause(self, ctx):
+        """Disable automatic channel pausing after confirmed incense purchases."""
+        await self.set_incense_auto_pause(ctx, enabled=False)
+
+    @commands.command(name="pon")
+    async def enable_incense_auto_pause(self, ctx):
+        """Enable automatic channel pausing after confirmed incense purchases."""
+        await self.set_incense_auto_pause(ctx, enabled=True)
+
+    async def set_incense_auto_pause(self, ctx, *, enabled: bool):
+        """Set the current server's restricted incense auto-pause preference."""
+        if ctx.guild is None:
+            await ctx.send("This command can only be used inside a server.")
+            return
+        if not self.has_restricted_permission(ctx):
+            await ctx.send(
+                "❌ You do not have permission to change incense auto-pause."
+            )
+            return
+        self.bot_state["incense_auto_pause"][str(ctx.guild.id)] = enabled
+        self.save_bot_state()
+        state = "enabled" if enabled else "disabled"
+        await ctx.send(
+            f"✅ Automatic pausing after confirmed incense purchases is {state} "
+            "for this server."
+        )
 
     @commands.command(name="r")
     async def reservations(self, ctx, *, entry: str = ""):
@@ -2814,18 +2944,58 @@ class PokéTwoNamingBot(commands.Cog):
                 await ctx.send("Usage: `v!r clear`")
                 return
             await self.clear_reserves(ctx)
+        elif action == "all":
+            if remainder:
+                await ctx.send("Usage: `v!r all`")
+                return
+            await self.resume_all_poketwo_channels(ctx)
         elif not action_entry:
             await ctx.send(
                 "Use `v!r list [@user]` / `v!reserve list [@user]`, "
                 "`v!r add <pokemon,...> <@user>`, "
                 "`v!r remove <pokemon,...|category> [@user]`, "
-                "`v!r search <pokemon>`, or `v!r clear`."
+                "`v!r search <pokemon>`, `v!r clear`, or `v!r all`."
             )
         else:
             await ctx.send(
                 "Unknown reservation action. Use `add`, `remove`, `search`, "
-                "`list`, or `clear`."
+                "`list`, `clear`, or `all`."
             )
+
+    async def resume_all_poketwo_channels(self, ctx):
+        """Resume all channels tracked as paused in the current server."""
+        if ctx.guild is None:
+            await ctx.send("This command can only be used inside a server.")
+            return
+        if not self.has_restricted_permission(ctx):
+            await ctx.send("❌ You do not have permission to resume all channels.")
+            return
+        guild_channels = {str(channel.id): channel for channel in ctx.guild.channels}
+        paused_channels = [
+            guild_channels[channel_id]
+            for channel_id in self.bot_state["paused_channels"]
+            if channel_id in guild_channels
+        ]
+        if not paused_channels:
+            await ctx.send("There are no tracked paused channels in this server.")
+            return
+
+        resumed = 0
+        failed = 0
+        for channel in paused_channels:
+            result = await self.restore_poketwo_channel(channel)
+            if result == "resumed":
+                resumed += 1
+            else:
+                failed += 1
+        if failed:
+            await ctx.send(
+                f"✅ Resumed {resumed} channel(s). ❌ Could not resume {failed}; "
+                "check my **Manage Channels** permission and that Pokétwo is "
+                "still in the server."
+            )
+        else:
+            await ctx.send(f"✅ Resumed Pokétwo in {resumed} channel(s).")
 
     async def exchange_reserves(self, ctx, remainder: str):
         """Move reserves from the given user to those in a replied list."""
