@@ -1866,6 +1866,9 @@ class PokéTwoNamingBot(commands.Cog):
         if box is None:
             await ctx.send(f"❌ Breeding box `{parts[0]}` was not found.")
             return
+        if box_name is None:
+            await ctx.send("❌ Breeding box lookup failed.")
+            return
 
         if action == "rename":
             if len(parts) < 2:
