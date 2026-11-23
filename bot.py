@@ -208,8 +208,8 @@ COMMAND_CATALOG = (
     ),
     (
         "Collections",
-        "v!cl add [all] <pokemon,...>",
-        "Adds comma-separated Pokémon/forms to your collection.",
+        "v!cl add [all] <pokemon,...|category>",
+        "Adds Pokémon/forms or every member of a server category to your collection.",
     ),
     (
         "Collections",
@@ -4054,17 +4054,25 @@ class PokéTwoNamingBot(commands.Cog):
         if ctx.invoked_subcommand is not None:
             return
         await ctx.send(
-            "Usage: `v!cl add <pokemon>`, `v!cl remove <pokemon>`, "
+            "Usage: `v!cl add <pokemon|category>`, `v!cl remove <pokemon>`, "
             "`v!cl list`, or `v!cl clear`."
         )
 
     @collection.command(name="add")
     async def add_collection(self, ctx, *, pokemon_input: str):
-        """Add one Pokémon or an entire family to the caller's collection."""
+        """Add Pokémon, a family, or a server category to the caller's collection."""
         if ctx.guild is None:
             await ctx.send("Collections can only be managed inside a server.")
             return
-        pokemon_names, unknown = self.resolve_pokemon_list(pokemon_input)
+        category_key = self.find_category(ctx.guild.id, pokemon_input.strip())
+        if category_key is not None:
+            pokemon_names = self.guild_categories(ctx.guild.id)[category_key]
+            unknown = []
+            if not pokemon_names:
+                await ctx.send(f"❌ Category **{category_key}** is empty.")
+                return
+        else:
+            pokemon_names, unknown = self.resolve_pokemon_list(pokemon_input)
         if unknown:
             await ctx.send(
                 "❌ Unknown Pokémon: "

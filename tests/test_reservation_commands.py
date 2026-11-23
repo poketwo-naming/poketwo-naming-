@@ -163,6 +163,18 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertNotIn("Unknown Pokémon", self.ctx.send.await_args.args[0])
 
+    async def test_collection_add_expands_server_category_without_duplicates(self):
+        self.cog.bot_state["categories"]["123"]["rare"] = ["Pikachu", "Eevee"]
+        self.cog.bot_state["collections"]["123"] = {"456": ["Pikachu"]}
+        self.ctx.author = SimpleNamespace(id=456)
+
+        await self.add_to_collection("RARE")
+
+        self.assertEqual(
+            self.cog.bot_state["collections"]["123"]["456"],
+            ["Pikachu", "Eevee"],
+        )
+
     async def test_nidoran_gender_and_all_in_collections_and_reserves(self):
         with Path("pokemon_species.json").open(encoding="utf-8") as source:
             species = json.load(source)

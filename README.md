@@ -51,7 +51,7 @@ Every `v!` command also works with a capital `V!` prefix.
 | `v!sh [pokemon]` | `v!sh Pikachu` | Start/switch a hunt, or show your current hunt |
 | `v!sh all <pokemon>` | `v!sh all Meowth` | Hunt every form of that Pokémon |
 | `v!sh clear` | `v!sh clear` | Clear your shiny hunt |
-| `v!cl add [all] <pokemon,...>` | `v!cl add Pikachu, Eevee` | Add multiple Pokémon to your collection |
+| `v!cl add [all] <pokemon,...|category>` | `v!cl add Pikachu, Eevee` or `v!cl add rare` | Add Pokémon, a family, or every Pokémon in a server category to your collection |
 | `v!cl remove <pokemon,...>` | `v!cl remove Pikachu, Eevee` | Remove multiple Pokémon from your collection |
 | `v!cl list` | `v!cl list` | List your own collection |
 | `v!cl clear` | `v!cl clear` | Clear your own collection |
@@ -155,8 +155,9 @@ including regional and custom forms, of the same species. A hunt for a single
 form still only matches that form. Chain tracking is not stored.
 
 Collections are personal and unrestricted: each member can only modify their
-own collection. Spawn output lists shiny hunts before collections. A reserve
-replaces both sections.
+own collection. Use `v!cl add <category>` to add every Pokémon from a
+server category to your collection. Spawn output lists shiny hunts before
+collections. A reserve replaces both sections.
 
 Active incense counts expire automatically after 90 seconds without a Pokétwo
 spawn in that channel. Override the inactivity window with
