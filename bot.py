@@ -22,6 +22,7 @@ from zoneinfo import ZoneInfo
 import aiohttp
 import discord
 from discord.ext import commands
+from discord import app_commands
 from geonamescache import GeonamesCache
 from PIL import Image, UnidentifiedImageError
 
@@ -1835,6 +1836,13 @@ class PokéTwoNamingBot(commands.Cog):
         if normalized in nidoran_genders:
             return self.class_names.get(nidoran_genders[normalized])
         return self.pokemon_aliases.get(normalized)
+
+    def custom_sprite_url(self, pokemon_name: str) -> str | None:
+        """Return the custom sprite URL for a Pokémon if available."""
+        sprite_id = self.pokemon_sprite_ids.get(pokemon_name)
+        if sprite_id is None:
+            return None
+        return f"{CUSTOM_SPRITE_BASE_URL}/{sprite_id}.png"
 
     def resolve_pokemon_family(
         self,
@@ -5767,6 +5775,324 @@ class PokéTwoNamingBot(commands.Cog):
         view.page = page - 1
         view.update_buttons()
         await ctx.send(embed=pages[view.page], view=view)
+
+    # Slash Commands (dual-mode: work in servers and via app installation)
+
+    @app_commands.command(name="ping", description="Check if the bot is responsive")
+    async def slash_ping(self, interaction: discord.Interaction):
+        """Check if the bot is responsive"""
+        await interaction.response.send_message(
+            f"Pong! {self.bot.latency * 1000:.2f}ms"
+        )
+
+    @app_commands.command(
+        name="typeping",
+        description="Choose Pokémon types to receive pings for"
+    )
+    async def slash_type_ping(self, interaction: discord.Interaction):
+        """Choose Pokémon types to receive pings for."""
+        view = TypePingView(self, interaction.user.id)
+        await interaction.response.send_message(
+            embed=view.build_embed(),
+            view=view,
+            ephemeral=True
+        )
+
+    @app_commands.command(
+        name="questping",
+        description="Choose regions to receive quest pings for"
+    )
+    async def slash_quest_ping(self, interaction: discord.Interaction):
+        """Choose regions to receive quest pings for."""
+        view = QuestPingView(self, interaction.user.id)
+        await interaction.response.send_message(
+            embed=view.build_embed(),
+            view=view,
+            ephemeral=True
+        )
+
+    @app_commands.command(
+        name="sr",
+        description="Show a Pokémon's Pokétwo spawn rate and artwork"
+    )
+    @app_commands.describe(pokemon_name="Name of the Pokémon")
+    async def slash_spawn_rate(
+        self,
+        interaction: discord.Interaction,
+        pokemon_name: str
+    ):
+        """Show a Pokémon's Pokétwo spawn rate and artwork."""
+        pokemon_input = pokemon_name.strip()
+        if not pokemon_input:
+            await interaction.response.send_message(
+                "Usage: `/sr pokemon_name`"
+            )
+            return
+
+        spawn_data = self.pokemon_spawn_chances.get(pokemon_input.casefold())
+        if spawn_data is None:
+            resolved_name = self.resolve_pokemon_name(pokemon_input)
+            if resolved_name is not None:
+                spawn_data = self.pokemon_spawn_chances.get(
+                    resolved_name.casefold()
+                )
+        if spawn_data is None:
+            await interaction.response.send_message(
+                f"❌ Unknown Pokémon: `{pokemon_input}`"
+            )
+            return
+
+        emoji = "🌟" if spawn_data.get("shiny") else "✨"
+        spawn_rate = spawn_data.get("spawn_rate", "Unknown")
+        biomes = spawn_data.get("biomes", [])
+        biome_text = ", ".join(biomes) if biomes else "Unknown"
+
+        embed = discord.Embed(
+            title=f"{emoji} {pokemon_input} Spawn Rate",
+            color=discord.Color.gold(),
+        )
+        embed.add_field(name="Spawn Rate", value=str(spawn_rate), inline=False)
+        embed.add_field(name="Biomes", value=biome_text, inline=False)
+
+        custom_sprite_url = self.custom_sprite_url(resolved_name or pokemon_input)
+        if custom_sprite_url:
+            embed.set_thumbnail(url=custom_sprite_url)
+
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(
+        name="afk",
+        description="Toggle ping notifications (AFK mode)"
+    )
+    @app_commands.describe(
+        kind="Type of pings to toggle",
+        muted="True to mute, False to unmute"
+    )
+    async def slash_afk(
+        self,
+        interaction: discord.Interaction,
+        kind: str = None,
+        muted: bool = None
+    ):
+        """Toggle ping notifications (AFK mode)."""
+        user_id = str(interaction.user.id)
+        afk_data = self.bot_state.setdefault("afk", {})
+        user_afk = afk_data.setdefault(user_id, {})
+
+        if kind is None or muted is None:
+            # Show current status
+            status = []
+            for ping_type in ["shiny_hunt", "collection", "typeping", "questping"]:
+                is_muted = user_afk.get(ping_type, False)
+                status.append(
+                    f"{ping_type}: {'🔇 Muted' if is_muted else '🔊 Receiving'}"
+                )
+            await interaction.response.send_message(
+                "Your ping settings:\n" + "\n".join(status),
+                ephemeral=True
+            )
+            return
+
+        valid_kinds = ["shiny_hunt", "collection", "typeping", "questping"]
+        if kind not in valid_kinds:
+            await interaction.response.send_message(
+                f"Invalid kind. Choose from: {', '.join(valid_kinds)}",
+                ephemeral=True
+            )
+            return
+
+        user_afk[kind] = muted
+        try:
+            self.save_bot_state()
+            status = "muted" if muted else "unmuted"
+            await interaction.response.send_message(
+                f"✅ {kind} pings {status}",
+                ephemeral=True
+            )
+        except OSError:
+            await interaction.response.send_message(
+                "❌ Could not save settings. Check the bot logs.",
+                ephemeral=True
+            )
+
+    @app_commands.command(
+        name="permission",
+        description="Check your permissions in this server"
+    )
+    async def slash_permission(self, interaction: discord.Interaction):
+        """Check your permissions in this server."""
+        if not interaction.guild:
+            await interaction.response.send_message(
+                "This command only works in servers.",
+                ephemeral=True
+            )
+            return
+
+        member = interaction.guild.get_member(interaction.user.id)
+        if member is None:
+            await interaction.response.send_message(
+                "Could not get your member information.",
+                ephemeral=True
+            )
+            return
+
+        perms = []
+        if member.guild_permissions.administrator:
+            perms.append("Administrator")
+        if interaction.user.id in TRAINING_REVIEWER_USER_IDS:
+            perms.append("Training Reviewer")
+        if not perms:
+            perms.append("User (no special permissions)")
+
+        embed = discord.Embed(
+            title="Your Permissions",
+            description="\n".join(f"• {p}" for p in perms),
+            color=discord.Color.blurple()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(
+        name="help",
+        description="Show bot commands and categories"
+    )
+    async def slash_help(self, interaction: discord.Interaction):
+        """Show bot commands and categories."""
+        pages = self.help_pages()
+        if not pages:
+            await interaction.response.send_message(
+                "No help available.",
+                ephemeral=True
+            )
+            return
+
+        view = HelpPagesView(interaction.user.id, pages)
+        await interaction.response.send_message(
+            embed=pages[0],
+            view=view,
+            ephemeral=True
+        )
+
+    @app_commands.command(
+        name="resume",
+        description="Resume receiving pings after using pause"
+    )
+    async def slash_resume(self, interaction: discord.Interaction):
+        """Resume receiving pings."""
+        user_id = str(interaction.user.id)
+        afk_data = self.bot_state.setdefault("afk", {})
+        if user_id not in afk_data:
+            await interaction.response.send_message(
+                "You are not currently paused.",
+                ephemeral=True
+            )
+            return
+        
+        afk_data.pop(user_id, None)
+        try:
+            self.save_bot_state()
+            await interaction.response.send_message(
+                "✅ You are now receiving pings again!",
+                ephemeral=True
+            )
+        except OSError:
+            await interaction.response.send_message(
+                "❌ Could not save settings.",
+                ephemeral=True
+            )
+
+    @app_commands.command(
+        name="pause",
+        description="Pause all pings"
+    )
+    async def slash_pause(self, interaction: discord.Interaction):
+        """Pause all pings temporarily."""
+        user_id = str(interaction.user.id)
+        afk_data = self.bot_state.setdefault("afk", {})
+        afk_data[user_id] = {
+            "shiny_hunt": True,
+            "collection": True,
+            "typeping": True,
+            "questping": True,
+        }
+        try:
+            self.save_bot_state()
+            await interaction.response.send_message(
+                "⏸️ You have paused all pings. Use `/resume` to continue.",
+                ephemeral=True
+            )
+        except OSError:
+            await interaction.response.send_message(
+                "❌ Could not save settings.",
+                ephemeral=True
+            )
+
+    @app_commands.command(
+        name="settings",
+        description="View or manage bot settings"
+    )
+    async def slash_settings(self, interaction: discord.Interaction):
+        """View your current bot settings."""
+        if not interaction.guild:
+            await interaction.response.send_message(
+                "This command only works in servers.",
+                ephemeral=True
+            )
+            return
+
+        user_id = str(interaction.user.id)
+        afk_data = self.bot_state.get("afk", {}).get(user_id, {})
+        type_pings = self.bot_state.get("type_pings", {}).get(user_id, [])
+        quest_pings = self.bot_state.get("quest_pings", {}).get(user_id, [])
+
+        embed = discord.Embed(
+            title="Your Settings",
+            color=discord.Color.blurple()
+        )
+
+        ping_status = []
+        for kind in ["shiny_hunt", "collection", "typeping", "questping"]:
+            is_muted = afk_data.get(kind, False)
+            status = "🔇 Muted" if is_muted else "🔊 Receiving"
+            ping_status.append(f"• {kind}: {status}")
+        embed.add_field(
+            name="Ping Settings",
+            value="\n".join(ping_status),
+            inline=False
+        )
+
+        if type_pings:
+            embed.add_field(
+                name="Type Pings",
+                value=", ".join(type_pings),
+                inline=False
+            )
+
+        if quest_pings:
+            embed.add_field(
+                name="Quest Ping Regions",
+                value=", ".join(quest_pings),
+                inline=False
+            )
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(
+        name="support",
+        description="Get support and links"
+    )
+    async def slash_support(self, interaction: discord.Interaction):
+        """Get support and links."""
+        embed = discord.Embed(
+            title="Support",
+            description=(
+                "Need help? Check these resources:\n\n"
+                "📖 **Pokétwo** - Main game bot\n"
+                "💬 **Support Server** - Get help from staff\n"
+                "🐛 **Bug Reports** - Report issues"
+            ),
+            color=discord.Color.blurple()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 async def setup(bot):

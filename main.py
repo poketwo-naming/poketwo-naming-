@@ -54,6 +54,14 @@ async def on_ready():
     """Called when the bot is ready"""
     print(f"{bot.user} has connected to Discord!")
     print(f"Bot is in {len(bot.guilds)} guild(s)")
+    
+    # Sync app commands
+    try:
+        synced = await bot.tree.sync()
+        print(f"Synced {len(synced)} app command(s)")
+    except Exception as e:
+        print(f"Failed to sync app commands: {e}")
+    
     cog = bot.get_cog("PokéTwoNamingBot")
     if cog is not None:
         try:
