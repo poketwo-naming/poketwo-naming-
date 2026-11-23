@@ -8,7 +8,13 @@ from unittest.mock import AsyncMock
 import discord
 from discord.ext import commands
 
-from bot import GrabConfirmView, GrabEmojiModal, GrabReservesView, PokéTwoNamingBot
+from bot import (
+    GrabConfirmView,
+    GrabEmojiModal,
+    GrabReservesView,
+    PokéTwoNamingBot,
+    ReadyupView,
+)
 
 
 class CollectionCallback(Protocol):
@@ -95,6 +101,147 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             embed.description,
             "No members have reserved this Pokémon.",
+        )
+
+    async def test_grab_readyup_button_adds_each_user_once(self):
+        self.cog.readyup_views = {}
+        view = GrabReservesView(
+            self.cog,
+            101,
+            456,
+            [
+                ("456", "Pikachu", False, False, ""),
+                ("456", "Eevee", False, False, ""),
+                ("789", "Meowth", False, False, ""),
+            ],
+        )
+        interaction = SimpleNamespace(
+            guild=SimpleNamespace(id=123),
+            response=SimpleNamespace(send_message=AsyncMock()),
+        )
+        button = next(child for child in view.children if child.label == "Readyup")
+
+        await button.callback(interaction)
+
+        self.assertEqual(
+            self.cog.bot_state["readyup_queues"]["123"],
+            ["456", "789"],
+        )
+        interaction.response.send_message.assert_awaited_once_with(
+            "Added **2** user(s) to the ready-up queue.",
+            ephemeral=True,
+        )
+
+    async def test_readyup_button_rejects_users_not_in_the_queue(self):
+        self.cog.readyup_views = {}
+        view = ReadyupView(self.cog, 123, 101, ["456", "789"])
+        self.cog.readyup_views["123"] = view
+        interaction = SimpleNamespace(
+            guild=SimpleNamespace(id=123),
+            user=SimpleNamespace(id=111),
+            response=SimpleNamespace(send_message=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+        )
+        button = next(child for child in view.children if child.label == "Ready")
+
+        await button.callback(interaction)
+
+        self.assertEqual(view.ready_user_ids, set())
+        interaction.response.send_message.assert_awaited_once_with(
+            "You are not in this ready-up queue.",
+            ephemeral=True,
+        )
+
+    async def test_grab_adds_new_users_to_an_active_readyup(self):
+        self.cog.readyup_views = {}
+        self.cog.bot_state["readyup_queues"] = {"123": ["456"]}
+        self.cog.save_bot_state = lambda: None
+        readyup_view = ReadyupView(self.cog, 123, 101, ["456"])
+        readyup_view.ready_user_ids.add("456")
+        readyup_view.message = SimpleNamespace(edit=AsyncMock())
+        self.cog.readyup_views["123"] = readyup_view
+        grab_view = GrabReservesView(
+            self.cog,
+            101,
+            456,
+            [("789", "Pikachu", False, False, "")],
+        )
+        interaction = SimpleNamespace(
+            guild=SimpleNamespace(id=123),
+            response=SimpleNamespace(send_message=AsyncMock()),
+        )
+        button = next(child for child in grab_view.children if child.label == "Readyup")
+
+        await button.callback(interaction)
+
+        self.assertEqual(readyup_view.user_ids, ["456", "789"])
+        self.assertEqual(readyup_view.ready_user_ids, {"456"})
+        self.assertIn(
+            "<@789>",
+            readyup_view.message.edit.await_args.kwargs["embed"].fields[0].value,
+        )
+
+    async def test_readyup_marks_members_and_notifies_runner_once(self):
+        self.cog.readyup_views = {}
+        view = ReadyupView(self.cog, 123, 101, ["456", "789"])
+        self.cog.readyup_views["123"] = view
+        button = next(child for child in view.children if child.label == "Ready")
+
+        first_interaction = SimpleNamespace(
+            guild=SimpleNamespace(id=123),
+            user=SimpleNamespace(id=456),
+            response=SimpleNamespace(edit_message=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+        )
+        await button.callback(first_interaction)
+        first_interaction.response.edit_message.assert_awaited_once()
+        first_embed = first_interaction.response.edit_message.await_args.kwargs[
+            "embed"
+        ]
+        self.assertIn("<@456>", first_embed.fields[1].value)
+        first_interaction.followup.send.assert_not_awaited()
+
+        second_interaction = SimpleNamespace(
+            guild=SimpleNamespace(id=123),
+            user=SimpleNamespace(id=789),
+            response=SimpleNamespace(edit_message=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+        )
+        await button.callback(second_interaction)
+
+        embed = second_interaction.response.edit_message.await_args.kwargs["embed"]
+        self.assertEqual(embed.title, "All Ready")
+        self.assertEqual(embed.description, "All users are ready!")
+        self.assertEqual(view.ready_user_ids, {"456", "789"})
+        second_interaction.followup.send.assert_awaited_once()
+        self.assertEqual(
+            second_interaction.followup.send.await_args.args[0],
+            "<@101> everyone is ready its time to start the org.",
+        )
+
+    async def test_readyup_clear_removes_queue_and_ends_active_message(self):
+        self.cog.readyup_views = {}
+        self.cog.bot_state["readyup_queues"] = {"123": ["456", "789"]}
+        self.cog.save_bot_state = lambda: None
+        view = ReadyupView(self.cog, 123, 101, ["456", "789"])
+        view.message = SimpleNamespace(edit=AsyncMock())
+        self.cog.readyup_views["123"] = view
+        ctx = SimpleNamespace(
+            guild=SimpleNamespace(id=123),
+            send=AsyncMock(),
+        )
+
+        await PokéTwoNamingBot.clear_readyup.callback(self.cog, ctx)
+
+        self.assertNotIn("123", self.cog.bot_state["readyup_queues"])
+        self.assertTrue(view.ended)
+        view.message.edit.assert_awaited_once_with(
+            content="Ready-up queue cleared.",
+            embed=None,
+            view=None,
+        )
+        ctx.send.assert_awaited_once_with(
+            "✅ Cleared **2** user(s) from the ready-up queue."
         )
 
     def configure_toxtricity_forms(self):

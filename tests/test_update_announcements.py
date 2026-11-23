@@ -6,6 +6,7 @@ import discord
 
 from announcements import (
     ANNOUNCEMENT_CHANNEL_ID,
+    ANNOUNCEMENT_ROLE_ID,
     ANNOUNCEMENT_STATE_KEY,
     UPDATE_ANNOUNCEMENT,
     post_update_announcement,
@@ -27,13 +28,22 @@ class UpdateAnnouncementTests(unittest.IsolatedAsyncioTestCase):
         cog = SimpleNamespace(bot_state={}, save_bot_state=Mock())
 
         self.assertTrue(await post_update_announcement(bot, cog))
-        channel.send.assert_awaited_once_with(UPDATE_ANNOUNCEMENT)
+        channel.send.assert_awaited_once()
+        sent_message = channel.send.await_args
+        self.assertEqual(
+            sent_message.args[0],
+            f"<@&{ANNOUNCEMENT_ROLE_ID}> {UPDATE_ANNOUNCEMENT}",
+        )
+        self.assertEqual(
+            sent_message.kwargs["allowed_mentions"].roles,
+            [discord.Object(id=ANNOUNCEMENT_ROLE_ID)],
+        )
         bot.get_channel.assert_called_once_with(ANNOUNCEMENT_CHANNEL_ID)
         bot.fetch_channel.assert_not_awaited()
         cog.save_bot_state.assert_called_once()
 
         self.assertFalse(await post_update_announcement(bot, cog))
-        channel.send.assert_awaited_once_with(UPDATE_ANNOUNCEMENT)
+        channel.send.assert_awaited_once()
 
     async def test_fetches_channel_when_not_cached(self):
         channel = FakeMessageableChannel()

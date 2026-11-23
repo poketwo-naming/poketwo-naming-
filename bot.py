@@ -242,7 +242,18 @@ COMMAND_CATALOG = (
     (
         "Reservations",
         "v!grab",
-        "Replies to a reserve list with sorting, form, copy, and reserve controls.",
+        "Replies to a reserve list with sorting, form, copy, reserve, and ready-up "
+        "controls.",
+    ),
+    (
+        "Reservations",
+        "v!readyup",
+        "Starts a ready check for users added from v!grab.",
+    ),
+    (
+        "Reservations",
+        "v!readyup clear",
+        "Clears the ready-up queue and ends its active check.",
     ),
     (
         "Reservations",
@@ -1296,6 +1307,33 @@ class GrabReservesView(discord.ui.View):
             ephemeral=True,
         )
 
+    @discord.ui.button(label="Readyup", style=discord.ButtonStyle.success)
+    async def readyup_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ):
+        del button
+        guild = interaction.guild
+        if guild is None:
+            await interaction.response.send_message(
+                "The ready-up queue can only be used inside a server.",
+                ephemeral=True,
+            )
+            return
+        user_ids = list(dict.fromkeys(user_id for user_id, *_ in self.entries))
+        active_views = getattr(self.cog, "readyup_views", {})
+        active_view = active_views.get(str(guild.id))
+        if active_view is None or active_view.is_finished():
+            added = self.cog.add_readyup_users(guild.id, user_ids)
+        else:
+            added = await active_view.add_users(user_ids)
+        if added:
+            message = f"Added **{len(added)}** user(s) to the ready-up queue."
+        else:
+            message = "Everyone in this list is already in the ready-up queue."
+        await interaction.response.send_message(message, ephemeral=True)
+
     @discord.ui.button(label="Add reserves", style=discord.ButtonStyle.primary)
     async def add_reserves_button(
         self,
@@ -1350,6 +1388,133 @@ class GrabReservesView(discord.ui.View):
                 self.h_mode,
             ),
         )
+
+
+class ReadyupView(discord.ui.View):
+    """Track readiness for the users in one server's ready-up queue."""
+
+    def __init__(
+        self,
+        cog,
+        guild_id: int,
+        author_id: int,
+        user_ids: list[str],
+    ):
+        super().__init__(timeout=1800)
+        self.cog = cog
+        self.guild_id = str(guild_id)
+        self.author_id = author_id
+        self.user_ids = list(dict.fromkeys(str(user_id) for user_id in user_ids))
+        self.ready_user_ids: set[str] = set()
+        self.completed = False
+        self.completion_notified = False
+        self.ended = False
+        self.message = None
+        self.lock = asyncio.Lock()
+
+    def build_embed(self) -> discord.Embed:
+        all_ready = len(self.ready_user_ids) == len(self.user_ids)
+        embed = discord.Embed(
+            title="All Ready" if all_ready else "Ready Up",
+            description=(
+                "All users are ready!"
+                if all_ready
+                else "Click **Ready** when you are ready to start."
+            ),
+            color=discord.Color.green() if all_ready else discord.Color.orange(),
+        )
+        not_ready = [
+            f"☐ <@{user_id}>"
+            for user_id in self.user_ids
+            if user_id not in self.ready_user_ids
+        ]
+        ready = [
+            f"✅ <@{user_id}>"
+            for user_id in self.user_ids
+            if user_id in self.ready_user_ids
+        ]
+        embed.add_field(
+            name="Not Ready",
+            value="\n".join(not_ready) or "—",
+            inline=False,
+        )
+        embed.add_field(
+            name="Ready",
+            value="\n".join(ready) or "—",
+            inline=False,
+        )
+        return embed
+
+    async def add_users(self, user_ids: list[str]) -> list[str]:
+        async with self.lock:
+            added = self.cog.add_readyup_users(self.guild_id, user_ids)
+            if not added:
+                return []
+            self.user_ids.extend(added)
+            self.completed = False
+            self.completion_notified = False
+            self.ready_button.disabled = False
+            if self.message is not None:
+                await self.message.edit(embed=self.build_embed(), view=self)
+            return added
+
+    @discord.ui.button(label="Ready", style=discord.ButtonStyle.success)
+    async def ready_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ):
+        del button
+        async with self.lock:
+            active_views = getattr(self.cog, "readyup_views", {})
+            if (
+                self.ended
+                or active_views.get(self.guild_id) is not self
+            ):
+                await interaction.response.send_message(
+                    "This ready-up has ended or was cleared.",
+                    ephemeral=True,
+                )
+                return
+            if self.completed:
+                await interaction.response.send_message(
+                    "Everyone in this ready-up is already ready.",
+                    ephemeral=True,
+                )
+                return
+            user_id = str(interaction.user.id)
+            if user_id not in self.user_ids:
+                await interaction.response.send_message(
+                    "You are not in this ready-up queue.",
+                    ephemeral=True,
+                )
+                return
+            if user_id in self.ready_user_ids:
+                await interaction.response.send_message(
+                    "You are already marked ready.",
+                    ephemeral=True,
+                )
+                return
+
+            self.ready_user_ids.add(user_id)
+            all_ready = len(self.ready_user_ids) == len(self.user_ids)
+            if all_ready:
+                self.completed = True
+                self.ready_button.disabled = True
+            await interaction.response.edit_message(
+                embed=self.build_embed(),
+                view=self,
+            )
+            if all_ready and not self.completion_notified:
+                self.completion_notified = True
+                await interaction.followup.send(
+                    f"<@{self.author_id}> everyone is ready its time to start the org.",
+                    allowed_mentions=discord.AllowedMentions(
+                        users=True,
+                        roles=False,
+                        everyone=False,
+                    ),
+                )
 
 
 class GrabConfirmView(discord.ui.View):
@@ -1478,6 +1643,7 @@ class PokéTwoNamingBot(commands.Cog):
         self.pokemon_species = self.load_pokemon_species()
         self.reviewed_spawn_count = self.load_collected_training_count()
         self.bot_state = self.load_bot_state()
+        self.readyup_views = {}
         self.breeding_box_service = BreedingBoxService(self, POKETWO_BOT_ID)
         self.seed_restricted_roles()
         self.active_incenses = {
@@ -1776,6 +1942,55 @@ class PokéTwoNamingBot(commands.Cog):
             return []
         return list(dict.fromkeys(user_ids))
 
+    def readyup_user_ids(self, guild_id) -> list[str]:
+        """Return the unique users queued for a server's ready-up."""
+        queues = self.bot_state.setdefault("readyup_queues", {})
+        user_ids = queues.get(str(guild_id), [])
+        if not isinstance(user_ids, list):
+            raise ValueError(f"Ready-up queue for server {guild_id} is invalid")
+        return list(dict.fromkeys(str(user_id) for user_id in user_ids))
+
+    def add_readyup_users(self, guild_id, user_ids: list[str]) -> list[str]:
+        """Append new users to a server's ready-up queue without duplicates."""
+        queues = self.bot_state.setdefault("readyup_queues", {})
+        guild_key = str(guild_id)
+        current = self.readyup_user_ids(guild_key)
+        added = [
+            user_id
+            for user_id in dict.fromkeys(str(value) for value in user_ids)
+            if user_id not in current
+        ]
+        if not added:
+            return []
+        had_queue = guild_key in queues
+        previous_queue = queues.get(guild_key)
+        queues[guild_key] = current + added
+        try:
+            self.save_bot_state()
+        except OSError:
+            if had_queue:
+                queues[guild_key] = previous_queue
+            else:
+                queues.pop(guild_key, None)
+            raise
+        return added
+
+    def clear_readyup_users(self, guild_id) -> int:
+        """Remove every queued user for one server."""
+        queues = self.bot_state.setdefault("readyup_queues", {})
+        guild_key = str(guild_id)
+        current = self.readyup_user_ids(guild_key)
+        if not current:
+            queues.pop(guild_key, None)
+            return 0
+        previous_queue = queues.pop(guild_key)
+        try:
+            self.save_bot_state()
+        except OSError:
+            queues[guild_key] = previous_queue
+            raise
+        return len(current)
+
     def add_reserve_owner(self, guild_id, pokemon_name: str, user_id) -> bool:
         """Add a reserving user without replacing existing owners."""
         guild_reserves = self.bot_state["reserves"].setdefault(str(guild_id), {})
@@ -1864,6 +2079,7 @@ class PokéTwoNamingBot(commands.Cog):
             "afk": {},
             "breeding_boxes": {},
             "daycare_settings": {},
+            "readyup_queues": {},
             "last_update_announcement": "",
         }
         if not os.path.exists(BOT_STATE_FILE):
@@ -1900,6 +2116,7 @@ class PokéTwoNamingBot(commands.Cog):
         state.setdefault("afk", {})
         state.setdefault("breeding_boxes", {})
         state.setdefault("daycare_settings", {})
+        state.setdefault("readyup_queues", {})
         state.setdefault("last_update_announcement", "")
         return state
 
@@ -4777,6 +4994,54 @@ class PokéTwoNamingBot(commands.Cog):
     async def grab_reserves_command(self, ctx):
         """Import reservations from the replied-to user/Pokémon list."""
         await self.grab_reserves(ctx, h_mode=False)
+
+    @commands.group(name="readyup", invoke_without_command=True)
+    async def readyup(self, ctx):
+        """Start a ready check for the users added from a grabbed list."""
+        if ctx.guild is None:
+            await ctx.send("Ready-up can only be used inside a server.")
+            return
+        user_ids = self.readyup_user_ids(ctx.guild.id)
+        if not user_ids:
+            await ctx.send(
+                "The ready-up queue is empty. Use `v!grab` and click **Readyup** "
+                "to add users first."
+            )
+            return
+        view = ReadyupView(self, ctx.guild.id, ctx.author.id, user_ids)
+        self.readyup_views[str(ctx.guild.id)] = view
+        view.message = await ctx.send(embed=view.build_embed(), view=view)
+
+    @readyup.command(name="clear")
+    async def clear_readyup(self, ctx):
+        """Clear the server's ready-up queue and end its active check."""
+        if ctx.guild is None:
+            await ctx.send("Ready-up can only be used inside a server.")
+            return
+        count = self.clear_readyup_users(ctx.guild.id)
+        view = self.readyup_views.pop(str(ctx.guild.id), None)
+        if view is not None:
+            view.ended = True
+            view.ready_button.disabled = True
+            if view.message is not None:
+                try:
+                    await view.message.edit(
+                        content="Ready-up queue cleared.",
+                        embed=None,
+                        view=None,
+                    )
+                    view.stop()
+                except discord.NotFound:
+                    view.stop()
+                except discord.DiscordException as error:
+                    logging.warning(
+                        "Could not update cleared ready-up message: %s",
+                        error,
+                    )
+        if count:
+            await ctx.send(f"✅ Cleared **{count}** user(s) from the ready-up queue.")
+        else:
+            await ctx.send("The ready-up queue is already empty.")
 
     @commands.group(name="cl", invoke_without_command=True)
     async def collection(self, ctx):

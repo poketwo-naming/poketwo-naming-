@@ -6,11 +6,12 @@ import discord
 
 
 ANNOUNCEMENT_CHANNEL_ID = 1574489953444827146
+ANNOUNCEMENT_ROLE_ID = 1574502724370825286
 ANNOUNCEMENT_STATE_KEY = "last_update_announcement"
 UPDATE_ANNOUNCEMENT = (
     "**What's new**\n"
-    "- Added `v!tp` / `v!typeping` to choose type-based spawn pings, including "
-    "dual-type Pokémon."
+    "- Added a ready-up queue: add users from `v!grab`, run `v!readyup` for "
+    "a Ready button, and use `v!readyup clear` to reset the queue."
 )
 
 
@@ -40,7 +41,14 @@ async def post_update_announcement(bot: AnnouncementBot, cog: AnnouncementCog) -
             f"Announcement channel {ANNOUNCEMENT_CHANNEL_ID} cannot receive messages"
         )
 
-    await channel.send(UPDATE_ANNOUNCEMENT)
+    await channel.send(
+        f"<@&{ANNOUNCEMENT_ROLE_ID}> {UPDATE_ANNOUNCEMENT}",
+        allowed_mentions=discord.AllowedMentions(
+            roles=[discord.Object(id=ANNOUNCEMENT_ROLE_ID)],
+            users=False,
+            everyone=False,
+        ),
+    )
     had_previous_digest = ANNOUNCEMENT_STATE_KEY in cog.bot_state
     previous_digest = cog.bot_state.get(ANNOUNCEMENT_STATE_KEY)
     cog.bot_state[ANNOUNCEMENT_STATE_KEY] = digest

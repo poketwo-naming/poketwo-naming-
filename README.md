@@ -48,7 +48,9 @@ Every `v!` command also works with a capital `V!` prefix.
 | `v!r list [@user]` | `v!r list @user` | List all server reserves or one member's reserves |
 | `v!reserve list [@user]` | `v!reserve list @user` | Long-form reserve list command |
 | `v!r clear` | `v!r clear` | Confirm and clear all server reserves (restricted) |
-| `v!grab` | Reply with `v!grab` | Preview a reserve list; category labels before a mention expand to that category |
+| `v!grab` | Reply with `v!grab` | Preview a reserve list, add its unique users to ready-up, or manage reserves |
+| `v!readyup` | `v!readyup` | Show a ready check for users added from `v!grab` |
+| `v!readyup clear` | `v!readyup clear` | Clear the server's ready-up queue and end its active check |
 | `h!grab` | Reply with `h!grab` | Same category support, delegated through h!r, then v!r |
 | `v!sh [pokemon]` | `v!sh Pikachu` | Start/switch a hunt, or show your current hunt |
 | `v!sh all <pokemon>` | `v!sh all Meowth` | Hunt every form of that Pokémon |
@@ -92,8 +94,9 @@ copying.
 
 On startup, the bot posts the current `UPDATE_ANNOUNCEMENT` from
 `announcements.py` to channel `1574489953444827146` once per announcement text.
-Update that summary alongside each bot change; restarts with unchanged
-announcement text do not post duplicates.
+Each update post pings the configured announcement role
+`1574502724370825286`. Update the summary alongside each bot change; restarts
+with unchanged announcement text do not post duplicates.
 
 In grabbed lists, `Booster` is treated as a heading rather than Flareon's
 localized name when a Pokémon follows the member mention.
@@ -162,6 +165,12 @@ expands an entry when its original text requests all forms. Grab and reserve
 exchange include regional forms for `all <Pokémon name>` (for example,
 `all Articuno` includes Galarian Articuno). Exchange skips forms the original
 user does not have reserved.
+
+Click **Readyup** on a `v!grab` preview to add each mentioned user once to that
+server's ready-up queue. Run `v!readyup` to show the Ready button and the
+not-ready/ready user lists; only queued users can mark themselves ready. When
+everyone is ready, the command runner is mentioned in a follow-up message.
+Use `v!readyup clear` to clear the queue and end the active check.
 
 When Pokétwo confirms an incense purchase with `Incense has been bought` or
 `You purchased an Incense for 50 shards!`, this bot pauses Pokétwo in that
