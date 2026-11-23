@@ -11,11 +11,12 @@ ANNOUNCEMENT_STATE_KEY = "last_update_announcement"
 PENDING_PUBLICATION_KEY = "pending_update_publication"
 UPDATE_ANNOUNCEMENT = (
     "**What's new**\n"
-    "- Restricted access to the following commands (requires staff permissions):\n"
-    "  - `v!tz` - Timezone finder\n"
-    "  - `v!premiumservers` / `v!ps` - View premium server tiers\n"
-    "  - `v!grab` - Import reservations\n"
-    "  - `v!servers` - List all connected servers"
+    "- Added `v!qp` / `v!questping` command to receive pings for regional Pokémon quests!\n"
+    "  - Select which regions to receive quest pings for\n"
+    "  - Supports 12 regions: Kanto, Johto, Hoenn, Sinnoh, Unova, Kalos, Alola, Galar, Hisui, Paldea, Kitakami, Paradox\n"
+    "  - Regional forms (Alolan, Galarian, Hisuian, Paldean) automatically map to their regions\n"
+    "  - Quest pings display in spawn messages when a matching regional Pokémon appears\n"
+    "- Quest pings respect your AFK status and can be toggled with `v!mute`"
 )
 
 
