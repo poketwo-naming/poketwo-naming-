@@ -48,7 +48,7 @@ async def on_message(message):
     if message.author == bot.user:
         return
     breeding_box_match = re.match(
-        r"^\s*[vV][lL][bB][oO][xX](?:\s+(.*))?\s*$",
+        r"^\s*[vV]![bB][oO][xX](?:\s+(.*))?\s*$",
         message.content,
         re.DOTALL,
     )

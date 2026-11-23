@@ -110,47 +110,47 @@ COMMAND_CATALOG = (
     ("General", "v!ping", "Shows the bot's gateway latency."),
     (
         "Breeding Boxes & Daycare",
-        "vlbox",
+        "v!box",
         "Shows all of your boxes and how full they are (limit 7,500 each).",
     ),
     (
         "Breeding Boxes & Daycare",
-        "vlbox <box> / <name>",
+        "v!box <box> / <name>",
         "Makes a new breeding box.",
     ),
     (
         "Breeding Boxes & Daycare",
-        "vlbox [number | box] [--c]",
+        "v!box [number | box] [--c]",
         "Replies to a Pokétwo list to store its eggs.",
     ),
     (
         "Breeding Boxes & Daycare",
-        "vlbox list / remove / transfer",
+        "v!box list / remove / transfer",
         "Browses, deletes, moves, or duplicates stored Pokémon.",
     ),
     (
         "Breeding Boxes & Daycare",
-        "vlbox tag / untag / tags / tagged",
+        "v!box tag / untag / tags / tagged",
         "Tracks or lists tagged egg moves.",
     ),
     (
         "Breeding Boxes & Daycare",
-        "vlbox rename / delete / clear / list",
+        "v!box rename / delete / clear / list",
         "Renames, deletes, clears, or lists boxes.",
     ),
     (
         "Breeding Boxes & Daycare",
-        "vlbox [box]",
+        "v!box [box]",
         "Pulls +2 breedable pairs with a ready-to-paste daycare command.",
     ),
     (
         "Breeding Boxes & Daycare",
-        "vlbox daycare",
+        "v!box daycare",
         "Changes how pairs are picked and displayed.",
     ),
     (
         "Breeding Boxes & Daycare",
-        "vlbox help",
+        "v!box help",
         "Shows the full list of box commands.",
     ),
     (
@@ -1857,7 +1857,7 @@ class PokéTwoNamingBot(commands.Cog):
         parts = argument.split()
         if not parts:
             await ctx.send(
-                f"Usage: `vlbox {action} <box>`"
+                f"Usage: `v!box {action} <box>`"
                 + (" <pokemon>" if action in {"remove", "tag", "untag"} else "")
             )
             return
@@ -1872,11 +1872,11 @@ class PokéTwoNamingBot(commands.Cog):
 
         if action == "rename":
             if len(parts) < 2:
-                await ctx.send("Usage: `vlbox rename <box> <new name>`")
+                await ctx.send("Usage: `v!box rename <box> <new name>`")
                 return
             new_name = " ".join(parts[1:]).strip()[:100]
             if not new_name:
-                await ctx.send("Usage: `vlbox rename <box> <new name>`")
+                await ctx.send("Usage: `v!box rename <box> <new name>`")
                 return
             if new_name.casefold() != box_name.casefold() and any(
                 name.casefold() == new_name.casefold() for name in boxes
@@ -1902,7 +1902,7 @@ class PokéTwoNamingBot(commands.Cog):
 
         if action == "remove":
             if len(parts) < 2:
-                await ctx.send("Usage: `vlbox remove <box> <pokemon>`")
+                await ctx.send("Usage: `v!box remove <box> <pokemon>`")
                 return
             pokemon_input = " ".join(parts[1:])
             pokemon_name = self.resolve_pokemon_name(pokemon_input)
@@ -1926,7 +1926,7 @@ class PokéTwoNamingBot(commands.Cog):
         if action == "transfer":
             if len(parts) < 3:
                 await ctx.send(
-                    "Usage: `vlbox transfer <from> <to> <pokemon>`"
+                    "Usage: `v!box transfer <from> <to> <pokemon>`"
                 )
                 return
             destination_name, destination = self.resolve_breeding_box(
@@ -1964,7 +1964,7 @@ class PokéTwoNamingBot(commands.Cog):
 
         if action in {"tag", "untag"}:
             if len(parts) < 2:
-                await ctx.send(f"Usage: `vlbox {action} <box> <pokemon> [tag]`")
+                await ctx.send(f"Usage: `v!box {action} <box> <pokemon> [tag]`")
                 return
             pokemon_input = " ".join(parts[1:-1]) if action == "tag" and len(parts) > 2 else " ".join(parts[1:])
             tag = parts[-1] if action == "tag" and len(parts) > 2 else ""
@@ -1985,7 +1985,7 @@ class PokéTwoNamingBot(commands.Cog):
             tags = set(item.setdefault("tags", []))
             if action == "tag":
                 if not tag:
-                    await ctx.send("Usage: `vlbox tag <box> <pokemon> <tag>`")
+                    await ctx.send("Usage: `v!box tag <box> <pokemon> <tag>`")
                     return
                 tags.add(tag)
                 item["tags"] = sorted(tags, key=str.casefold)
@@ -2019,7 +2019,7 @@ class PokéTwoNamingBot(commands.Cog):
             if not boxes:
                 await ctx.send(
                     "You have no breeding boxes yet. Create one with "
-                    "`vlbox <box name>`."
+                    "`v!box <box name>`."
                 )
                 return
             lines = []
@@ -2043,15 +2043,15 @@ class PokéTwoNamingBot(commands.Cog):
         if subcommand == "help":
             await ctx.send(
                 "**Breeding box commands**\n"
-                "`vlbox` — list boxes\n"
-                "`vlbox <name>` — create a box\n"
-                "Reply to a Pokétwo list with `vlbox [box] [--c]` — store eggs\n"
-                "`vlbox remove <box> <name>` — remove Pokémon\n"
-                "`vlbox transfer <from> <to> <name>` — move Pokémon\n"
-                "`vlbox tag <box> <name> <tag>` / `vlbox untag <box> <name>`\n"
-                "`vlbox tags` / `vlbox tagged <tag>`\n"
-                "`vlbox rename <box> <new name>` / `vlbox delete <box>`\n"
-                "`vlbox clear <box>` / `vlbox [box]` — suggest daycare pairs"
+                "`v!box` — list boxes\n"
+                "`v!box <name>` — create a box\n"
+                "Reply to a Pokétwo list with `v!box [box] [--c]` — store eggs\n"
+                "`v!box remove <box> <name>` — remove Pokémon\n"
+                "`v!box transfer <from> <to> <name>` — move Pokémon\n"
+                "`v!box tag <box> <name> <tag>` / `v!box untag <box> <name>`\n"
+                "`v!box tags` / `v!box tagged <tag>`\n"
+                "`v!box rename <box> <new name>` / `v!box delete <box>`\n"
+                "`v!box clear <box>` / `v!box [box]` — suggest daycare pairs"
             )
             return
 
@@ -2096,7 +2096,7 @@ class PokéTwoNamingBot(commands.Cog):
             if text == "daycare":
                 await ctx.send(
                     "Daycare preferences are available as part of pair selection "
-                    "from `vlbox [box]`."
+                    "from `v!box [box]`."
                 )
                 return
 
@@ -2188,7 +2188,7 @@ class PokéTwoNamingBot(commands.Cog):
 
         box_name = text[:100].strip()
         if not box_name:
-            await ctx.send("Usage: `vlbox <box name>`")
+            await ctx.send("Usage: `v!box <box name>`")
             return
         if box_name.casefold() in {name.casefold() for name in boxes}:
             await ctx.send(f"❌ A breeding box named **{box_name}** already exists.")

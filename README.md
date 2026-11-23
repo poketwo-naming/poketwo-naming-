@@ -61,15 +61,15 @@ Every `v!` command also works with a capital `V!` prefix.
 | `v!export_training` | `v!export_training` | Download reviewed images for retraining |
 | `v!help [page]` | `v!help 1` | Paginated command explanations |
 | `v!commands [page]` | `v!commands 1` | Categorized command list |
-| `vlbox` | `vlbox` | Show all boxes and how full they are (limit 7,500 each) |
-| `vlbox <box> / <name>` | `vlbox Daycare` | Make a new box |
-| `vlbox [number | box] [--c]` | Reply to a Pokétwo list with `vlbox` | Store eggs from the replied list |
-| `vlbox list / remove / transfer` | `vlbox list` | Browse, delete, move, or duplicate stored Pokémon |
-| `vlbox tag / untag / tags / tagged` | `vlbox tags` | Track egg moves on tags |
-| `vlbox rename / delete / clear / list` | `vlbox rename <box> <name>` | Manage or wipe boxes |
-| `vlbox [box]` | `vlbox 1` | Pull +2 breedable pairs with a ready-to-paste daycare command |
-| `vlbox daycare` | `vlbox daycare` | Change how pairs are picked and shown |
-| `vlbox help` | `vlbox help` | Show the full list of box commands |
+| `v!box` | `v!box` | Show all boxes and how full they are (limit 7,500 each) |
+| `v!box <box> / <name>` | `v!box Daycare` | Make a new box |
+| `v!box [number | box] [--c]` | Reply to a Pokétwo list with `v!box` | Store eggs from the replied list |
+| `v!box list / remove / transfer` | `v!box list` | Browse, delete, move, or duplicate stored Pokémon |
+| `v!box tag / untag / tags / tagged` | `v!box tags` | Track egg moves on tags |
+| `v!box rename / delete / clear / list` | `v!box rename <box> <name>` | Manage or wipe boxes |
+| `v!box [box]` | `v!box 1` | Pull +2 breedable pairs with a ready-to-paste daycare command |
+| `v!box daycare` | `v!box daycare` | Change how pairs are picked and shown |
+| `v!box help` | `v!box help` | Show the full list of box commands |
 
 In grabbed lists, `Booster` is treated as a heading rather than Flareon's
 localized name when a Pokémon follows the member mention.
