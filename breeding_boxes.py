@@ -56,7 +56,14 @@ def find_daycare_pairs(
     species_data: dict[int, dict],
     selection: str = "first",
 ) -> list[tuple[int, int]]:
-    """Find up to two compatible, non-repeating Pokémon pairs."""
+    """Find all compatible, non-repeating Pokémon pairs.
+    
+    Prioritizes:
+    1. Ditto pairing with other Pokémon (Ditto can breed with any species)
+    2. Male-female pairing of compatible species (same egg groups)
+    
+    Returns up to all possible pairs found.
+    """
     ditto_indices = []
     males: dict[str, list[int]] = {}
     females: dict[str, list[int]] = {}
@@ -97,19 +104,9 @@ def find_daycare_pairs(
 
     pairs = []
     used = set()
-    for group in dict.fromkeys(
-        [*males.keys(), *females.keys()]
-    ):
-        for male_index in males.get(group, ()):
-            for female_index in females.get(group, ()):
-                if male_index == female_index or male_index in used or female_index in used:
-                    continue
-                pairs.append((male_index, female_index))
-                used.update((male_index, female_index))
-                if len(pairs) == 2:
-                    return pairs
-
-    eligible = []
+    
+    # First, pair Ditto with other Pokémon (prioritized)
+    eligible_for_ditto = []
     for index, item in enumerate(items):
         species_id = item.get("species_id")
         if species_id is None:
@@ -125,15 +122,28 @@ def find_daycare_pairs(
                 or data.get("gender_rate") in {0, 8}
             )
         ):
-            eligible.append(index)
+            eligible_for_ditto.append(index)
+    
     for ditto_index in ditto_indices:
-        for other_index in eligible:
+        for other_index in eligible_for_ditto:
             if ditto_index == other_index or other_index in used:
                 continue
             pairs.append((ditto_index, other_index))
             used.update((ditto_index, other_index))
-            if len(pairs) == 2:
-                return pairs
+            break  # Each Ditto pairs with one Pokémon
+    
+    # Then, pair remaining males and females by egg group compatibility
+    for group in dict.fromkeys([*males.keys(), *females.keys()]):
+        for male_index in males.get(group, ()):
+            if male_index in used:
+                continue
+            for female_index in females.get(group, ()):
+                if female_index == male_index or female_index in used:
+                    continue
+                pairs.append((male_index, female_index))
+                used.update((male_index, female_index))
+                break  # Each Pokémon pairs with one other
+    
     return pairs
 
 
@@ -1028,7 +1038,7 @@ class BreedingBoxService:
                 "visible genders."
             )
             return
-        displayed_pairs = pairs[:1]
+        displayed_pairs = pairs
         output = [
             f"**Daycare Pairs — {box_name}**",
             f"Name: {box_name}",
