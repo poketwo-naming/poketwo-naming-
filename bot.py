@@ -2553,7 +2553,15 @@ class PokéTwoNamingBot(commands.Cog):
         started = perf_counter()
         for attachment in message.attachments:
             if (attachment.content_type or "").startswith("image/"):
-                return await attachment.read(), perf_counter() - started
+                try:
+                    image_data = await attachment.read(use_cached=True)
+                except discord.HTTPException as error:
+                    print(
+                        "Could not download Pokétwo spawn image from Discord's "
+                        f"cached media URL; retrying the original URL: {error}"
+                    )
+                    image_data = await attachment.read()
+                return image_data, perf_counter() - started
 
         image_url = self.spawn_image_url(message)
         if image_url is None:

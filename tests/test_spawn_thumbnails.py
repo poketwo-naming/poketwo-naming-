@@ -116,6 +116,49 @@ class SpawnThumbnailTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.cog.last_spawn_metrics["send"], self.cog.message_send_times[0])
         self.assertEqual(list(self.cog.spawn_metrics), [self.cog.last_spawn_metrics])
 
+    async def test_spawn_image_download_uses_discord_cached_media_url(self):
+        attachment = SimpleNamespace(
+            content_type="image/png",
+            read=AsyncMock(return_value=self.image_data),
+        )
+        self.message.attachments = [attachment]
+
+        image_data, _ = await PokéTwoNamingBot._get_spawn_image(
+            self.cog,
+            self.message,
+        )
+
+        self.assertEqual(image_data, self.image_data)
+        attachment.read.assert_awaited_once_with(use_cached=True)
+
+    async def test_spawn_image_download_falls_back_when_cached_url_fails(self):
+        attachment = SimpleNamespace(
+            content_type="image/png",
+            read=AsyncMock(
+                side_effect=[
+                    discord.HTTPException(
+                        SimpleNamespace(status=404, reason="Not Found"),
+                        "cached media unavailable",
+                    ),
+                    self.image_data,
+                ]
+            ),
+        )
+        self.message.attachments = [attachment]
+
+        image_data, _ = await PokéTwoNamingBot._get_spawn_image(
+            self.cog,
+            self.message,
+        )
+
+        self.assertEqual(image_data, self.image_data)
+        self.assertEqual(
+            attachment.read.await_args_list[0].kwargs,
+            {"use_cached": True},
+        )
+        self.assertEqual(attachment.read.await_args_list[1].args, ())
+        self.assertEqual(attachment.read.await_args_list[1].kwargs, {})
+
     async def test_low_confidence_spawn_still_sends_review(self):
         self.channel.id = TRAINING_REVIEW_CHANNEL_ID
         self.recognize.return_value = ("Pikachu", 20.0, 0.02)

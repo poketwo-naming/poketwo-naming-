@@ -171,7 +171,9 @@ host and network.
 `v!apislow` shows download, inference, Discord send, other, and total time for
 the slowest of the latest 100 completed recognitions since restart. Other time
 includes scheduling, response preparation, and any MissingNo pause and alert.
-The timing starts when spawn handling begins, after message tracking.
+The timing starts when spawn handling begins, after message tracking. Spawn
+attachments are fetched from Discord's cached media URL first, with the original
+attachment URL as a fallback.
 
 The bot uses the Pokémon-named folders in `pokemon_images/training_data` to build
 the recognition model. Rebuild it after changing the training images:
