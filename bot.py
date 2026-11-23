@@ -3902,6 +3902,23 @@ class PokéTwoNamingBot(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else None
         await ctx.send(view=ServerSettingsView(ctx.author.id, cog=self, guild_id=guild_id))
 
+    @commands.command(name="announce", hidden=True)
+    async def announce_update(self, ctx):
+        """Post the update announcement immediately (staff only)."""
+        if not self.has_restricted_permission(ctx):
+            await ctx.send("❌ You don't have permission.")
+            return
+        
+        from announcements import post_update_announcement
+        try:
+            result = await post_update_announcement(self.bot, self)
+            if result:
+                await ctx.send("✅ Announcement posted successfully")
+            else:
+                await ctx.send("ℹ️ Announcement unchanged from last post")
+        except Exception as e:
+            await ctx.send(f"❌ Error posting announcement: {e}")
+
     def guild_categories(self, guild_id) -> dict:
         """Get categories for a guild."""
         return self.bot_state["categories"].setdefault(str(guild_id), {})
