@@ -2440,6 +2440,8 @@ class PokéTwoNamingBot(commands.Cog):
             "daycare_settings": {},
             "readyup_queues": {},
             "last_update_announcement": "",
+            "automatic_update_announcement": "",
+            "automatic_update_pending_message": None,
         }
         if not os.path.exists(BOT_STATE_FILE):
             return default_state
@@ -2477,6 +2479,8 @@ class PokéTwoNamingBot(commands.Cog):
         state.setdefault("daycare_settings", {})
         state.setdefault("readyup_queues", {})
         state.setdefault("last_update_announcement", "")
+        state.setdefault("automatic_update_announcement", "")
+        state.setdefault("automatic_update_pending_message", None)
         return state
 
     def seed_restricted_roles(self):

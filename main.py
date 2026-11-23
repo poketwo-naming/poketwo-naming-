@@ -1,6 +1,7 @@
 """
 Pokétwo Naming Bot - Main entry point
 """
+import asyncio
 import os
 import re
 from typing import Protocol, cast
@@ -9,7 +10,7 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 
-from announcements import post_update_announcement
+from announcements import run_update_announcement
 
 load_dotenv()
 
@@ -56,15 +57,17 @@ async def on_ready():
     print(f"Bot is in {len(bot.guilds)} guild(s)")
     print(f"DEBUG: App commands in tree: {len(bot.tree._get_all_commands())}")
     
-    # Sync app commands
+    # Sync app commands with timeout
     try:
         print("DEBUG: Starting app command sync...")
-        synced = await bot.tree.sync()
+        synced = await asyncio.wait_for(bot.tree.sync(), timeout=30.0)
         print(f"✅ Synced {len(synced)} app command(s)")
         if synced:
             print(f"DEBUG: Synced commands: {[cmd.name for cmd in synced]}")
         else:
             print("DEBUG: No new commands to sync (already up to date)")
+    except asyncio.TimeoutError:
+        print("⚠️  App command sync timed out (30s)")
     except discord.app_commands.errors.AppCommandSyncError as e:
         # Handle Discord's Entry Point command restriction error
         if "50240" in str(e):
@@ -77,19 +80,7 @@ async def on_ready():
         import traceback
         traceback.print_exc()
     
-    # Try to post announcement (might fail if cog not loaded yet)
-    cog = bot.get_cog("PokéTwoNamingBot")
-    if cog is not None:
-        try:
-            result = await post_update_announcement(bot, cog)
-            if result:
-                print("✅ Update announcement posted successfully")
-            else:
-                print("ℹ️  Announcement unchanged from last post")
-        except (discord.DiscordException, OSError, TypeError, ValueError) as error:
-            print(f"⚠️  Could not post announcement: {error}")
-    else:
-        print("ℹ️  Cog not loaded yet, announcement deferred")
+    asyncio.create_task(run_update_announcement(bot))
 
 
 @bot.event

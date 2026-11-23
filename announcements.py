@@ -1,14 +1,14 @@
-"""Post update announcements to the configured Discord channel."""
-import hashlib
-from typing import Protocol
+"""Automatic update announcements for the Poketwo Naming server."""
+import asyncio
+import traceback
 
 import discord
 
 
 ANNOUNCEMENT_CHANNEL_ID = 1574489953444827146
 ANNOUNCEMENT_ROLE_ID = 1574502724370825286
-ANNOUNCEMENT_STATE_KEY = "last_update_announcement"
-PENDING_PUBLICATION_KEY = "pending_update_publication"
+ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
+PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 UPDATE_ANNOUNCEMENT = (
     "**What's new**\n"
     "🔧 **Breeding Box Slash Commands** - Manage boxes and daycare pairs with `/` commands\n"
@@ -18,49 +18,38 @@ UPDATE_ANNOUNCEMENT = (
 )
 
 
-class AnnouncementCog(Protocol):
-    bot_state: dict[str, object]
+async def post_update_announcement(bot, cog) -> bool:
+    """Send and automatically publish the latest update once."""
+    bot_state = cog.bot_state
 
-    def save_bot_state(self) -> None: ...
+    bot_state.pop("last_update_announcement", None)
+    bot_state.pop("pending_update_publication", None)
 
-
-class AnnouncementBot(Protocol):
-    def get_channel(self, channel_id: int) -> object | None: ...
-
-    async def fetch_channel(self, channel_id: int) -> object: ...
-
-
-async def post_update_announcement(bot: AnnouncementBot, cog: AnnouncementCog) -> bool:
-    """Post and publish the update once, retrying any pending publication."""
-    digest = hashlib.sha256(UPDATE_ANNOUNCEMENT.encode("utf-8")).hexdigest()
-    pending = cog.bot_state.get(PENDING_PUBLICATION_KEY)
-    if cog.bot_state.get(ANNOUNCEMENT_STATE_KEY) == digest and pending is None:
+    if bot_state.get(ANNOUNCEMENT_STATE_KEY) == UPDATE_ANNOUNCEMENT:
+        bot_state.pop(PENDING_MESSAGE_STATE_KEY, None)
         return False
 
     channel = bot.get_channel(ANNOUNCEMENT_CHANNEL_ID)
     if channel is None:
         channel = await bot.fetch_channel(ANNOUNCEMENT_CHANNEL_ID)
-    if not isinstance(channel, discord.abc.Messageable):
+    if not isinstance(channel, discord.TextChannel):
         raise TypeError(
-            f"Announcement channel {ANNOUNCEMENT_CHANNEL_ID} cannot receive messages"
+            f"Announcement channel {ANNOUNCEMENT_CHANNEL_ID} is not a text channel"
         )
 
-    async def publish_pending(message: discord.Message) -> None:
-        if not message.flags.crossposted:
-            await message.publish()
-        pending_id = cog.bot_state.pop(PENDING_PUBLICATION_KEY)
-        try:
+    pending_id = bot_state.get(PENDING_MESSAGE_STATE_KEY)
+    if pending_id is not None:
+        if not isinstance(pending_id, int):
+            bot_state.pop(PENDING_MESSAGE_STATE_KEY, None)
             cog.save_bot_state()
-        except OSError:
-            cog.bot_state[PENDING_PUBLICATION_KEY] = pending_id
-            raise
-
-    if pending is not None:
-        if not isinstance(pending, int):
-            raise ValueError("Invalid pending update announcement message ID")
-        await publish_pending(await channel.fetch_message(pending))
-        if cog.bot_state.get(ANNOUNCEMENT_STATE_KEY) == digest:
-            return False
+        else:
+            message = await channel.fetch_message(pending_id)
+            if not getattr(message.flags, "crossposted", False):
+                await message.publish()
+            bot_state.pop(PENDING_MESSAGE_STATE_KEY)
+            bot_state[ANNOUNCEMENT_STATE_KEY] = UPDATE_ANNOUNCEMENT
+            cog.save_bot_state()
+            return True
 
     message = await channel.send(
         f"<@&{ANNOUNCEMENT_ROLE_ID}> {UPDATE_ANNOUNCEMENT}",
@@ -70,18 +59,38 @@ async def post_update_announcement(bot: AnnouncementBot, cog: AnnouncementCog) -
             everyone=False,
         ),
     )
-    had_previous_digest = ANNOUNCEMENT_STATE_KEY in cog.bot_state
-    previous_digest = cog.bot_state.get(ANNOUNCEMENT_STATE_KEY)
-    cog.bot_state[ANNOUNCEMENT_STATE_KEY] = digest
-    cog.bot_state[PENDING_PUBLICATION_KEY] = message.id
-    try:
-        cog.save_bot_state()
-    except OSError:
-        cog.bot_state.pop(PENDING_PUBLICATION_KEY)
-        if had_previous_digest:
-            cog.bot_state[ANNOUNCEMENT_STATE_KEY] = previous_digest
-        else:
-            cog.bot_state.pop(ANNOUNCEMENT_STATE_KEY)
-        raise
-    await publish_pending(message)
+
+    bot_state[PENDING_MESSAGE_STATE_KEY] = message.id
+    cog.save_bot_state()
+
+    if not getattr(message.flags, "crossposted", False):
+        await message.publish()
+
+    bot_state.pop(PENDING_MESSAGE_STATE_KEY)
+    bot_state[ANNOUNCEMENT_STATE_KEY] = UPDATE_ANNOUNCEMENT
+    cog.save_bot_state()
     return True
+
+
+async def run_update_announcement(bot, retries: int = 12, delay_seconds: float = 5) -> None:
+    """Retry startup announcement failures until a send/publish succeeds."""
+    for attempt in range(retries):
+        cog = bot.get_cog("PokéTwoNamingBot")
+        if cog is None:
+            if attempt + 1 < retries:
+                await asyncio.sleep(delay_seconds)
+            continue
+        try:
+            if await post_update_announcement(bot, cog):
+                print("✅ Update announcement sent and published")
+            else:
+                print("ℹ️ Update announcement is already current")
+            return
+        except Exception as error:
+            print(
+                f"⚠️ Could not send/publish update announcement "
+                f"(attempt {attempt + 1}/{retries}): {error}"
+            )
+            traceback.print_exc()
+            if attempt + 1 < retries:
+                await asyncio.sleep(delay_seconds)
