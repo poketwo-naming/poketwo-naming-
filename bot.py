@@ -24,6 +24,7 @@ from discord.ext import commands
 from geonamescache import GeonamesCache
 from PIL import Image, UnidentifiedImageError
 
+from breeding_boxes import BreedingBoxService
 from pokemon_recognition import PokemonImageRecognizer
 from tools.build_pokemon_types import (
     CUSTOM_SPRITE_IDENTIFIERS,
@@ -115,42 +116,42 @@ COMMAND_CATALOG = (
     ),
     (
         "Breeding Boxes & Daycare",
-        "v!box <box> / <name>",
-        "Makes a new breeding box.",
+        "v!box create <name>",
+        "Makes a new box.",
     ),
     (
         "Breeding Boxes & Daycare",
-        "v!box [number | box] [--c]",
-        "Replies to a Pokétwo list to store its eggs.",
+        "v!box append [box] [--c]",
+        "Replies to a Pokétwo list to store its Pokémon; append each page to keep adding.",
     ),
     (
         "Breeding Boxes & Daycare",
-        "v!box list / remove / transfer",
-        "Browses, deletes, moves, or duplicates stored Pokémon.",
+        "v!box list / remove / transfer / copy",
+        "Browses, deletes, moves, or duplicates stored Pokémon and boxes.",
     ),
     (
         "Breeding Boxes & Daycare",
         "v!box tag / untag / tags / tagged",
-        "Tracks or lists tagged egg moves.",
+        "Tracks egg moves on stored Pokémon.",
     ),
     (
         "Breeding Boxes & Daycare",
-        "v!box rename / delete / clear / list",
-        "Renames, deletes, clears, or lists boxes.",
+        "v!box rename / delete / clear / reset",
+        "Manages or wipes boxes.",
     ),
     (
         "Breeding Boxes & Daycare",
-        "v!box [box]",
-        "Pulls +2 breedable pairs with a ready-to-paste daycare command.",
+        "v!dc [box]",
+        "Pulls two breedable pairs with ready-to-paste daycare commands.",
     ),
     (
         "Breeding Boxes & Daycare",
-        "v!box daycare",
-        "Changes how pairs are picked and displayed.",
+        "v!dc settings",
+        "Changes how pairs are picked and shown.",
     ),
     (
         "Breeding Boxes & Daycare",
-        "v!box help",
+        "v!boxhelp",
         "Shows the full list of box commands.",
     ),
     (
@@ -1361,6 +1362,7 @@ class PokéTwoNamingBot(commands.Cog):
         self.pokemon_species = self.load_pokemon_species()
         self.reviewed_spawn_count = self.load_collected_training_count()
         self.bot_state = self.load_bot_state()
+        self.breeding_box_service = BreedingBoxService(self)
         self.seed_restricted_roles()
         self.active_incenses = {
             int(channel_id): float(expires_at)
@@ -1721,6 +1723,7 @@ class PokéTwoNamingBot(commands.Cog):
             "categories": {},
             "afk": {},
             "breeding_boxes": {},
+            "daycare_settings": {},
         }
         if not os.path.exists(BOT_STATE_FILE):
             return default_state
@@ -1754,6 +1757,7 @@ class PokéTwoNamingBot(commands.Cog):
         state.setdefault("categories", {})
         state.setdefault("afk", {})
         state.setdefault("breeding_boxes", {})
+        state.setdefault("daycare_settings", {})
         return state
 
     def seed_restricted_roles(self):
@@ -1999,8 +2003,8 @@ class PokéTwoNamingBot(commands.Cog):
                 self.save_bot_state()
                 await ctx.send(f"✅ Removed tags from **{pokemon_name}**.")
 
-    async def breeding_box_command(self, ctx, entry: str = ""):
-        """Manage personal breeding boxes and daycare pair selections."""
+    async def legacy_breeding_box_command(self, ctx, entry: str = ""):
+        """Retained for migration compatibility with pre-v!box box state."""
         if ctx.guild is None:
             await ctx.send("Breeding boxes can only be used inside a server.")
             return
@@ -2044,14 +2048,16 @@ class PokéTwoNamingBot(commands.Cog):
             await ctx.send(
                 "**Breeding box commands**\n"
                 "`v!box` — list boxes\n"
-                "`v!box <name>` — create a box\n"
-                "Reply to a Pokétwo list with `v!box [box] [--c]` — store eggs\n"
+                "`v!box create <name>` — create a box\n"
+                "Reply to a Pokétwo list with `v!box append [box] [--c]`\n"
                 "`v!box remove <box> <name>` — remove Pokémon\n"
                 "`v!box transfer <from> <to> <name>` — move Pokémon\n"
+                "`v!box copy <source> <new name>` — copy a box\n"
                 "`v!box tag <box> <name> <tag>` / `v!box untag <box> <name>`\n"
                 "`v!box tags` / `v!box tagged <tag>`\n"
                 "`v!box rename <box> <new name>` / `v!box delete <box>`\n"
-                "`v!box clear <box>` / `v!box [box]` — suggest daycare pairs"
+                "`v!box clear <box>` / `v!box reset`\n"
+                "`v!dc [box]` / `v!dc settings` / `v!boxhelp`"
             )
             return
 
@@ -2096,7 +2102,7 @@ class PokéTwoNamingBot(commands.Cog):
             if text == "daycare":
                 await ctx.send(
                     "Daycare preferences are available as part of pair selection "
-                    "from `v!box [box]`."
+                    "from `v!dc [box]`."
                 )
                 return
 
@@ -2196,6 +2202,15 @@ class PokéTwoNamingBot(commands.Cog):
         boxes[box_name] = {"items": []}
         self.save_bot_state()
         await ctx.send(f"✅ Created breeding box **{box_name}**.")
+
+    async def breeding_box_command(
+        self,
+        ctx,
+        command: str,
+        entry: str = "",
+    ):
+        """Route the v!box, v!dc, and v!boxhelp command families."""
+        await self.breeding_box_service.dispatch(ctx, command, entry)
 
     def load_premium_servers(self):
         """Load persistent server tier assignments."""

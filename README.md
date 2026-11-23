@@ -62,14 +62,23 @@ Every `v!` command also works with a capital `V!` prefix.
 | `v!help [page]` | `v!help 1` | Paginated command explanations |
 | `v!commands [page]` | `v!commands 1` | Categorized command list |
 | `v!box` | `v!box` | Show all boxes and how full they are (limit 7,500 each) |
-| `v!box <box> / <name>` | `v!box Daycare` | Make a new box |
-| `v!box [number | box] [--c]` | Reply to a Pokétwo list with `v!box` | Store eggs from the replied list |
-| `v!box list / remove / transfer` | `v!box list` | Browse, delete, move, or duplicate stored Pokémon |
-| `v!box tag / untag / tags / tagged` | `v!box tags` | Track egg moves on tags |
-| `v!box rename / delete / clear / list` | `v!box rename <box> <name>` | Manage or wipe boxes |
-| `v!box [box]` | `v!box 1` | Pull +2 breedable pairs with a ready-to-paste daycare command |
-| `v!box daycare` | `v!box daycare` | Change how pairs are picked and shown |
-| `v!box help` | `v!box help` | Show the full list of box commands |
+| `v!box create <name>` | `v!box create Daycare` | Make a new box |
+| `v!box append [box] [--c]` | Reply to a Pokétwo list with `v!box append Daycare` | Append Pokémon from each replied page; `--c` clears the box first |
+| `v!box list [box]` | `v!box list Daycare` | Browse boxes or the Pokémon in one box |
+| `v!box remove <box> <number\|Pokémon> [all]` | `v!box remove Daycare Pikachu all` | Delete stored Pokémon |
+| `v!box transfer <from> <to> <number\|Pokémon> [all]` | `v!box transfer Daycare Eggs Pikachu` | Move Pokémon between boxes |
+| `v!box copy <source> <new name>` | `v!box copy Daycare Backup` | Duplicate a box; add a destination to copy entries into an existing box |
+| `v!box tag / untag / tags / tagged` | `v!box tag Daycare 1 egg-move` | Track and browse egg-move tags |
+| `v!box rename / delete / clear / reset` | `v!box rename Daycare Eggs` | Rename, delete, or wipe boxes |
+| `v!dc [box]` | `v!dc Daycare` | Pull up to two compatible breedable pairs with ready-to-paste daycare commands |
+| `v!dc settings` | `v!dc settings` | Change pair selection and display |
+| `v!boxhelp` | `v!boxhelp` | Show the full list of box commands |
+
+Use quotes around multiword box names when a command has more than one box
+argument, for example `v!box transfer "Main Box" "Egg Box" 1`.
+`v!dc` returns two pairs only when it can find four distinct, compatible stored
+Pokémon. Pair compatibility uses Pokémon egg groups and gender; mixed-gender
+species need their gender visible in the list that was appended.
 
 In grabbed lists, `Booster` is treated as a heading rather than Flareon's
 localized name when a Pokémon follows the member mention.

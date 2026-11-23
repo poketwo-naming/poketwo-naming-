@@ -3,6 +3,8 @@ Pokétwo Naming Bot - Main entry point
 """
 import os
 import re
+from typing import Protocol, cast
+
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -23,6 +25,16 @@ def get_token() -> str:
 
 
 TOKEN = get_token()
+
+
+class BreedingBoxCog(Protocol):
+    async def breeding_box_command(
+        self,
+        ctx: commands.Context,
+        command: str,
+        entry: str,
+    ) -> None: ...
+
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -48,9 +60,9 @@ async def on_message(message):
     if message.author == bot.user:
         return
     breeding_box_match = re.match(
-        r"^\s*[vV]![bB][oO][xX](?:\s+(.*))?\s*$",
+        r"^\s*v!(?P<command>boxhelp|box|dc)(?:\s+(?P<entry>.*))?\s*$",
         message.content,
-        re.DOTALL,
+        re.IGNORECASE | re.DOTALL,
     )
     if breeding_box_match:
         ctx = await bot.get_context(message)
@@ -61,9 +73,11 @@ async def on_message(message):
             )
             return
         try:
-            await cog.breeding_box_command(
+            handler = cast(BreedingBoxCog, cog)
+            await handler.breeding_box_command(
                 ctx,
-                breeding_box_match.group(1) or "",
+                breeding_box_match.group("command").casefold(),
+                breeding_box_match.group("entry") or "",
             )
         except discord.DiscordException as error:
             print(f"Breeding box routing failed: {error}")
