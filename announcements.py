@@ -11,12 +11,13 @@ ANNOUNCEMENT_STATE_KEY = "last_update_announcement"
 PENDING_PUBLICATION_KEY = "pending_update_publication"
 UPDATE_ANNOUNCEMENT = (
     "**What's new**\n"
-    "- Added `v!qp` / `v!questping` command to receive pings for regional Pokémon quests!\n"
-    "  - Select which regions to receive quest pings for\n"
+    "✨ **Slash Commands** - Vivillon now works with `/` commands!\n"
+    "  - Use `/ping`, `/typeping`, `/questping`, `/sr`, `/afk`, `/settings`, and more\n"
+    "  - Works when added via 'Add to My Apps' in any server\n"
+    "  - Prefix commands (`v!`) still work normally\n\n"
+    "🌍 **Quest Pings** - Set which regions to receive quest pings for\n"
     "  - Supports 12 regions: Kanto, Johto, Hoenn, Sinnoh, Unova, Kalos, Alola, Galar, Hisui, Paldea, Kitakami, Paradox\n"
-    "  - Regional forms (Alolan, Galarian, Hisuian, Paldean) automatically map to their regions\n"
-    "  - Quest pings display in spawn messages when a matching regional Pokémon appears\n"
-    "- Quest pings respect your AFK status and can be toggled with `v!mute`"
+    "  - Use `/questping` or `v!qp` to configure"
 )
 
 
