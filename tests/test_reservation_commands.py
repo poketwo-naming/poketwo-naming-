@@ -1,4 +1,5 @@
 import json
+import re
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -286,6 +287,44 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
             "❌ You do not have permission to use ready-up."
         )
         self.assertEqual(self.cog.readyup_views, {})
+
+    async def test_readyup_command_pings_all_queued_users(self):
+        self.cog.readyup_views = {}
+        self.cog.bot_state["readyup_queues"] = {"123": ["456", "789"]}
+        self.ctx.author = SimpleNamespace(id=101)
+        callback = cast(ReadyupCallback, PokéTwoNamingBot.readyup.callback)
+
+        await callback(self.cog, cast(commands.Context, self.ctx))
+
+        self.ctx.send.assert_awaited_once()
+        kwargs = self.ctx.send.await_args.kwargs
+        self.assertEqual(kwargs["content"], "<@456> <@789>")
+        self.assertIsInstance(kwargs["embed"], discord.Embed)
+        self.assertTrue(kwargs["allowed_mentions"].users)
+        self.assertFalse(kwargs["allowed_mentions"].roles)
+        self.assertFalse(kwargs["allowed_mentions"].everyone)
+
+    async def test_readyup_command_chunks_large_ping_lists(self):
+        user_ids = [str(100000000000000000 + index) for index in range(100)]
+        self.cog.readyup_views = {}
+        self.cog.bot_state["readyup_queues"] = {"123": user_ids}
+        self.ctx.author = SimpleNamespace(id=101)
+        callback = cast(ReadyupCallback, PokéTwoNamingBot.readyup.callback)
+
+        await callback(self.cog, cast(commands.Context, self.ctx))
+
+        self.assertEqual(self.ctx.send.await_count, 3)
+        mention_messages = self.ctx.send.await_args_list[:2]
+        self.assertTrue(
+            all(len(call.kwargs["content"]) <= 1900 for call in mention_messages)
+        )
+        mentioned_ids = [
+            user_id
+            for call in mention_messages
+            for user_id in re.findall(r"<@(\d+)>", call.kwargs["content"])
+        ]
+        self.assertEqual(mentioned_ids, user_ids)
+        self.assertIn("embed", self.ctx.send.await_args_list[2].kwargs)
 
     async def test_readyup_clear_requires_restricted_permission(self):
         self.cog.has_restricted_permission = lambda ctx: False

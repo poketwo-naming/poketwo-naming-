@@ -11,7 +11,8 @@ ANNOUNCEMENT_STATE_KEY = "last_update_announcement"
 UPDATE_ANNOUNCEMENT = (
     "**What's new**\n"
     "- Added a ready-up queue: add users from `v!grab`, run `v!readyup` for "
-    "a Ready button, and use `v!readyup clear` to reset the queue."
+    "a Ready button that pings queued users, and use `v!readyup clear` to reset "
+    "the queue."
 )
 
 

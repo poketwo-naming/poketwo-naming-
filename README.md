@@ -168,8 +168,9 @@ user does not have reserved.
 
 Click **Readyup** on a `v!grab` preview to add each mentioned user once to that
 server's ready-up queue. Run `v!readyup` to show the Ready button and the
-not-ready/ready user lists; only queued users can mark themselves ready. When
-everyone is ready, the command runner is mentioned in a follow-up message.
+not-ready/ready user lists and ping everyone in the queue; only queued users can
+mark themselves ready. When everyone is ready, the command runner is mentioned
+in a follow-up message.
 `v!readyup` and `v!readyup clear` are restricted to administrators and
 configured restricted roles. Use `v!readyup clear` to clear the queue and end
 the active check.

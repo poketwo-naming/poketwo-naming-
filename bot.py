@@ -5012,8 +5012,42 @@ class PokéTwoNamingBot(commands.Cog):
             )
             return
         view = ReadyupView(self, ctx.guild.id, ctx.author.id, user_ids)
+        mention_chunks = []
+        current_mentions = []
+        current_length = 0
+        for user_id in user_ids:
+            mention = f"<@{user_id}>"
+            mention_length = len(mention) + (1 if current_mentions else 0)
+            if current_mentions and current_length + mention_length > 1900:
+                mention_chunks.append(" ".join(current_mentions))
+                current_mentions = []
+                current_length = 0
+                mention_length = len(mention)
+            current_mentions.append(mention)
+            current_length += mention_length
+        if current_mentions:
+            mention_chunks.append(" ".join(current_mentions))
+        allowed_mentions = discord.AllowedMentions(
+            users=True,
+            roles=False,
+            everyone=False,
+        )
+        if len(mention_chunks) == 1:
+            message = await ctx.send(
+                content=mention_chunks[0],
+                embed=view.build_embed(),
+                view=view,
+                allowed_mentions=allowed_mentions,
+            )
+        else:
+            for mentions in mention_chunks:
+                await ctx.send(
+                    content=mentions,
+                    allowed_mentions=allowed_mentions,
+                )
+            message = await ctx.send(embed=view.build_embed(), view=view)
+        view.message = message
         self.readyup_views[str(ctx.guild.id)] = view
-        view.message = await ctx.send(embed=view.build_embed(), view=view)
 
     @readyup.command(name="clear")
     async def clear_readyup(self, ctx):
