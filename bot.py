@@ -213,8 +213,8 @@ COMMAND_CATALOG = (
     ),
     (
         "Collections",
-        "v!cl remove <pokemon,...>",
-        "Removes comma-separated Pokémon from your collection.",
+        "v!cl remove <pokemon,...|category>",
+        "Removes Pokémon/forms or every member of a server category from your collection.",
     ),
     ("Collections", "v!cl list", "Lists your own collection."),
     ("Collections", "v!cl clear", "Clears your own collection."),
@@ -4054,7 +4054,8 @@ class PokéTwoNamingBot(commands.Cog):
         if ctx.invoked_subcommand is not None:
             return
         await ctx.send(
-            "Usage: `v!cl add <pokemon|category>`, `v!cl remove <pokemon>`, "
+            "Usage: `v!cl add <pokemon|category>`, "
+            "`v!cl remove <pokemon|category>`, "
             "`v!cl list`, or `v!cl clear`."
         )
 
@@ -4098,11 +4099,19 @@ class PokéTwoNamingBot(commands.Cog):
 
     @collection.command(name="remove")
     async def remove_collection(self, ctx, *, pokemon_input: str):
-        """Remove one Pokémon from the caller's collection."""
+        """Remove Pokémon or a server category from the caller's collection."""
         if ctx.guild is None:
             await ctx.send("Collections can only be managed inside a server.")
             return
-        pokemon_names, unknown = self.resolve_pokemon_list(pokemon_input)
+        category_key = self.find_category(ctx.guild.id, pokemon_input.strip())
+        if category_key is not None:
+            pokemon_names = self.guild_categories(ctx.guild.id)[category_key]
+            unknown = []
+            if not pokemon_names:
+                await ctx.send(f"❌ Category **{category_key}** is empty.")
+                return
+        else:
+            pokemon_names, unknown = self.resolve_pokemon_list(pokemon_input)
         if unknown:
             await ctx.send(
                 "❌ Unknown Pokémon: "

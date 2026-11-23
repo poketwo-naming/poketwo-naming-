@@ -48,6 +48,15 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
             self.cog, cast(commands.Context, self.ctx), pokemon_input=pokemon_input
         )
 
+    async def remove_from_collection(self, pokemon_input: str):
+        callback = cast(
+            CollectionCallback,
+            PokéTwoNamingBot.remove_collection.callback,
+        )
+        await callback(
+            self.cog, cast(commands.Context, self.ctx), pokemon_input=pokemon_input
+        )
+
     async def test_remove_category_removes_all_category_reservations(self):
         await self.cog.remove_reserve(self.ctx, entry="featured")
 
@@ -174,6 +183,21 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
             self.cog.bot_state["collections"]["123"]["456"],
             ["Pikachu", "Eevee"],
         )
+
+    async def test_collection_remove_expands_server_category(self):
+        self.cog.bot_state["categories"]["123"]["rare"] = ["Pikachu", "Eevee"]
+        self.cog.bot_state["collections"]["123"] = {
+            "456": ["Pikachu", "Eevee", "Charmander"]
+        }
+        self.ctx.author = SimpleNamespace(id=456)
+
+        await self.remove_from_collection("RARE")
+
+        self.assertEqual(
+            self.cog.bot_state["collections"]["123"]["456"],
+            ["Charmander"],
+        )
+        self.assertIn("Pikachu, Eevee", self.ctx.send.await_args.args[0])
 
     async def test_nidoran_gender_and_all_in_collections_and_reserves(self):
         with Path("pokemon_species.json").open(encoding="utf-8") as source:
