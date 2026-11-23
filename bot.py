@@ -13,7 +13,7 @@ import logging
 import os
 import re
 from time import perf_counter, time
-from types import CoroutineType
+from types import CoroutineType, SimpleNamespace
 from typing import Any, cast
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -1907,6 +1907,26 @@ class GrabConfirmView(discord.ui.View):
             embed=None,
             view=None,
         )
+
+
+class SlashBreedingContext:
+    """Adapt a Discord slash interaction to the breeding box service context."""
+
+    def __init__(self, interaction: discord.Interaction, message_id: str | None = None):
+        self.interaction = interaction
+        self.guild = interaction.guild
+        self.author = interaction.user
+        self.channel = interaction.channel
+        reference = None
+        if message_id and message_id.isdigit():
+            reference = SimpleNamespace(
+                message_id=int(message_id),
+                resolved=None,
+            )
+        self.message = SimpleNamespace(reference=reference)
+
+    async def send(self, *args, **kwargs):
+        return await self.interaction.followup.send(*args, **kwargs)
 
 
 class PokéTwoNamingBot(commands.Cog):
@@ -5976,6 +5996,133 @@ class PokéTwoNamingBot(commands.Cog):
         await interaction.response.send_message(
             f"Pong! {self.bot.latency * 1000:.2f}ms"
         )
+
+    @app_commands.command(name="box", description="Manage your breeding boxes")
+    @app_commands.describe(
+        action="Box operation to perform",
+        box_name="Box name or 1-based box number",
+        destination="Destination box name",
+        item="Pokémon name or stored item number",
+        tag="Tag name",
+        all_matches="Remove or transfer every matching Pokémon",
+        clear_first="Clear the box before appending a Pokétwo list",
+        message_id="Pokétwo list message ID to append",
+    )
+    @app_commands.choices(
+        action=[
+            app_commands.Choice(name="List", value="list"),
+            app_commands.Choice(name="Create", value="create"),
+            app_commands.Choice(name="Append", value="append"),
+            app_commands.Choice(name="Remove", value="remove"),
+            app_commands.Choice(name="Transfer", value="transfer"),
+            app_commands.Choice(name="Copy", value="copy"),
+            app_commands.Choice(name="Tag", value="tag"),
+            app_commands.Choice(name="Untag", value="untag"),
+            app_commands.Choice(name="Tags", value="tags"),
+            app_commands.Choice(name="Tagged", value="tagged"),
+            app_commands.Choice(name="Rename", value="rename"),
+            app_commands.Choice(name="Delete", value="delete"),
+            app_commands.Choice(name="Clear", value="clear"),
+            app_commands.Choice(name="Reset", value="reset"),
+        ]
+    )
+    async def slash_box(
+        self,
+        interaction: discord.Interaction,
+        action: app_commands.Choice[str],
+        box_name: str | None = None,
+        destination: str | None = None,
+        item: str | None = None,
+        tag: str | None = None,
+        all_matches: bool = False,
+        clear_first: bool = False,
+        message_id: str | None = None,
+    ):
+        """Manage breeding boxes through Discord slash commands."""
+        if interaction.guild is None:
+            await interaction.response.send_message(
+                "Breeding boxes can only be used inside a server.",
+                ephemeral=True,
+            )
+            return
+
+        operation = action.value
+        entry_parts: list[str] = [operation]
+
+        if operation in {"create", "list", "delete", "clear", "tags", "tagged"}:
+            if box_name:
+                entry_parts.append(box_name)
+            elif operation == "tagged" and tag:
+                entry_parts.append(tag)
+        elif operation in {"rename"}:
+            if box_name:
+                entry_parts.append(box_name)
+            if destination:
+                entry_parts.append(destination)
+        elif operation in {"remove", "tag", "untag"}:
+            if box_name:
+                entry_parts.append(box_name)
+            if item:
+                entry_parts.append(item)
+            if all_matches:
+                entry_parts.append("all")
+            if operation == "tag" and tag:
+                entry_parts.append(tag)
+            elif operation == "untag" and tag:
+                entry_parts.append(tag)
+        elif operation in {"transfer", "copy"}:
+            if box_name:
+                entry_parts.append(box_name)
+            if destination:
+                entry_parts.append(destination)
+            if operation == "transfer" and item:
+                entry_parts.append(item)
+                if all_matches:
+                    entry_parts.append("all")
+        elif operation == "append":
+            if box_name:
+                entry_parts.append(box_name)
+            if clear_first:
+                entry_parts.append("--c")
+
+        await interaction.response.defer()
+        ctx = SlashBreedingContext(interaction, message_id)
+        await self.breeding_box_service.dispatch(
+            ctx,
+            "box",
+            " ".join(entry_parts),
+        )
+
+    @app_commands.command(name="dc", description="Find compatible daycare pairs")
+    @app_commands.describe(
+        box_name="Box name or 1-based box number",
+        settings="Open daycare pairing settings",
+    )
+    async def slash_daycare(
+        self,
+        interaction: discord.Interaction,
+        box_name: str | None = None,
+        settings: bool = False,
+    ):
+        """Find breeding pairs or open daycare settings."""
+        if interaction.guild is None:
+            await interaction.response.send_message(
+                "Daycare commands can only be used inside a server.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer()
+        ctx = SlashBreedingContext(interaction)
+        entry = "settings" if settings else (box_name or "")
+        await self.breeding_box_service.dispatch(ctx, "dc", entry)
+
+    @app_commands.command(name="boxhelp", description="Show breeding box and daycare help")
+    async def slash_box_help(self, interaction: discord.Interaction):
+        """Show breeding box and daycare command help."""
+        await interaction.response.defer()
+        ctx = SlashBreedingContext(interaction)
+        await self.breeding_box_service.dispatch(ctx, "boxhelp")
 
     @app_commands.command(
         name="typeping",

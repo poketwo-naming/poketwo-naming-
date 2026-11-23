@@ -11,10 +11,10 @@ ANNOUNCEMENT_STATE_KEY = "last_update_announcement"
 PENDING_PUBLICATION_KEY = "pending_update_publication"
 UPDATE_ANNOUNCEMENT = (
     "**What's new**\n"
-    "🔧 **Announcement Posting Fix** - Update notices now post and publish reliably\n"
-    "  - Send and publication failures are no longer silently swallowed\n"
-    "  - Pending announcements retry instead of being lost\n"
-    "  - Failed state saves roll back safely for the next retry"
+    "🔧 **Breeding Box Slash Commands** - Manage boxes and daycare pairs with `/` commands\n"
+    "  - Use `/box` for create, list, append, remove, transfer, copy, tags, rename, and reset\n"
+    "  - Use `/dc` to find pairs or open daycare settings\n"
+    "  - Use `/boxhelp` for the breeding box command guide"
 )
 
 
