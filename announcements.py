@@ -11,9 +11,11 @@ ANNOUNCEMENT_STATE_KEY = "last_update_announcement"
 PENDING_PUBLICATION_KEY = "pending_update_publication"
 UPDATE_ANNOUNCEMENT = (
     "**What's new**\n"
-    "- Fixed typeping to respect user ping preferences and reserve overrides.\n"
-    "- Category commands (create, modify, remove) now require staff permissions.\n"
-    "- Added `v!category remove <name>` command for deleting categories."
+    "- Restricted access to the following commands (requires staff permissions):\n"
+    "  - `v!tz` - Timezone finder\n"
+    "  - `v!premiumservers` / `v!ps` - View premium server tiers\n"
+    "  - `v!grab` - Import reservations\n"
+    "  - `v!servers` - List all connected servers"
 )
 
 
