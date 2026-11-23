@@ -108,6 +108,51 @@ SPAWN_RATE_PRICES = (
 COMMAND_CATALOG = (
     ("General", "v!ping", "Shows the bot's gateway latency."),
     (
+        "Breeding Boxes & Daycare",
+        "vlbox",
+        "Shows all of your boxes and how full they are (limit 7,500 each).",
+    ),
+    (
+        "Breeding Boxes & Daycare",
+        "vlbox <box> / <name>",
+        "Makes a new breeding box.",
+    ),
+    (
+        "Breeding Boxes & Daycare",
+        "vlbox [number | box] [--c]",
+        "Replies to a Pokétwo list to store its eggs.",
+    ),
+    (
+        "Breeding Boxes & Daycare",
+        "vlbox list / remove / transfer",
+        "Browses, deletes, moves, or duplicates stored Pokémon.",
+    ),
+    (
+        "Breeding Boxes & Daycare",
+        "vlbox tag / untag / tags / tagged",
+        "Tracks or lists tagged egg moves.",
+    ),
+    (
+        "Breeding Boxes & Daycare",
+        "vlbox rename / delete / clear / list",
+        "Renames, deletes, clears, or lists boxes.",
+    ),
+    (
+        "Breeding Boxes & Daycare",
+        "vlbox [box]",
+        "Pulls +2 breedable pairs with a ready-to-paste daycare command.",
+    ),
+    (
+        "Breeding Boxes & Daycare",
+        "vlbox daycare",
+        "Changes how pairs are picked and displayed.",
+    ),
+    (
+        "Breeding Boxes & Daycare",
+        "vlbox help",
+        "Shows the full list of box commands.",
+    ),
+    (
         "General",
         "v!support",
         "Shows how to support Vivillon's running and development costs.",
