@@ -32,6 +32,7 @@ from tools.build_pokemon_types import (
 
 
 POKETWO_BOT_ID = 716390085896962058
+BREEDING_BOX_LIMIT = 7_500
 MISSINGNO_ALERT_ROLE_ID = 1573065640762151003
 TIMEZONE_ROLE_ID = 1553235133119598652
 TRAINING_REVIEW_CHANNEL_ID = 1531476097970212915
@@ -1719,6 +1720,7 @@ class PokéTwoNamingBot(commands.Cog):
             "collections": {},
             "categories": {},
             "afk": {},
+            "breeding_boxes": {},
         }
         if not os.path.exists(BOT_STATE_FILE):
             return default_state
@@ -1751,6 +1753,7 @@ class PokéTwoNamingBot(commands.Cog):
         state.setdefault("collections", {})
         state.setdefault("categories", {})
         state.setdefault("afk", {})
+        state.setdefault("breeding_boxes", {})
         return state
 
     def seed_restricted_roles(self):
@@ -1781,6 +1784,415 @@ class PokéTwoNamingBot(commands.Cog):
             f.flush()
             os.fsync(f.fileno())
         os.replace(temporary_file, BOT_STATE_FILE)
+
+    def breeding_user_boxes(self, guild_id: int, user_id: int) -> dict:
+        """Return one member's breeding boxes in the current server."""
+        guild_boxes = self.bot_state["breeding_boxes"].setdefault(str(guild_id), {})
+        return guild_boxes.setdefault(str(user_id), {})
+
+    def resolve_breeding_box(
+        self,
+        guild_id: int,
+        user_id: int,
+        selector: str,
+    ) -> tuple[str | None, dict | None]:
+        """Resolve a box name or 1-based box number."""
+        boxes = self.breeding_user_boxes(guild_id, user_id)
+        if not boxes:
+            return None, None
+        if selector.isdigit():
+            names = sorted(boxes, key=str.casefold)
+            index = int(selector) - 1
+            if 0 <= index < len(names):
+                name = names[index]
+                return name, boxes[name]
+        name = next(
+            (key for key in boxes if key.casefold() == selector.casefold()),
+            None,
+        )
+        return (name, boxes[name]) if name is not None else (None, None)
+
+    def breeding_box_item_count(self, box: dict) -> int:
+        """Count individual stored Pokémon entries in a box."""
+        items = box.get("items", [])
+        return len(items) if isinstance(items, list) else 0
+
+    async def breeding_box_message_items(self, ctx) -> list[str]:
+        """Read Pokémon names from the replied-to Pokétwo list."""
+        if ctx.message.reference is None:
+            return []
+        source = ctx.message.reference.resolved
+        if source is None:
+            try:
+                source = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                return []
+        text = "\n".join(
+            [
+                source.content or "",
+                *(embed.title or "" for embed in source.embeds),
+                *(embed.description or "" for embed in source.embeds),
+            ]
+        )
+        names = []
+        for line in text.splitlines():
+            for reported_name in sorted(
+                self.report_pokemon_names(),
+                key=len,
+                reverse=True,
+            ):
+                pattern = rf"(?<![\w]){re.escape(reported_name)}(?![\w])"
+                if re.search(pattern, line, re.IGNORECASE):
+                    resolved = self.resolve_pokemon_name(reported_name)
+                    if resolved:
+                        names.append(resolved)
+                    break
+        return list(dict.fromkeys(names))
+
+    async def manage_breeding_box(self, ctx, action: str, argument: str):
+        """Perform destructive and tag operations on personal breeding boxes."""
+        guild_id = ctx.guild.id
+        user_id = ctx.author.id
+        boxes = self.breeding_user_boxes(guild_id, user_id)
+        parts = argument.split()
+        if not parts:
+            await ctx.send(
+                f"Usage: `vlbox {action} <box>`"
+                + (" <pokemon>" if action in {"remove", "tag", "untag"} else "")
+            )
+            return
+
+        box_name, box = self.resolve_breeding_box(guild_id, user_id, parts[0])
+        if box is None:
+            await ctx.send(f"❌ Breeding box `{parts[0]}` was not found.")
+            return
+
+        if action == "rename":
+            if len(parts) < 2:
+                await ctx.send("Usage: `vlbox rename <box> <new name>`")
+                return
+            new_name = " ".join(parts[1:]).strip()[:100]
+            if not new_name:
+                await ctx.send("Usage: `vlbox rename <box> <new name>`")
+                return
+            if new_name.casefold() != box_name.casefold() and any(
+                name.casefold() == new_name.casefold() for name in boxes
+            ):
+                await ctx.send(f"❌ A box named **{new_name}** already exists.")
+                return
+            boxes[new_name] = boxes.pop(box_name)
+            self.save_bot_state()
+            await ctx.send(f"✅ Renamed **{box_name}** to **{new_name}**.")
+            return
+
+        if action == "delete":
+            boxes.pop(box_name, None)
+            self.save_bot_state()
+            await ctx.send(f"✅ Deleted breeding box **{box_name}**.")
+            return
+
+        if action == "clear":
+            box["items"] = []
+            self.save_bot_state()
+            await ctx.send(f"✅ Cleared breeding box **{box_name}**.")
+            return
+
+        if action == "remove":
+            if len(parts) < 2:
+                await ctx.send("Usage: `vlbox remove <box> <pokemon>`")
+                return
+            pokemon_input = " ".join(parts[1:])
+            pokemon_name = self.resolve_pokemon_name(pokemon_input)
+            if pokemon_name is None:
+                await ctx.send(f"❌ Unknown Pokémon: `{pokemon_input}`")
+                return
+            original_count = len(box["items"])
+            box["items"] = [
+                item for item in box["items"]
+                if not (isinstance(item, dict) and item.get("name") == pokemon_name)
+            ]
+            removed = original_count - len(box["items"])
+            self.save_bot_state()
+            await ctx.send(
+                f"✅ Removed **{removed}** {pokemon_name} entry/entries."
+                if removed
+                else f"{pokemon_name} is not in **{box_name}**."
+            )
+            return
+
+        if action == "transfer":
+            if len(parts) < 3:
+                await ctx.send(
+                    "Usage: `vlbox transfer <from> <to> <pokemon>`"
+                )
+                return
+            destination_name, destination = self.resolve_breeding_box(
+                guild_id,
+                user_id,
+                parts[1],
+            )
+            if destination is None:
+                await ctx.send(f"❌ Breeding box `{parts[1]}` was not found.")
+                return
+            pokemon_name = self.resolve_pokemon_name(" ".join(parts[2:]))
+            if pokemon_name is None:
+                await ctx.send(f"❌ Unknown Pokémon: `{' '.join(parts[2:])}`")
+                return
+            index = next(
+                (
+                    index for index, item in enumerate(box["items"])
+                    if isinstance(item, dict) and item.get("name") == pokemon_name
+                ),
+                None,
+            )
+            if index is None:
+                await ctx.send(f"{pokemon_name} is not in **{box_name}**.")
+                return
+            if self.breeding_box_item_count(destination) >= BREEDING_BOX_LIMIT:
+                await ctx.send(f"❌ Breeding box **{destination_name}** is full.")
+                return
+            destination.setdefault("items", []).append(box["items"].pop(index))
+            self.save_bot_state()
+            await ctx.send(
+                f"✅ Transferred **{pokemon_name}** from **{box_name}** "
+                f"to **{destination_name}**."
+            )
+            return
+
+        if action in {"tag", "untag"}:
+            if len(parts) < 2:
+                await ctx.send(f"Usage: `vlbox {action} <box> <pokemon> [tag]`")
+                return
+            pokemon_input = " ".join(parts[1:-1]) if action == "tag" and len(parts) > 2 else " ".join(parts[1:])
+            tag = parts[-1] if action == "tag" and len(parts) > 2 else ""
+            pokemon_name = self.resolve_pokemon_name(pokemon_input)
+            if pokemon_name is None:
+                await ctx.send(f"❌ Unknown Pokémon: `{pokemon_input}`")
+                return
+            item = next(
+                (
+                    item for item in box["items"]
+                    if isinstance(item, dict) and item.get("name") == pokemon_name
+                ),
+                None,
+            )
+            if item is None:
+                await ctx.send(f"{pokemon_name} is not in **{box_name}**.")
+                return
+            tags = set(item.setdefault("tags", []))
+            if action == "tag":
+                if not tag:
+                    await ctx.send("Usage: `vlbox tag <box> <pokemon> <tag>`")
+                    return
+                tags.add(tag)
+                item["tags"] = sorted(tags, key=str.casefold)
+                self.save_bot_state()
+                await ctx.send(f"✅ Tagged **{pokemon_name}** as `{tag}`.")
+            else:
+                if not tags:
+                    await ctx.send(f"{pokemon_name} has no tags.")
+                    return
+                item["tags"] = []
+                self.save_bot_state()
+                await ctx.send(f"✅ Removed tags from **{pokemon_name}**.")
+
+    async def breeding_box_command(self, ctx, entry: str = ""):
+        """Manage personal breeding boxes and daycare pair selections."""
+        if ctx.guild is None:
+            await ctx.send("Breeding boxes can only be used inside a server.")
+            return
+
+        text = entry.strip()
+        parts = text.split(maxsplit=1)
+        subcommand = parts[0].casefold() if parts else ""
+        argument = parts[1].strip() if len(parts) > 1 else ""
+        guild_id = ctx.guild.id
+        user_id = ctx.author.id
+        boxes = self.breeding_user_boxes(guild_id, user_id)
+
+        if subcommand in {"", "list"}:
+            if subcommand == "list" and not argument:
+                pass
+            if not boxes:
+                await ctx.send(
+                    "You have no breeding boxes yet. Create one with "
+                    "`vlbox <box name>`."
+                )
+                return
+            lines = []
+            for index, (name, box) in enumerate(
+                sorted(boxes.items(), key=lambda item: item[0].casefold()),
+                start=1,
+            ):
+                count = self.breeding_box_item_count(box)
+                lines.append(
+                    f"{index}. **{name}** — {count}/{BREEDING_BOX_LIMIT}"
+                )
+            await ctx.send(
+                embed=discord.Embed(
+                    title=f"{ctx.author.display_name}'s Breeding Boxes",
+                    description="\n".join(lines),
+                    color=discord.Color.green(),
+                )
+            )
+            return
+
+        if subcommand == "help":
+            await ctx.send(
+                "**Breeding box commands**\n"
+                "`vlbox` — list boxes\n"
+                "`vlbox <name>` — create a box\n"
+                "Reply to a Pokétwo list with `vlbox [box] [--c]` — store eggs\n"
+                "`vlbox remove <box> <name>` — remove Pokémon\n"
+                "`vlbox transfer <from> <to> <name>` — move Pokémon\n"
+                "`vlbox tag <box> <name> <tag>` / `vlbox untag <box> <name>`\n"
+                "`vlbox tags` / `vlbox tagged <tag>`\n"
+                "`vlbox rename <box> <new name>` / `vlbox delete <box>`\n"
+                "`vlbox clear <box>` / `vlbox [box]` — suggest daycare pairs"
+            )
+            return
+
+        if subcommand in {"rename", "delete", "clear", "remove", "transfer", "tag", "untag"}:
+            await self.manage_breeding_box(ctx, subcommand, argument)
+            return
+
+        if subcommand == "tags":
+            tags = sorted(
+                {
+                    str(tag)
+                    for box in boxes.values()
+                    for item in box.get("items", [])
+                    if isinstance(item, dict)
+                    for tag in item.get("tags", [])
+                },
+                key=str.casefold,
+            )
+            await ctx.send(
+                "No tags yet." if not tags else
+                "Tags: " + ", ".join(f"`{tag}`" for tag in tags)
+            )
+            return
+
+        if subcommand == "tagged":
+            tag = argument.casefold()
+            matches = []
+            for box_name, box in boxes.items():
+                for item in box.get("items", []):
+                    if isinstance(item, dict) and tag in {
+                        str(value).casefold() for value in item.get("tags", [])
+                    }:
+                        matches.append(f"**{item['name']}** ({box_name})")
+            await ctx.send(
+                "\n".join(dict.fromkeys(matches))
+                if matches
+                else f"No Pokémon are tagged `{argument}`."
+            )
+            return
+
+        if subcommand == "daycare":
+            if text == "daycare":
+                await ctx.send(
+                    "Daycare preferences are available as part of pair selection "
+                    "from `vlbox [box]`."
+                )
+                return
+
+        if ctx.message.reference is not None:
+            copy_only = "--c" in text.casefold().split()
+            selector = text.replace("--c", "", 1).strip() if copy_only else text
+            box_name, box = (
+                self.resolve_breeding_box(guild_id, user_id, selector)
+                if selector
+                else (None, None)
+            )
+            if selector and box is None:
+                await ctx.send(f"❌ Breeding box `{selector}` was not found.")
+                return
+            if box is None:
+                box_name = "Box 1"
+                box = boxes.setdefault(
+                    box_name,
+                    {"items": []},
+                )
+            items = await self.breeding_box_message_items(ctx)
+            if not items:
+                await ctx.send(
+                    "No recognized Pokémon were found in the replied-to list."
+                )
+                return
+            available = BREEDING_BOX_LIMIT - self.breeding_box_item_count(box)
+            if available <= 0:
+                await ctx.send(f"❌ Breeding box **{box_name}** is full.")
+                return
+            added = []
+            stored_items = box.setdefault("items", [])
+            for pokemon_name in items[:available]:
+                stored_items.append({"name": pokemon_name, "tags": []})
+                added.append(pokemon_name)
+            self.save_bot_state()
+            names = ", ".join(dict.fromkeys(added))
+            await ctx.send(
+                f"✅ Stored {len(added)} Pokémon in **{box_name}**: {names}"
+                + ("." if copy_only is False else ".")
+            )
+            return
+
+        if subcommand == "create":
+            argument = argument or ""
+        if not subcommand and argument:
+            subcommand = ""
+
+        box_name, box = self.resolve_breeding_box(guild_id, user_id, text)
+        if box is not None:
+            items = sorted(
+                (
+                    item["name"]
+                    for item in box.get("items", [])
+                    if isinstance(item, dict) and item.get("name")
+                ),
+                key=str.casefold,
+            )
+            if not items:
+                await ctx.send(f"Box **{box_name}** is empty.")
+                return
+            species = {}
+            for item in items:
+                canonical = self.resolve_pokemon_name(item)
+                key = (
+                    self.pokemon_species.get(canonical)
+                    if canonical
+                    else None
+                )
+                if key is not None:
+                    species.setdefault(str(key), []).append(canonical)
+            pairs = []
+            for names in species.values():
+                names = sorted(set(names), key=str.casefold)
+                if len(names) >= 2:
+                    pairs.append(f"`@Pokétwo#8236 daycare {names[0].lower()} {names[1].lower()}`")
+            await ctx.send(
+                embed=discord.Embed(
+                    title=f"{box_name} — Breedable Pairs",
+                    description=(
+                        "\n".join(pairs[:20])
+                        if pairs
+                        else "No two matching stored species were found."
+                    ),
+                    color=discord.Color.green(),
+                )
+            )
+            return
+
+        box_name = text[:100].strip()
+        if not box_name:
+            await ctx.send("Usage: `vlbox <box name>`")
+            return
+        if box_name.casefold() in {name.casefold() for name in boxes}:
+            await ctx.send(f"❌ A breeding box named **{box_name}** already exists.")
+            return
+        boxes[box_name] = {"items": []}
+        self.save_bot_state()
+        await ctx.send(f"✅ Created breeding box **{box_name}**.")
 
     def load_premium_servers(self):
         """Load persistent server tier assignments."""

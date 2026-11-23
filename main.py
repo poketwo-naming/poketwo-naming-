@@ -47,6 +47,30 @@ async def on_message(message):
     """Handle incoming messages"""
     if message.author == bot.user:
         return
+    breeding_box_match = re.match(
+        r"^\s*[vV][lL][bB][oO][xX](?:\s+(.*))?\s*$",
+        message.content,
+        re.DOTALL,
+    )
+    if breeding_box_match:
+        ctx = await bot.get_context(message)
+        cog = bot.get_cog("PokéTwoNamingBot")
+        if cog is None:
+            await message.channel.send(
+                "❌ Breeding box handler is not loaded. Restart the bot."
+            )
+            return
+        try:
+            await cog.breeding_box_command(
+                ctx,
+                breeding_box_match.group(1) or "",
+            )
+        except discord.DiscordException as error:
+            print(f"Breeding box routing failed: {error}")
+            await message.channel.send(
+                "❌ Breeding boxes failed. Check the bot logs."
+            )
+        return
     reserve_list_match = re.fullmatch(
         r"\s*[vV]!(?:r|reserve)\s+list(?:\s+(.+?))?\s*",
         message.content,
