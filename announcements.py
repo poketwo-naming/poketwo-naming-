@@ -7,18 +7,11 @@ ANNOUNCEMENT_CHANNEL_ID = 1574489953444827146
 ANNOUNCEMENT_ROLE_ID = 1574502724370825286
 ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
+# Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
     "**What's new**\n"
-    "🔧 **Breeding Box Slash Commands** - Manage boxes and daycare pairs with `/` commands\n"
-    "  - Use `/box` for create, list, append, remove, transfer, copy, tags, rename, and reset\n"
-    "  - Use `/dc` to find pairs or open daycare settings\n"
-    "  - Use `/boxhelp` for the breeding box command guide\n"
-    "🔧 **Slash Command Registration Fix** - Vivillon now registers its slash "
-    "commands even when Discord blocks bulk syncing for an Activity\n"
-    "🌿 **Smoliv Recognition** - Improved recognition of Smoliv images that "
-    "could be mistaken for Applin\n"
-    "🔧 **Automatic Update Announcements** - New bot updates now post and publish automatically\n"
-    "  - Update notices retry automatically if sending or publishing fails"
+    "🔧 **Update Announcements** - New announcements now describe only the "
+    "latest update instead of repeating previous changes."
 )
 
 

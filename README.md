@@ -95,8 +95,9 @@ copying.
 On startup, the bot posts the current `UPDATE_ANNOUNCEMENT` from
 `announcements.py` to channel `1574489953444827146` once per announcement text.
 Each update post pings the configured announcement role
-`1574502724370825286`. Update the summary alongside each bot change; restarts
-with unchanged announcement text do not post duplicates. The bot automatically
+`1574502724370825286`. Replace the summary with only the latest changes alongside
+each bot update; do not append previous updates. Restarts with unchanged
+announcement text do not post duplicates. The bot automatically
 publishes each update to announcement-channel followers. The channel must be an
 announcement channel and the bot needs permission to send messages there. If
 publishing fails, the bot logs the error and retries the same message on the
