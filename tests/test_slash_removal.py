@@ -4,11 +4,12 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import discord
+from discord.ext import commands
 
 from bot import PokéTwoNamingBot
 
 with patch.dict(os.environ, {"DISCORD_TOKEN": "test-token"}):
-    from main import remove_old_slash_commands
+    from main import register_daycare_command, remove_old_slash_commands
 
 
 class SlashRemovalTests(unittest.IsolatedAsyncioTestCase):
@@ -19,25 +20,43 @@ class SlashRemovalTests(unittest.IsolatedAsyncioTestCase):
         other = SimpleNamespace(
             name="unrelated", type=discord.AppCommandType.chat_input, delete=AsyncMock()
         )
+        daycare = SimpleNamespace(
+            name="dc", type=discord.AppCommandType.chat_input, delete=AsyncMock()
+        )
         activity = SimpleNamespace(
             name="box", type=4,
             delete=AsyncMock(),
         )
-        tree = SimpleNamespace(fetch_commands=AsyncMock(return_value=[old, other, activity]))
+        tree = SimpleNamespace(
+            fetch_commands=AsyncMock(return_value=[old, other, daycare, activity])
+        )
 
         self.assertEqual(await remove_old_slash_commands(tree), 1)
         old.delete.assert_awaited_once()
         other.delete.assert_not_awaited()
+        daycare.delete.assert_not_awaited()
         activity.delete.assert_not_awaited()
 
     async def test_delete_failures_are_reported(self):
         command = SimpleNamespace(
-            name="dc", type=discord.AppCommandType.chat_input,
+            name="box", type=discord.AppCommandType.chat_input,
             delete=AsyncMock(side_effect=RuntimeError("failed")),
         )
         tree = SimpleNamespace(fetch_commands=AsyncMock(return_value=[command]))
         with self.assertRaisesRegex(RuntimeError, "failed"):
             await remove_old_slash_commands(tree)
 
-    def test_cog_registers_no_slash_commands(self):
-        self.assertEqual(PokéTwoNamingBot.__cog_app_commands__, [])
+    async def test_only_daycare_is_registered_without_bulk_sync(self):
+        client = commands.Bot(command_prefix="!", intents=discord.Intents.none())
+        client._connection.application_id = 123
+        cog = PokéTwoNamingBot.__new__(PokéTwoNamingBot)
+        for command in cog.__cog_app_commands__:
+            client.tree.add_command(command)
+        with patch.object(
+            client.tree._http, "upsert_global_command", new_callable=AsyncMock
+        ) as upsert:
+            await register_daycare_command(client.tree)
+        payload = upsert.await_args.kwargs["payload"]
+        self.assertEqual([command.name for command in cog.__cog_app_commands__], ["dc"])
+        self.assertEqual(payload["name"], "dc")
+        self.assertEqual([option["name"] for option in payload["options"]], ["box_name"])

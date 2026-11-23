@@ -413,6 +413,75 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertNotIn("embed", self.ctx.send.await_args.kwargs)
 
+    async def test_slash_daycare_returns_only_one_pair_from_named_box(self):
+        boxes = self.service.user_boxes(123, 456)
+        boxes["Trainer's Box"] = {
+            "items": [
+                {"name": "Pikachu", "gender": gender, "tags": [], "pokemon_id": str(number)}
+                for number, gender in [(1, "male"), (2, "female"), (3, "male"), (4, "female")]
+            ]
+        }
+        self.service.species_cache[25] = {"gender_rate": 4, "egg_groups": ("field",)}
+        interaction = SimpleNamespace(
+            guild=self.ctx.guild,
+            user=self.ctx.author,
+            response=SimpleNamespace(defer=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+        )
+
+        await PokéTwoNamingBot.slash_daycare.callback(
+            self.cog, interaction, box_name="Trainer's Box"
+        )
+
+        interaction.response.defer.assert_awaited_once()
+        output = interaction.followup.send.await_args.args[0]
+        self.assertIn("Name: Trainer's Box", output)
+        self.assertIn("Pairs formed: 1", output)
+        self.assertIn("daycare add 1 2", output)
+        self.assertNotIn("daycare add 3 4", output)
+
+        await self.service.daycare_command(self.ctx, '"Trainer\'s Box"')
+        self.assertIn("Pairs formed: 2", self.ctx.send.await_args.args[0])
+
+    async def test_slash_daycare_treats_settings_as_a_box_name(self):
+        self.service.user_boxes(123, 456)["settings"] = {"items": []}
+        interaction = SimpleNamespace(
+            guild=self.ctx.guild,
+            user=self.ctx.author,
+            response=SimpleNamespace(defer=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+        )
+
+        await PokéTwoNamingBot.slash_daycare.callback(
+            self.cog, interaction, box_name="settings"
+        )
+
+        self.assertIn("No compatible numbered pair", interaction.followup.send.await_args.args[0])
+
+    async def test_slash_daycare_defaults_to_first_box(self):
+        self.service.user_boxes(123, 456)["First Box"] = {"items": []}
+        interaction = SimpleNamespace(
+            guild=self.ctx.guild,
+            user=self.ctx.author,
+            response=SimpleNamespace(defer=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+        )
+
+        await PokéTwoNamingBot.slash_daycare.callback(self.cog, interaction)
+
+        self.assertIn("First Box", interaction.followup.send.await_args.args[0])
+
+    async def test_slash_daycare_rejects_direct_messages(self):
+        interaction = SimpleNamespace(
+            guild=None,
+            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+        )
+
+        await PokéTwoNamingBot.slash_daycare.callback(self.cog, interaction)
+
+        interaction.response.send_message.assert_awaited_once()
+        interaction.response.defer.assert_not_awaited()
+
     async def test_daycare_does_not_pair_duplicate_numbers_or_old_numberless_entries(self):
         boxes = self.service.user_boxes(123, 456)
         boxes["Daycare"] = {

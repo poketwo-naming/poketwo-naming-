@@ -373,6 +373,7 @@ class BreedingBoxService:
                     "`v!box clear <box>` — empty one box\n"
                     "`v!box reset` — confirm before removing all your boxes\n"
                     "`v!dc [box]` — get one compatible pair using Pokémon numbers\n"
+                    "`/dc [box]` — get one compatible pair using slash commands\n"
                     "`v!dc settings` — choose first, random, or tagged-first pairs "
                     "and display\n"
                     "`v!boxhelp` — show this command list"
@@ -970,9 +971,12 @@ class BreedingBoxService:
             await ctx.send(embed=view.embed(), view=view)
             return
 
+        await self.show_daycare_pairs(ctx, " ".join(args))
+
+    async def show_daycare_pairs(self, ctx, box_selection: str, *, first_only=False):
         boxes = self.user_boxes(ctx.guild.id, ctx.author.id)
-        if args:
-            box_name, box = self.resolve_box(boxes, " ".join(args))
+        if box_selection:
+            box_name, box = self.resolve_box(boxes, box_selection)
         elif boxes:
             box_name, box = next(iter(boxes.items()))
         else:
@@ -1038,7 +1042,7 @@ class BreedingBoxService:
                 "visible genders."
             )
             return
-        displayed_pairs = pairs
+        displayed_pairs = pairs[:1] if first_only else pairs
         header = [
             f"**Daycare Pairs — {box_name}**",
             f"Name: {box_name}",

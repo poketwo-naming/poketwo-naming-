@@ -75,6 +75,7 @@ Every `v!` command also works with a capital `V!` prefix.
 | `v!box tag / untag / tags / tagged` | `v!box tag Daycare 1 egg-move` | Track and browse egg-move tags |
 | `v!box rename / delete / clear / reset` | `v!box rename Daycare Eggs` | Rename, delete, or wipe boxes |
 | `v!dc [box]` | `v!dc Daycare` | Show a compatible pair, its box name, and two ready-to-paste commands for phone and PC |
+| `/dc [box_name]` | `/dc box_name:Daycare` | Show one compatible pair from a breeding box |
 | `v!dc settings` | `v!dc settings` | Change pair selection and display |
 | `v!boxhelp` | `v!boxhelp` | Show the full list of box commands |
 

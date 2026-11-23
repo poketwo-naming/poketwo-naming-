@@ -10,8 +10,9 @@ PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
     "**What's new**\n"
-    "Slash commands have been removed. Continue using Vivillon's `v!` commands, "
-    "including `v!box`, `v!dc`, and `v!boxhelp`."
+    "The other slash commands have been removed. `/dc` is the only slash "
+    "command and finds one compatible daycare pair. Existing `v!` commands "
+    "remain available."
 )
 
 

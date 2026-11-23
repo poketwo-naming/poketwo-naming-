@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo
 
 import aiohttp
 import discord
+from discord import app_commands
 from discord.ext import commands
 from geonamescache import GeonamesCache
 from PIL import Image, UnidentifiedImageError
@@ -1906,6 +1907,16 @@ class GrabConfirmView(discord.ui.View):
             embed=None,
             view=None,
         )
+
+
+class SlashDaycareContext:
+    def __init__(self, interaction: discord.Interaction):
+        self.guild = interaction.guild
+        self.author = interaction.user
+        self.interaction = interaction
+
+    async def send(self, *args, **kwargs):
+        return await self.interaction.followup.send(*args, **kwargs)
 
 
 class PokéTwoNamingBot(commands.Cog):
@@ -5971,6 +5982,23 @@ class PokéTwoNamingBot(commands.Cog):
         view.update_buttons()
         await ctx.send(embed=pages[view.page], view=view)
 
+    @app_commands.command(name="dc", description="Find one compatible daycare pair")
+    @app_commands.describe(box_name="Box name or 1-based box number")
+    async def slash_daycare(
+        self, interaction: discord.Interaction, box_name: str | None = None
+    ):
+        if interaction.guild is None:
+            await interaction.response.send_message(
+                "Daycare commands can only be used inside a server.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer()
+        ctx = SlashDaycareContext(interaction)
+        await self.breeding_box_service.show_daycare_pairs(
+            ctx, box_name or "", first_only=True
+        )
 
 
 async def setup(bot):

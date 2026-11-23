@@ -51,7 +51,7 @@ bot = commands.Bot(
 
 
 REMOVED_SLASH_COMMANDS = frozenset({
-    "ping", "box", "dc", "boxhelp", "typeping", "questping", "sr", "afk",
+    "ping", "box", "boxhelp", "typeping", "questping", "sr", "afk",
     "permission", "help", "resume", "pause", "settings", "support",
 })
 
@@ -69,6 +69,23 @@ async def remove_old_slash_commands(tree: discord.app_commands.CommandTree) -> i
     return removed
 
 
+async def register_daycare_command(tree: discord.app_commands.CommandTree) -> None:
+    """Register /dc without replacing Discord's managed Activity command."""
+    application_id = tree.client.application_id
+    if application_id is None:
+        raise discord.app_commands.MissingApplicationID
+    command = tree.get_command("dc")
+    if command is None:
+        raise RuntimeError("The /dc command is not loaded")
+    translator = tree.translator
+    payload = (
+        await command.get_translated_payload(tree, translator)
+        if translator is not None
+        else command.to_dict(tree)
+    )
+    await tree._http.upsert_global_command(application_id, payload=payload)
+
+
 @bot.event
 async def on_ready():
     """Called when the bot is ready"""
@@ -82,10 +99,12 @@ async def on_ready():
         )
         if removed_count:
             print(f"✅ Removed {removed_count} old slash command(s)")
+        await asyncio.wait_for(register_daycare_command(bot.tree), timeout=120.0)
+        print("✅ Registered /dc")
     except asyncio.TimeoutError:
-        print("⚠️  Old slash command removal timed out (120s)")
+        print("⚠️  Slash command update timed out (120s)")
     except (discord.DiscordException, discord.app_commands.AppCommandError) as error:
-        print(f"❌ Failed to remove old slash commands: {error}")
+        print(f"❌ Failed to update slash commands: {error}")
 
 
 @bot.event
