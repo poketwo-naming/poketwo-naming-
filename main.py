@@ -59,6 +59,13 @@ async def on_ready():
     try:
         synced = await bot.tree.sync()
         print(f"Synced {len(synced)} app command(s)")
+    except discord.app_commands.errors.AppCommandSyncError as e:
+        # Handle Discord's Entry Point command restriction error
+        if "50240" in str(e):
+            print("Warning: Entry Point command cannot be modified in bulk sync.")
+            print("This is expected behavior for Discord apps. App commands may still work.")
+        else:
+            print(f"Failed to sync app commands: {e}")
     except Exception as e:
         print(f"Failed to sync app commands: {e}")
     
