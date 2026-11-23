@@ -17,7 +17,11 @@ UPDATE_ANNOUNCEMENT = (
     "  - Prefix commands (`v!`) still work normally\n\n"
     "🌍 **Quest Pings** - Set which regions to receive quest pings for\n"
     "  - Supports 12 regions: Kanto, Johto, Hoenn, Sinnoh, Unova, Kalos, Alola, Galar, Hisui, Paldea, Kitakami, Paradox\n"
-    "  - Use `/questping` or `v!qp` to configure"
+    "  - Use `/questping` or `v!qp` to configure\n\n"
+    "💔 **Improved Daycare Pairing** - Shows all compatible breeding pairs\n"
+    "  - Ditto takes priority: pairs with any compatible Pokémon first\n"
+    "  - Male-female pairs: then matches remaining Pokémon by egg group\n"
+    "  - Use `v!dc <boxname>` to see all pairs in your daycare box"
 )
 
 

@@ -5829,6 +5829,7 @@ class PokéTwoNamingBot(commands.Cog):
             )
             return
 
+        resolved_name = None
         spawn_data = self.pokemon_spawn_chances.get(pokemon_input.casefold())
         if spawn_data is None:
             resolved_name = self.resolve_pokemon_name(pokemon_input)
@@ -5871,8 +5872,8 @@ class PokéTwoNamingBot(commands.Cog):
     async def slash_afk(
         self,
         interaction: discord.Interaction,
-        kind: str = None,
-        muted: bool = None
+        kind: str | None = None,
+        muted: bool | None = None
     ):
         """Toggle ping notifications (AFK mode)."""
         user_id = str(interaction.user.id)
@@ -5957,7 +5958,7 @@ class PokéTwoNamingBot(commands.Cog):
     )
     async def slash_help(self, interaction: discord.Interaction):
         """Show bot commands and categories."""
-        pages = self.help_pages()
+        pages = self.command_pages(command_only=False)
         if not pages:
             await interaction.response.send_message(
                 "No help available.",
