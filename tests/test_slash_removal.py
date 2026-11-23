@@ -59,4 +59,6 @@ class SlashRemovalTests(unittest.IsolatedAsyncioTestCase):
         payload = upsert.await_args.kwargs["payload"]
         self.assertEqual([command.name for command in cog.__cog_app_commands__], ["dc"])
         self.assertEqual(payload["name"], "dc")
-        self.assertEqual([option["name"] for option in payload["options"]], ["box_name"])
+        self.assertEqual([option["name"] for option in payload["options"]], ["box", "count"])
+        self.assertTrue(payload["options"][0]["autocomplete"])
+        self.assertEqual(payload["options"][1]["min_value"], 1)

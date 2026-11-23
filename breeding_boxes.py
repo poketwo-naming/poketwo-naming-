@@ -373,7 +373,7 @@ class BreedingBoxService:
                     "`v!box clear <box>` — empty one box\n"
                     "`v!box reset` — confirm before removing all your boxes\n"
                     "`v!dc [box]` — get one compatible pair using Pokémon numbers\n"
-                    "`/dc [box]` — get one compatible pair using slash commands\n"
+                    "`/dc [box] [count]` — choose a box and number of pairs\n"
                     "`v!dc settings` — choose first, random, or tagged-first pairs "
                     "and display\n"
                     "`v!boxhelp` — show this command list"
@@ -971,9 +971,11 @@ class BreedingBoxService:
             await ctx.send(embed=view.embed(), view=view)
             return
 
-        await self.show_daycare_pairs(ctx, " ".join(args))
+        await self.show_daycare_pairs(ctx, " ".join(args), limit=1)
 
-    async def show_daycare_pairs(self, ctx, box_selection: str, *, first_only=False):
+    async def show_daycare_pairs(
+        self, ctx, box_selection: str, *, limit: int | None = None
+    ):
         boxes = self.user_boxes(ctx.guild.id, ctx.author.id)
         if box_selection:
             box_name, box = self.resolve_box(boxes, box_selection)
@@ -1042,13 +1044,15 @@ class BreedingBoxService:
                 "visible genders."
             )
             return
-        displayed_pairs = pairs[:1] if first_only else pairs
+        displayed_pairs = pairs[:limit] if limit is not None else pairs
         header = [
             f"**Daycare Pairs — {box_name}**",
             f"Name: {box_name}",
             f"Pairs formed: {len(displayed_pairs)}",
-            "",
         ]
+        if limit is not None and len(displayed_pairs) < limit:
+            header.append(f"Requested {limit}; only {len(displayed_pairs)} available.")
+        header.append("")
         
         messages = []
         current_chunk = "\n".join(header)

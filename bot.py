@@ -5982,10 +5982,31 @@ class PokéTwoNamingBot(commands.Cog):
         view.update_buttons()
         await ctx.send(embed=pages[view.page], view=view)
 
-    @app_commands.command(name="dc", description="Find one compatible daycare pair")
-    @app_commands.describe(box_name="Box name or 1-based box number")
+    async def daycare_box_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        if interaction.guild is None:
+            return []
+        boxes = self.breeding_box_service.user_boxes(
+            interaction.guild.id, interaction.user.id
+        )
+        return [
+            app_commands.Choice(name=name, value=str(index) if name.isdigit() else name)
+            for index, name in enumerate(boxes, start=1)
+            if current.casefold() in name.casefold()
+        ][:25]
+
+    @app_commands.command(name="dc", description="Find compatible daycare pairs")
+    @app_commands.describe(
+        box="Choose a breeding box",
+        count="Number of different pairs to find (default: 1)",
+    )
+    @app_commands.autocomplete(box=daycare_box_autocomplete)
     async def slash_daycare(
-        self, interaction: discord.Interaction, box_name: str | None = None
+        self,
+        interaction: discord.Interaction,
+        box: str | None = None,
+        count: app_commands.Range[int, 1] = 1,
     ):
         if interaction.guild is None:
             await interaction.response.send_message(
@@ -5997,7 +6018,7 @@ class PokéTwoNamingBot(commands.Cog):
         await interaction.response.defer()
         ctx = SlashDaycareContext(interaction)
         await self.breeding_box_service.show_daycare_pairs(
-            ctx, box_name or "", first_only=True
+            ctx, box or "", limit=count
         )
 
 

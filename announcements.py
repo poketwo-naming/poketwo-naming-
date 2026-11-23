@@ -10,8 +10,9 @@ PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
     "**What's new**\n"
-    "`v!dc` now splits large daycare pair lists into Discord-sized messages, "
-    "so large breeding boxes no longer fail to display their pairs."
+    "`v!dc <box>` now returns just **1 pair** for quick lookups.\n"
+    "`/dc` has a **box** picker and a **count** option to select a breeding box "
+    "and choose how many different compatible pairs to show."
 )
 
 

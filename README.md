@@ -75,7 +75,7 @@ Every `v!` command also works with a capital `V!` prefix.
 | `v!box tag / untag / tags / tagged` | `v!box tag Daycare 1 egg-move` | Track and browse egg-move tags |
 | `v!box rename / delete / clear / reset` | `v!box rename Daycare Eggs` | Rename, delete, or wipe boxes |
 | `v!dc [box]` | `v!dc Daycare` | Show a compatible pair, its box name, and two ready-to-paste commands for phone and PC |
-| `/dc [box_name]` | `/dc box_name:Daycare` | Show one compatible pair from a breeding box |
+| `/dc [box] [count]` | `/dc box:Daycare count:2` | Choose a box and number of compatible pairs (defaults to the first box and one pair) |
 | `v!dc settings` | `v!dc settings` | Change pair selection and display |
 | `v!boxhelp` | `v!boxhelp` | Show the full list of box commands |
 
@@ -92,6 +92,8 @@ mixed-gender species need their gender visible in the list that was appended.
 The plain-text result shows the selected box name and pair count, with an
 inline daycare command for phone copying and a fenced command block for PC
 copying. Large pair lists are split across multiple messages.
+The `/dc` box option suggests your boxes as you type; `count` must be at least
+1 and returns up to the number of compatible pairs available.
 
 On startup, the bot posts the current `UPDATE_ANNOUNCEMENT` from
 `announcements.py` to channel `1574489953444827146` once per announcement text.

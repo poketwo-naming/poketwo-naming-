@@ -424,7 +424,7 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
         }
         self.service.species_cache[25] = {"gender_rate": 4, "egg_groups": ("field",)}
 
-        await self.service.daycare_command(self.ctx, "purmel")
+        await self.service.show_daycare_pairs(self.ctx, "purmel")
 
         messages = [call.args[0] for call in self.ctx.send.await_args_list]
         self.assertGreater(len(messages), 1)
@@ -497,7 +497,7 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
         )
 
         await PokéTwoNamingBot.slash_daycare.callback(
-            self.cog, interaction, box_name="Trainer's Box"
+            self.cog, interaction, box="Trainer's Box"
         )
 
         interaction.response.defer.assert_awaited_once()
@@ -508,7 +508,55 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("daycare add 3 4", output)
 
         await self.service.daycare_command(self.ctx, '"Trainer\'s Box"')
-        self.assertIn("Pairs formed: 2", self.ctx.send.await_args.args[0])
+        self.assertIn("Pairs formed: 1", self.ctx.send.await_args.args[0])
+
+    async def test_slash_daycare_count_limits_pairs_and_reports_shortfall(self):
+        boxes = self.service.user_boxes(123, 456)
+        boxes["Daycare"] = {
+            "items": [
+                {"name": "Pikachu", "gender": gender, "tags": [], "pokemon_id": str(number)}
+                for number, gender in [(1, "male"), (2, "female"), (3, "male"), (4, "female")]
+            ]
+        }
+        self.service.species_cache[25] = {"gender_rate": 4, "egg_groups": ("field",)}
+        interaction = SimpleNamespace(
+            guild=self.ctx.guild,
+            user=self.ctx.author,
+            response=SimpleNamespace(defer=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+        )
+
+        await PokéTwoNamingBot.slash_daycare.callback(
+            self.cog, interaction, box="Daycare", count=2
+        )
+
+        output = interaction.followup.send.await_args.args[0]
+        self.assertIn("Pairs formed: 2", output)
+        self.assertIn("daycare add 1 2", output)
+        self.assertIn("daycare add 3 4", output)
+
+        await PokéTwoNamingBot.slash_daycare.callback(
+            self.cog, interaction, box="Daycare", count=3
+        )
+        self.assertIn("Requested 3; only 2 available", interaction.followup.send.await_args.args[0])
+
+    async def test_slash_box_autocomplete_is_scoped_and_limited(self):
+        boxes = self.service.user_boxes(123, 456)
+        boxes.update({f"Box {index}": {"items": []} for index in range(30)})
+        boxes["2"] = {"items": []}
+        self.service.user_boxes(123, 999)["Private"] = {"items": []}
+        interaction = SimpleNamespace(guild=self.ctx.guild, user=self.ctx.author)
+
+        choices = await PokéTwoNamingBot.daycare_box_autocomplete(self.cog, interaction, "box")
+        self.assertEqual(len(choices), 25)
+        self.assertTrue(all(choice.name.startswith("Box ") for choice in choices))
+        numeric = await PokéTwoNamingBot.daycare_box_autocomplete(self.cog, interaction, "2")
+        numeric_choice = next(choice for choice in numeric if choice.name == "2")
+        self.assertEqual(self.service.resolve_box(boxes, numeric_choice.value)[0], "2")
+        self.assertEqual(
+            await PokéTwoNamingBot.daycare_box_autocomplete(self.cog, interaction, "Private"),
+            [],
+        )
 
     async def test_slash_daycare_treats_settings_as_a_box_name(self):
         self.service.user_boxes(123, 456)["settings"] = {"items": []}
@@ -520,7 +568,7 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
         )
 
         await PokéTwoNamingBot.slash_daycare.callback(
-            self.cog, interaction, box_name="settings"
+            self.cog, interaction, box="settings"
         )
 
         self.assertIn("No compatible numbered pair", interaction.followup.send.await_args.args[0])
