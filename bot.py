@@ -13,7 +13,8 @@ import logging
 import os
 import re
 from time import perf_counter, time
-from typing import cast
+from types import CoroutineType
+from typing import Any, cast
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 from zipfile import ZIP_DEFLATED, ZipFile
 from zoneinfo import ZoneInfo
@@ -408,7 +409,13 @@ class CorrectPokemonModal(discord.ui.Modal, title="Correct Pokémon Name"):
         super().__init__()
         self.review = review
 
-    async def on_submit(self, interaction: discord.Interaction):
+    def on_submit(
+        self,
+        interaction: discord.Interaction,
+    ) -> CoroutineType[Any, Any, None]:
+        return self._handle_submit(interaction)
+
+    async def _handle_submit(self, interaction: discord.Interaction) -> None:
         try:
             await self.review.confirm(interaction, self.pokemon_name.value)
         except ValueError as error:
