@@ -50,26 +50,46 @@ bot = commands.Bot(
 )
 
 
+async def sync_application_commands(tree: discord.app_commands.CommandTree) -> int:
+    """Sync global commands, preserving Discord's managed Activity entry point."""
+    try:
+        return len(await tree.sync())
+    except discord.HTTPException as error:
+        if error.code != 50240:
+            raise
+
+    application_id = tree.client.application_id
+    if application_id is None:
+        raise discord.app_commands.MissingApplicationID
+    commands_to_sync = tree.get_commands()
+    translator = tree.translator
+    for command in commands_to_sync:
+        payload = (
+            await command.get_translated_payload(tree, translator)
+            if translator is not None
+            else command.to_dict(tree)
+        )
+        # discord.py exposes no public API for individual command upserts.
+        await tree._http.upsert_global_command(application_id, payload=payload)
+    return len(commands_to_sync)
+
+
 @bot.event
 async def on_ready():
     """Called when the bot is ready"""
     print(f"{bot.user} has connected to Discord!")
     print(f"Bot is in {len(bot.guilds)} guild(s)")
-    
-    try:
-        synced = await asyncio.wait_for(bot.tree.sync(), timeout=30.0)
-        print(f"✅ Synced {len(synced)} app command(s)")
-    except asyncio.TimeoutError:
-        print("⚠️  App command sync timed out (30s)")
-    except discord.app_commands.errors.AppCommandSyncError as e:
-        if "50240" in str(e):
-            print("⚠️  Warning: Entry Point command cannot be modified in bulk sync.")
-        else:
-            print(f"❌ AppCommandSyncError: {e}")
-    except Exception as e:
-        print(f"❌ Sync failed with exception: {type(e).__name__}: {e}")
-    
     asyncio.create_task(run_update_announcement(bot))
+
+    try:
+        synced_count = await asyncio.wait_for(
+            sync_application_commands(bot.tree), timeout=120.0
+        )
+        print(f"✅ Synced {synced_count} app command(s)")
+    except asyncio.TimeoutError:
+        print("⚠️  App command sync timed out (120s)")
+    except (discord.DiscordException, discord.app_commands.AppCommandError) as error:
+        print(f"❌ Failed to sync app commands: {error}")
 
 
 @bot.event
@@ -148,21 +168,6 @@ async def load_cogs():
         if filename.endswith(".py"):
             await bot.load_extension(f"cogs.{filename[:-3]}")
             print(f"Loaded cog: {filename}")
-
-
-@bot.event
-async def on_connect():
-    """Sync app commands when bot connects"""
-    try:
-        synced = await bot.tree.sync()
-        print(f"✅ Synced {len(synced)} app command(s)")
-    except discord.app_commands.errors.AppCommandSyncError as e:
-        if "50240" in str(e):
-            print("⚠️  Entry Point command cannot be modified (expected)")
-        else:
-            print(f"⚠️  Failed to sync app commands: {e}")
-    except Exception as e:
-        print(f"⚠️  Failed to sync app commands: {e}")
 
 
 async def main():

@@ -73,6 +73,7 @@ class UpdateAnnouncementTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_retries_pending_message_without_sending_again(self):
         pending_message = SimpleNamespace(
+            content=f"<@&{ANNOUNCEMENT_ROLE_ID}> {UPDATE_ANNOUNCEMENT}",
             flags=SimpleNamespace(crossposted=False),
             publish=AsyncMock(),
         )
@@ -95,6 +96,29 @@ class UpdateAnnouncementTests(unittest.IsolatedAsyncioTestCase):
             cog.bot_state[ANNOUNCEMENT_STATE_KEY],
             UPDATE_ANNOUNCEMENT,
         )
+
+    async def test_old_pending_update_does_not_replace_new_announcement(self):
+        channel = self.make_channel()
+        old_message = SimpleNamespace(
+            content="An older update",
+            flags=SimpleNamespace(crossposted=False),
+            publish=AsyncMock(),
+        )
+        channel.fetch_message.return_value = old_message
+        bot = SimpleNamespace(
+            get_channel=Mock(return_value=channel),
+            fetch_channel=AsyncMock(),
+        )
+        cog = SimpleNamespace(
+            bot_state={PENDING_MESSAGE_STATE_KEY: 100},
+            save_bot_state=Mock(),
+        )
+
+        self.assertTrue(await post_update_announcement(bot, cog))
+        old_message.publish.assert_awaited_once()
+        channel.send.assert_awaited_once()
+        channel.send.return_value.publish.assert_awaited_once()
+        self.assertEqual(cog.bot_state[ANNOUNCEMENT_STATE_KEY], UPDATE_ANNOUNCEMENT)
 
     async def test_send_failure_is_not_marked_as_sent(self):
         channel = self.make_channel()

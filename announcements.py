@@ -13,6 +13,8 @@ UPDATE_ANNOUNCEMENT = (
     "  - Use `/box` for create, list, append, remove, transfer, copy, tags, rename, and reset\n"
     "  - Use `/dc` to find pairs or open daycare settings\n"
     "  - Use `/boxhelp` for the breeding box command guide\n"
+    "🔧 **Slash Command Registration Fix** - Vivillon now registers its slash "
+    "commands even when Discord blocks bulk syncing for an Activity\n"
     "🔧 **Automatic Update Announcements** - New bot updates now post and publish automatically\n"
     "  - Update notices retry automatically if sending or publishing fails"
 )
@@ -25,10 +27,13 @@ async def post_update_announcement(bot, cog) -> bool:
     bot_state.pop("last_update_announcement", None)
     bot_state.pop("pending_update_publication", None)
 
-    if bot_state.get(ANNOUNCEMENT_STATE_KEY) == UPDATE_ANNOUNCEMENT:
-        bot_state.pop(PENDING_MESSAGE_STATE_KEY, None)
+    if (
+        bot_state.get(ANNOUNCEMENT_STATE_KEY) == UPDATE_ANNOUNCEMENT
+        and bot_state.get(PENDING_MESSAGE_STATE_KEY) is None
+    ):
         return False
 
+    content = f"<@&{ANNOUNCEMENT_ROLE_ID}> {UPDATE_ANNOUNCEMENT}"
     channel = bot.get_channel(ANNOUNCEMENT_CHANNEL_ID)
     if channel is None:
         channel = await bot.fetch_channel(ANNOUNCEMENT_CHANNEL_ID)
@@ -47,12 +52,14 @@ async def post_update_announcement(bot, cog) -> bool:
             if not getattr(message.flags, "crossposted", False):
                 await message.publish()
             bot_state.pop(PENDING_MESSAGE_STATE_KEY)
-            bot_state[ANNOUNCEMENT_STATE_KEY] = UPDATE_ANNOUNCEMENT
+            if message.content == content:
+                bot_state[ANNOUNCEMENT_STATE_KEY] = UPDATE_ANNOUNCEMENT
             cog.save_bot_state()
-            return True
+            if bot_state.get(ANNOUNCEMENT_STATE_KEY) == UPDATE_ANNOUNCEMENT:
+                return message.content == content
 
     message = await channel.send(
-        f"<@&{ANNOUNCEMENT_ROLE_ID}> {UPDATE_ANNOUNCEMENT}",
+        content,
         allowed_mentions=discord.AllowedMentions(
             roles=[discord.Object(id=ANNOUNCEMENT_ROLE_ID)],
             users=False,
