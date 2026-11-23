@@ -4307,15 +4307,10 @@ class PokéTwoNamingBot(commands.Cog):
         ]
         for name, value in fields:
             embed.add_field(name=name, value=value, inline=True)
-        server_names = ", ".join(sorted(guild.name for guild in self.bot.guilds))
-        server_summary = server_names if server_names else "No connected servers"
-        if len(server_summary) > 700:
-            server_summary = f"{server_summary[:697]}..."
         embed.set_footer(
             text=(
                 f"Model: {MODEL_READ_VERSION} | ONNX fp32 "
                 f"| Window: latest 100 recognitions"
-                f"\nServers ({len(self.bot.guilds)}): {server_summary}"
             )
         )
         await ctx.send(embed=embed)

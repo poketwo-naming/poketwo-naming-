@@ -159,7 +159,10 @@ class SpawnThumbnailTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(sha256(b"1").digest(), self.cog.spawn_prediction_cache)
 
     async def test_api_shows_download_and_send_times(self):
-        self.cog.bot = SimpleNamespace(user=None, guilds=[])
+        self.cog.bot = SimpleNamespace(
+            user=None,
+            guilds=[SimpleNamespace(name="Private Server")],
+        )
         self.cog.store_times = deque(maxlen=100)
         self.cog.json_load_seconds = 0.0
         self.cog.model_load_seconds = 0.0
@@ -175,6 +178,14 @@ class SpawnThumbnailTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(fields["Download Latest"], "200 ms")
         self.assertEqual(fields["Send Avg"], "350 ms")
         self.assertEqual(fields["Send Latest"], "400 ms")
+        self.assertNotIn(
+            "Servers",
+            ctx.send.await_args.kwargs["embed"].footer.text,
+        )
+        self.assertNotIn(
+            "Private Server",
+            ctx.send.await_args.kwargs["embed"].footer.text,
+        )
 
     async def test_apislow_reports_breakdown_of_slowest_recent_response(self):
         self.cog.spawn_metrics.append(
