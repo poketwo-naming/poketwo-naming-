@@ -49,8 +49,8 @@ Every `v!` command also works with a capital `V!` prefix.
 | `v!reserve list [@user]` | `v!reserve list @user` | Long-form reserve list command |
 | `v!r clear` | `v!r clear` | Confirm and clear all server reserves (restricted) |
 | `v!grab` | Reply with `v!grab` | Preview a reserve list, add its unique users to ready-up, or manage reserves |
-| `v!readyup` | `v!readyup` | Show a ready check for users added from `v!grab` |
-| `v!readyup clear` | `v!readyup clear` | Clear the server's ready-up queue and end its active check |
+| `v!readyup` | `v!readyup` | Show a ready check for users added from `v!grab` (restricted) |
+| `v!readyup clear` | `v!readyup clear` | Clear the server's ready-up queue and end its active check (restricted) |
 | `h!grab` | Reply with `h!grab` | Same category support, delegated through h!r, then v!r |
 | `v!sh [pokemon]` | `v!sh Pikachu` | Start/switch a hunt, or show your current hunt |
 | `v!sh all <pokemon>` | `v!sh all Meowth` | Hunt every form of that Pokémon |
@@ -170,7 +170,9 @@ Click **Readyup** on a `v!grab` preview to add each mentioned user once to that
 server's ready-up queue. Run `v!readyup` to show the Ready button and the
 not-ready/ready user lists; only queued users can mark themselves ready. When
 everyone is ready, the command runner is mentioned in a follow-up message.
-Use `v!readyup clear` to clear the queue and end the active check.
+`v!readyup` and `v!readyup clear` are restricted to administrators and
+configured restricted roles. Use `v!readyup clear` to clear the queue and end
+the active check.
 
 When Pokétwo confirms an incense purchase with `Incense has been bought` or
 `You purchased an Incense for 50 shards!`, this bot pauses Pokétwo in that

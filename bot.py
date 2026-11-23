@@ -248,12 +248,12 @@ COMMAND_CATALOG = (
     (
         "Reservations",
         "v!readyup",
-        "Starts a ready check for users added from v!grab.",
+        "Starts a ready check for users added from v!grab. Restricted.",
     ),
     (
         "Reservations",
         "v!readyup clear",
-        "Clears the ready-up queue and ends its active check.",
+        "Clears the ready-up queue and ends its active check. Restricted.",
     ),
     (
         "Reservations",
@@ -5001,6 +5001,9 @@ class PokéTwoNamingBot(commands.Cog):
         if ctx.guild is None:
             await ctx.send("Ready-up can only be used inside a server.")
             return
+        if not self.has_restricted_permission(ctx):
+            await ctx.send("❌ You do not have permission to use ready-up.")
+            return
         user_ids = self.readyup_user_ids(ctx.guild.id)
         if not user_ids:
             await ctx.send(
@@ -5017,6 +5020,9 @@ class PokéTwoNamingBot(commands.Cog):
         """Clear the server's ready-up queue and end its active check."""
         if ctx.guild is None:
             await ctx.send("Ready-up can only be used inside a server.")
+            return
+        if not self.has_restricted_permission(ctx):
+            await ctx.send("❌ You do not have permission to clear ready-up.")
             return
         count = self.clear_readyup_users(ctx.guild.id)
         view = self.readyup_views.pop(str(ctx.guild.id), None)

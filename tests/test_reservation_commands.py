@@ -31,6 +31,14 @@ class ReadyupClearCallback(Protocol):
     ) -> None: ...
 
 
+class ReadyupCallback(Protocol):
+    async def __call__(
+        self,
+        cog: PokéTwoNamingBot,
+        ctx: commands.Context,
+    ) -> None: ...
+
+
 def button_named(view: discord.ui.View, label: str) -> discord.ui.Button:
     return next(
         child
@@ -265,6 +273,39 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
         ctx.send.assert_awaited_once_with(
             "✅ Cleared **2** user(s) from the ready-up queue."
         )
+
+    async def test_readyup_command_requires_restricted_permission(self):
+        self.cog.has_restricted_permission = lambda ctx: False
+        self.cog.readyup_views = {}
+        self.cog.bot_state["readyup_queues"] = {"123": ["456"]}
+        callback = cast(ReadyupCallback, PokéTwoNamingBot.readyup.callback)
+
+        await callback(self.cog, cast(commands.Context, self.ctx))
+
+        self.ctx.send.assert_awaited_once_with(
+            "❌ You do not have permission to use ready-up."
+        )
+        self.assertEqual(self.cog.readyup_views, {})
+
+    async def test_readyup_clear_requires_restricted_permission(self):
+        self.cog.has_restricted_permission = lambda ctx: False
+        self.cog.bot_state["readyup_queues"] = {"123": ["456"]}
+        self.cog.readyup_views = {}
+        view = ReadyupView(self.cog, 123, 101, ["456"])
+        self.cog.readyup_views["123"] = view
+        callback = cast(
+            ReadyupClearCallback,
+            PokéTwoNamingBot.clear_readyup.callback,
+        )
+
+        await callback(self.cog, cast(commands.Context, self.ctx))
+
+        self.ctx.send.assert_awaited_once_with(
+            "❌ You do not have permission to clear ready-up."
+        )
+        self.assertEqual(self.cog.bot_state["readyup_queues"]["123"], ["456"])
+        self.assertFalse(view.ended)
+        self.assertIs(self.cog.readyup_views["123"], view)
 
     def configure_toxtricity_forms(self):
         self.cog.class_names = {
