@@ -1030,6 +1030,7 @@ class BreedingBoxService:
             return
         displayed_pairs = pairs[:1]
         output = [
+            f"**Daycare Pairs — {box_name}**",
             f"Name: {box_name}",
             f"Pairs formed: {len(displayed_pairs)}",
             "",
@@ -1041,7 +1042,8 @@ class BreedingBoxService:
                 f"{POKETWO_DAYCARE_COMMAND} add {first['pokemon_id']} "
                 f"{second['pokemon_id']}"
             )
-            output.append(f"`{daycare_command}`\n\n`{daycare_command}`")
+            output.append(f"`{daycare_command}`")
+            output.extend(("", f"```\n{daycare_command}\n```"))
             if settings["display"] == "details":
                 genders = (
                     first.get("gender") or "fixed gender",
@@ -1060,10 +1062,4 @@ class BreedingBoxService:
                     f"\n**Pair {pair_number}:** {first['name']} ({genders[0]}) + "
                     f"{second['name']} ({genders[1]}){tag_text}"
                 )
-        await ctx.send(
-            embed=discord.Embed(
-                title=f"Daycare Pairs — {box_name}",
-                description="\n".join(output),
-                color=discord.Color.green(),
-            )
-        )
+        await ctx.send("\n".join(output))

@@ -401,16 +401,17 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
 
         await self.service.daycare_command(self.ctx, "Daycare")
 
-        embed = self.ctx.send.await_args.kwargs["embed"]
         self.assertEqual(
-            embed.description,
+            self.ctx.send.await_args.args[0],
+            "**Daycare Pairs — Daycare**\n"
             "Name: Daycare\n"
             "Pairs formed: 1\n"
             "\n"
             "`@Pokétwo#8236 daycare add 23580 28179`\n"
             "\n"
-            "`@Pokétwo#8236 daycare add 23580 28179`",
+            "```\n@Pokétwo#8236 daycare add 23580 28179\n```",
         )
+        self.assertNotIn("embed", self.ctx.send.await_args.kwargs)
 
     async def test_daycare_does_not_pair_duplicate_numbers_or_old_numberless_entries(self):
         boxes = self.service.user_boxes(123, 456)

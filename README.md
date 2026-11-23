@@ -84,8 +84,9 @@ tracking are not imported. Pokémon stored before numbers were saved cannot be
 deduplicated or used by `v!dc`; clear and re-import that box to replace them.
 `v!dc` finds one pair of distinct numbered Pokémon using egg groups and gender;
 mixed-gender species need their gender visible in the list that was appended.
-The result shows the selected box name and includes the same Pokétwo daycare
-command twice so it is easy to copy on a phone or PC.
+The plain-text result shows the selected box name and pair count, with an
+inline daycare command for phone copying and a fenced command block for PC
+copying.
 
 On startup, the bot posts the current `UPDATE_ANNOUNCEMENT` from
 `announcements.py` to channel `1574489953444827146` once per announcement text.
