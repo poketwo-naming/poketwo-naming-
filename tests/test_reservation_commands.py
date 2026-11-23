@@ -57,6 +57,15 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
             self.cog, cast(commands.Context, self.ctx), pokemon_input=pokemon_input
         )
 
+    async def search_collection(self, pokemon_input: str):
+        callback = cast(
+            CollectionCallback,
+            PokéTwoNamingBot.search_collection.callback,
+        )
+        await callback(
+            self.cog, cast(commands.Context, self.ctx), pokemon_input=pokemon_input
+        )
+
     async def test_remove_category_removes_all_category_reservations(self):
         await self.cog.remove_reserve(self.ctx, entry="featured")
 
@@ -198,6 +207,46 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
             ["Charmander"],
         )
         self.assertIn("Pikachu, Eevee", self.ctx.send.await_args.args[0])
+
+    async def test_collection_search_finds_pokemon_for_calling_member(self):
+        self.cog.bot_state["collections"]["123"] = {
+            "456": ["Pikachu"],
+            "789": ["Eevee"],
+        }
+        self.ctx.author = SimpleNamespace(id=456)
+
+        await self.search_collection("Pikachu")
+
+        embed = self.ctx.send.await_args.kwargs["embed"]
+        self.assertEqual(embed.title, "Pikachu Collection Search")
+        self.assertEqual(
+            embed.description,
+            "✅ **Pikachu** is in your collection.",
+        )
+
+    async def test_collection_search_does_not_find_other_members_pokemon(self):
+        self.cog.bot_state["collections"]["123"] = {"789": ["Pikachu"]}
+        self.ctx.author = SimpleNamespace(id=456)
+
+        await self.search_collection("Pikachu")
+
+        embed = self.ctx.send.await_args.kwargs["embed"]
+        self.assertEqual(
+            embed.description,
+            "❌ **Pikachu** is not in your collection.",
+        )
+
+    async def test_collection_search_resolves_alias(self):
+        self.cog.class_names["braviary"] = "Braviary"
+        self.cog.pokemon_aliases = self.cog.load_pokemon_aliases()
+        self.cog.bot_state["collections"]["123"] = {"456": ["Braviary"]}
+        self.ctx.author = SimpleNamespace(id=456)
+
+        await self.search_collection("Woguru")
+
+        embed = self.ctx.send.await_args.kwargs["embed"]
+        self.assertEqual(embed.title, "Braviary Collection Search")
+        self.assertIn("is in your collection", embed.description)
 
     async def test_nidoran_gender_and_all_in_collections_and_reserves(self):
         with Path("pokemon_species.json").open(encoding="utf-8") as source:

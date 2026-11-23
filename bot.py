@@ -216,6 +216,11 @@ COMMAND_CATALOG = (
         "v!cl remove <pokemon,...|category>",
         "Removes Pokémon/forms or every member of a server category from your collection.",
     ),
+    (
+        "Collections",
+        "v!cl search <pokemon>",
+        "Checks whether a Pokémon is in your collection.",
+    ),
     ("Collections", "v!cl list", "Lists your own collection."),
     ("Collections", "v!cl clear", "Clears your own collection."),
     (
@@ -4056,7 +4061,7 @@ class PokéTwoNamingBot(commands.Cog):
         await ctx.send(
             "Usage: `v!cl add <pokemon|category>`, "
             "`v!cl remove <pokemon|category>`, "
-            "`v!cl list`, or `v!cl clear`."
+            "`v!cl search <pokemon>`, `v!cl list`, or `v!cl clear`."
         )
 
     @collection.command(name="add")
@@ -4140,6 +4145,38 @@ class PokéTwoNamingBot(commands.Cog):
         if skipped:
             result += ". Skipped: " + ", ".join(skipped)
         await ctx.send(result)
+
+    @collection.command(name="search")
+    async def search_collection(self, ctx, *, pokemon_input: str):
+        """Check whether a Pokémon is in the caller's collection."""
+        if ctx.guild is None:
+            await ctx.send("Collections can only be viewed inside a server.")
+            return
+        search_input = pokemon_input.strip()
+        if not search_input:
+            await ctx.send("Usage: `v!cl search <pokemon>`")
+            return
+        pokemon_name = self.resolve_pokemon_name(search_input)
+        if pokemon_name is None:
+            await ctx.send(f"❌ Unknown Pokémon: `{search_input}`")
+            return
+
+        collection = self.bot_state["collections"].get(
+            str(ctx.guild.id),
+            {},
+        ).get(str(ctx.author.id), [])
+        found = pokemon_name in collection
+        description = (
+            f"✅ **{pokemon_name}** is in your collection."
+            if found
+            else f"❌ **{pokemon_name}** is not in your collection."
+        )
+        embed = discord.Embed(
+            title=f"{pokemon_name} Collection Search",
+            description=description,
+            color=discord.Color.blue(),
+        )
+        await ctx.send(embed=embed)
 
     @collection.command(name="list")
     async def list_collection(self, ctx):

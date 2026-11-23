@@ -53,6 +53,7 @@ Every `v!` command also works with a capital `V!` prefix.
 | `v!sh clear` | `v!sh clear` | Clear your shiny hunt |
 | `v!cl add [all] <pokemon,...|category>` | `v!cl add Pikachu, Eevee` or `v!cl add rare` | Add Pokémon, a family, or every Pokémon in a server category to your collection |
 | `v!cl remove <pokemon,...|category>` | `v!cl remove Pikachu, Eevee` or `v!cl remove rare` | Remove Pokémon or every Pokémon in a server category from your collection |
+| `v!cl search <pokemon>` | `v!cl search Pikachu` | Check whether a Pokémon is in your own collection |
 | `v!cl list` | `v!cl list` | List your own collection |
 | `v!cl clear` | `v!cl clear` | Clear your own collection |
 | `v!permission <role_id>` | `v!permission 123456789` | Grant a role restricted-command access |
