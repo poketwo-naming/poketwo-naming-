@@ -54,11 +54,13 @@ async def on_ready():
     """Called when the bot is ready"""
     print(f"{bot.user} has connected to Discord!")
     print(f"Bot is in {len(bot.guilds)} guild(s)")
+    print(f"DEBUG: App commands in tree: {len(bot.tree._get_all_commands())}")
     
     # Sync app commands
     try:
         synced = await bot.tree.sync()
         print(f"✅ Synced {len(synced)} app command(s)")
+        print(f"DEBUG: Synced commands: {[cmd.name for cmd in synced]}")
     except discord.app_commands.errors.AppCommandSyncError as e:
         # Handle Discord's Entry Point command restriction error
         if "50240" in str(e):
