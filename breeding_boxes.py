@@ -1028,14 +1028,20 @@ class BreedingBoxService:
                 "visible genders."
             )
             return
-        output = []
-        for pair_number, (left, right) in enumerate(pairs[:1], start=1):
+        displayed_pairs = pairs[:1]
+        output = [
+            f"Name: {box_name}",
+            f"Pairs formed: {len(displayed_pairs)}",
+            "",
+        ]
+        for pair_number, (left, right) in enumerate(displayed_pairs, start=1):
             first = candidates[left]
             second = candidates[right]
             daycare_command = (
                 f"{POKETWO_DAYCARE_COMMAND} add {first['pokemon_id']} "
                 f"{second['pokemon_id']}"
             )
+            output.append(f"`{daycare_command}`\n\n`{daycare_command}`")
             if settings["display"] == "details":
                 genders = (
                     first.get("gender") or "fixed gender",
@@ -1051,12 +1057,9 @@ class BreedingBoxService:
                     else ""
                 )
                 output.append(
-                    f"**Pair {pair_number}:** {first['name']} ({genders[0]}) + "
-                    f"{second['name']} ({genders[1]}){tag_text}\n"
-                    f"`{daycare_command}`"
+                    f"\n**Pair {pair_number}:** {first['name']} ({genders[0]}) + "
+                    f"{second['name']} ({genders[1]}){tag_text}"
                 )
-            else:
-                output.append(f"`{daycare_command}`")
         await ctx.send(
             embed=discord.Embed(
                 title=f"Daycare Pairs — {box_name}",

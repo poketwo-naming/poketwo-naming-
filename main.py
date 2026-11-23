@@ -9,6 +9,8 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 
+from announcements import post_update_announcement
+
 load_dotenv()
 
 
@@ -52,6 +54,12 @@ async def on_ready():
     """Called when the bot is ready"""
     print(f"{bot.user} has connected to Discord!")
     print(f"Bot is in {len(bot.guilds)} guild(s)")
+    cog = bot.get_cog("PokéTwoNamingBot")
+    if cog is not None:
+        try:
+            await post_update_announcement(bot, cog)
+        except (discord.DiscordException, OSError) as error:
+            print(f"Could not post update announcement: {error}")
 
 
 @bot.event

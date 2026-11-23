@@ -1724,6 +1724,7 @@ class PokéTwoNamingBot(commands.Cog):
             "afk": {},
             "breeding_boxes": {},
             "daycare_settings": {},
+            "last_update_announcement": "",
         }
         if not os.path.exists(BOT_STATE_FILE):
             return default_state
@@ -1758,6 +1759,7 @@ class PokéTwoNamingBot(commands.Cog):
         state.setdefault("afk", {})
         state.setdefault("breeding_boxes", {})
         state.setdefault("daycare_settings", {})
+        state.setdefault("last_update_announcement", "")
         return state
 
     def seed_restricted_roles(self):

@@ -70,7 +70,7 @@ Every `v!` command also works with a capital `V!` prefix.
 | `v!box copy <source> <new name>` | `v!box copy Daycare Backup` | Duplicate a box; add a destination to copy entries into an existing box |
 | `v!box tag / untag / tags / tagged` | `v!box tag Daycare 1 egg-move` | Track and browse egg-move tags |
 | `v!box rename / delete / clear / reset` | `v!box rename Daycare Eggs` | Rename, delete, or wipe boxes |
-| `v!dc [box]` | `v!dc Daycare` | Pull one compatible pair with a ready-to-paste command using their Pokétwo numbers |
+| `v!dc [box]` | `v!dc Daycare` | Show a compatible pair, its box name, and two ready-to-paste commands for phone and PC |
 | `v!dc settings` | `v!dc settings` | Change pair selection and display |
 | `v!boxhelp` | `v!boxhelp` | Show the full list of box commands |
 
@@ -84,6 +84,13 @@ tracking are not imported. Pokémon stored before numbers were saved cannot be
 deduplicated or used by `v!dc`; clear and re-import that box to replace them.
 `v!dc` finds one pair of distinct numbered Pokémon using egg groups and gender;
 mixed-gender species need their gender visible in the list that was appended.
+The result shows the selected box name and includes the same Pokétwo daycare
+command twice so it is easy to copy on a phone or PC.
+
+On startup, the bot posts the current `UPDATE_ANNOUNCEMENT` from
+`announcements.py` to channel `1574489953444827146` once per announcement text.
+Update that summary alongside each bot change; restarts with unchanged
+announcement text do not post duplicates.
 
 In grabbed lists, `Booster` is treated as a heading rather than Flareon's
 localized name when a Pokémon follows the member mention.

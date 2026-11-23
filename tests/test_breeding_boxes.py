@@ -404,6 +404,11 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
         embed = self.ctx.send.await_args.kwargs["embed"]
         self.assertEqual(
             embed.description,
+            "Name: Daycare\n"
+            "Pairs formed: 1\n"
+            "\n"
+            "`@Pokétwo#8236 daycare add 23580 28179`\n"
+            "\n"
             "`@Pokétwo#8236 daycare add 23580 28179`",
         )
 
