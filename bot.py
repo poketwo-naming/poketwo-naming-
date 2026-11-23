@@ -3576,9 +3576,12 @@ class PokéTwoNamingBot(commands.Cog):
 
     @commands.command(name="addcategory", aliases=["ac"])
     async def add_category(self, ctx, *, name: str = ""):
-        """Create an empty Pokémon category."""
+        """Create an empty Pokémon category. Restricted."""
         if ctx.guild is None:
             await ctx.send("Categories can only be managed inside a server.")
+            return
+        if not self.has_restricted_permission(ctx):
+            await ctx.send("❌ You don't have permission to create categories.")
             return
         name = name.strip()
         if not name:
@@ -3593,9 +3596,12 @@ class PokéTwoNamingBot(commands.Cog):
 
     @commands.command(name="createcategory", aliases=["cc"])
     async def fill_category(self, ctx, category: str = "", *, pokemon_input: str = ""):
-        """Add Pokémon to an existing category."""
+        """Add Pokémon to an existing category. Restricted."""
         if ctx.guild is None:
             await ctx.send("Categories can only be managed inside a server.")
+            return
+        if not self.has_restricted_permission(ctx):
+            await ctx.send("❌ You don't have permission to modify categories.")
             return
         if not category or not pokemon_input.strip():
             await ctx.send("Usage: `v!cc <category> <pokemon>, <pokemon>`")
@@ -3636,6 +3642,26 @@ class PokéTwoNamingBot(commands.Cog):
         for name, members in categories.items():
             embed.add_field(name=name, value=f"{len(members)} Pokémon", inline=False)
         await ctx.send(embed=embed)
+
+    @commands.command(name="category")
+    async def category_command(self, ctx, action: str = "", *, name: str = ""):
+        """Manage categories: v!category remove <name>. Restricted."""
+        if ctx.guild is None:
+            await ctx.send("Categories can only be managed inside a server.")
+            return
+        if not self.has_restricted_permission(ctx):
+            await ctx.send("❌ You don't have permission to manage categories.")
+            return
+        if action.lower() != "remove" or not name.strip():
+            await ctx.send("Usage: `v!category remove <name>`")
+            return
+        key = self.find_category(ctx.guild.id, name.strip())
+        if key is None:
+            await ctx.send(f"❌ Category **{name}** doesn't exist.")
+            return
+        self.guild_categories(ctx.guild.id).pop(key)
+        self.save_bot_state()
+        await ctx.send(f"✅ Deleted category **{key}**.")
 
     def report_pokemon_names(self) -> list[str]:
         """Return Pokémon names usable when reading catch and naming-bot messages."""

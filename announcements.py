@@ -11,9 +11,9 @@ ANNOUNCEMENT_STATE_KEY = "last_update_announcement"
 PENDING_PUBLICATION_KEY = "pending_update_publication"
 UPDATE_ANNOUNCEMENT = (
     "**What's new**\n"
-    "- Improved recognition of Deerling's seasonal forms.\n"
-    "- Ready-up commands are restricted to staff with permission.\n"
-    "- Update announcements are now automatically published to followers."
+    "- Fixed typeping to respect user ping preferences and reserve overrides.\n"
+    "- Category commands (create, modify, remove) now require staff permissions.\n"
+    "- Added `v!category remove <name>` command for deleting categories."
 )
 
 
