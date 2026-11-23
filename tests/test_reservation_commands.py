@@ -22,6 +22,7 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
         self.cog = PokéTwoNamingBot.__new__(PokéTwoNamingBot)
         self.cog.bot_state = {
             "categories": {"123": {"featured": ["Pikachu", "Eevee"]}},
+            "collections": {},
             "reserves": {
                 "123": {
                     "Pikachu": ["456", "789"],
@@ -78,6 +79,76 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
             "No members have reserved this Pokémon.",
         )
 
+    def configure_toxtricity_forms(self):
+        self.cog.class_names = {
+            "amped toxtricity": "Amped Toxtricity",
+            "low key toxtricity": "Low Key Toxtricity",
+        }
+        self.cog.pokemon_species = {
+            "Amped Toxtricity": 849,
+            "Low Key Toxtricity": 849,
+        }
+        self.cog.pokemon_aliases = self.cog.load_pokemon_aliases()
+
+    async def test_add_all_toxtricity_reserves_both_forms(self):
+        self.configure_toxtricity_forms()
+        member = SimpleNamespace(id=789, mention="<@789>")
+        self.ctx.guild.get_member = lambda user_id: member if user_id == 789 else None
+
+        await self.cog.add_reserve(self.ctx, entry="all toxtricity <@789>")
+
+        self.assertEqual(
+            self.cog.bot_state["reserves"]["123"],
+            {
+                "Pikachu": ["456", "789"],
+                "Eevee": "456",
+                "Amped Toxtricity": ["789"],
+                "Low Key Toxtricity": ["789"],
+            },
+        )
+
+    async def test_search_all_toxtricity_shows_both_forms(self):
+        self.configure_toxtricity_forms()
+        self.cog.bot_state["reserves"]["123"].update(
+            {
+                "Amped Toxtricity": ["456"],
+                "Low Key Toxtricity": ["789"],
+            }
+        )
+
+        await self.cog.search_reserve(self.ctx, "all toxtricity")
+
+        embed = self.ctx.send.await_args.kwargs["embed"]
+        self.assertEqual(embed.title, "All Toxtricity Reservations")
+        self.assertIn("**Amped Toxtricity** — <@456>", embed.description)
+        self.assertIn("**Low Key Toxtricity** — <@789>", embed.description)
+
+    async def test_exchange_all_toxtricity_expands_both_forms(self):
+        self.configure_toxtricity_forms()
+        source = SimpleNamespace(
+            guild=SimpleNamespace(id=123),
+            content="<@456> - all toxtricity",
+            embeds=[],
+            message_snapshots=[],
+        )
+        self.cog.referenced_grab_message = AsyncMock(return_value=source)
+        ctx = SimpleNamespace(
+            guild=SimpleNamespace(id=123),
+            author=SimpleNamespace(id=101),
+            send=AsyncMock(),
+        )
+
+        await self.cog.exchange_reserves(ctx, "<@789>")
+
+        view = ctx.send.await_args.kwargs["view"]
+        self.assertEqual(
+            view.entries,
+            [
+                ("456", "Amped Toxtricity"),
+                ("456", "Low Key Toxtricity"),
+            ],
+        )
+
     async def test_collection_add_accepts_woguru_for_braviary(self):
         self.cog.class_names["braviary"] = "Braviary"
         self.cog.pokemon_aliases = self.cog.load_pokemon_aliases()
@@ -94,9 +165,9 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_nidoran_gender_and_all_in_collections_and_reserves(self):
         with Path("pokemon_species.json").open(encoding="utf-8") as source:
-            self.cog.class_names = {
-                name.casefold(): name for name in json.load(source)
-            }
+            species = json.load(source)
+        self.cog.class_names = {name.casefold(): name for name in species}
+        self.cog.pokemon_species = species
         self.cog.pokemon_aliases = self.cog.load_pokemon_aliases()
         self.ctx.author = SimpleNamespace(id=456)
         member = SimpleNamespace(id=789, mention="<@789>")

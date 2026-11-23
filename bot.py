@@ -1392,12 +1392,20 @@ class PokéTwoNamingBot(commands.Cog):
         is_regional = canonical.startswith(REGIONAL_PREFIXES)
         family_matches = []
         canonical_normalized = normalize_pokemon_alias(canonical)
+        pokemon_species = getattr(self, "pokemon_species", {})
+        species_id = pokemon_species.get(canonical)
         for class_name in self.class_names.values():
             class_normalized = normalize_pokemon_alias(class_name)
             matches_family = (
-                canonical_normalized in class_normalized
-                or class_name == canonical
+                pokemon_species.get(class_name) == species_id
+                if species_id is not None
+                else (
+                    canonical_normalized in class_normalized
+                    or class_name == canonical
+                )
             )
+            if canonical_normalized.startswith("nidoran"):
+                matches_family = class_normalized.startswith("nidoran")
             if (
                 matches_family
                 and (
@@ -3862,10 +3870,38 @@ class PokéTwoNamingBot(commands.Cog):
         if not pokemon_input.strip():
             await ctx.send("Usage: `v!r search <pokemon>`")
             return
-        pokemon_name = self.resolve_pokemon_name(pokemon_input)
-        if pokemon_name is None:
+        search_input = pokemon_input.strip()
+        all_forms = search_input.casefold().startswith("all ")
+        family_input = search_input[4:].strip() if all_forms else search_input
+        pokemon_names = (
+            self.resolve_pokemon_family(family_input)
+            if all_forms
+            else [self.resolve_pokemon_name(family_input)]
+        )
+        pokemon_names = [name for name in pokemon_names if name is not None]
+        if not pokemon_names:
             await ctx.send(f"❌ Unknown Pokémon: `{pokemon_input.strip()}`")
             return
+        if len(pokemon_names) > 1:
+            lines = []
+            for pokemon_name in pokemon_names:
+                user_ids = self.reserve_user_ids(ctx.guild.id, pokemon_name)
+                reservers = (
+                    ", ".join(f"<@{user_id}>" for user_id in user_ids)
+                    if user_ids
+                    else "No members have reserved this Pokémon."
+                )
+                lines.append(f"**{pokemon_name}** — {reservers}")
+            label = family_input[0].upper() + family_input[1:]
+            embed = discord.Embed(
+                title=f"All {label} Reservations",
+                description="\n".join(lines),
+                color=discord.Color.purple(),
+            )
+            await ctx.send(embed=embed)
+            return
+
+        pokemon_name = pokemon_names[0]
         user_ids = self.reserve_user_ids(ctx.guild.id, pokemon_name)
         description = (
             "\n".join(f"• <@{user_id}>" for user_id in user_ids)
