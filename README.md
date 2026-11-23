@@ -96,7 +96,11 @@ On startup, the bot posts the current `UPDATE_ANNOUNCEMENT` from
 `announcements.py` to channel `1574489953444827146` once per announcement text.
 Each update post pings the configured announcement role
 `1574502724370825286`. Update the summary alongside each bot change; restarts
-with unchanged announcement text do not post duplicates.
+with unchanged announcement text do not post duplicates. The bot automatically
+publishes each update to announcement-channel followers. The channel must be an
+announcement channel and the bot needs permission to send messages there. If
+publishing fails, the bot logs the error and retries the same message on the
+next startup or reconnect.
 
 In grabbed lists, `Booster` is treated as a heading rather than Flareon's
 localized name when a Pokémon follows the member mention.
@@ -241,9 +245,10 @@ encoder, `pokemon_types.json`, `pokemon_sprite_ids.json`,
 `pokemon_best_names.json`, `pokemon_aliases.json`, and `pokemon_species.json` files.
 
 To teach the bot commonly confused Pokémon (Alolan Meowth/Rattata, Blipbug,
-Luxray, Pikipek, Finizen, Palafin, Hero Palafin, and Squawkabilly plumage forms)
-after adding images to their folders, rebuild the lightweight refinement file
-without retraining. Pass extra folder names to add more classes:
+Deerling seasonal forms, Luxray, Pikipek, Finizen, Palafin, Hero Palafin, and
+Squawkabilly plumage forms) after adding images to their folders, rebuild the
+lightweight refinement file without retraining. Pass extra folder names to add
+more classes:
 
 ```bash
 python tools/build_pokemon_refinements.py

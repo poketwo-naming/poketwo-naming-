@@ -102,6 +102,22 @@ class PokemonRecognitionTests(unittest.TestCase):
 
 
 class SpawnImageRecognitionTests(unittest.TestCase):
+    def test_deerling_seasonal_spawn_images(self):
+        source = Path("pokemon_images/training_data")
+        examples = (
+            (source / "Deerling" / "1492074968702517368.jpg", "Deerling"),
+            (source / "Summer Deerling" / "1515602630372626523.jpg", "Summer Deerling"),
+            (source / "Autumn Deerling" / "1444837446721208340.jpg", "Autumn Deerling"),
+            (source / "Winter Deerling" / "1445168416565624932.jpg", "Winter Deerling"),
+        )
+        if not all(path.exists() for path, _ in examples):
+            self.skipTest("Deerling training images are not available")
+        recognizer = PokemonImageRecognizer()
+        for path, expected in examples:
+            with self.subTest(path=path), Image.open(path) as image:
+                self.assertEqual(recognizer.recognize(image)[0], expected)
+                self.assertEqual(recognizer.recognize(ImageOps.mirror(image))[0], expected)
+
     def test_nidoran_gender_on_spawn_images(self):
         source = Path("pokemon_images/training_data")
         male = source / "Nidoran♂" / "1568160619629117440.jpg"

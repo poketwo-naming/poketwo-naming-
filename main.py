@@ -58,8 +58,8 @@ async def on_ready():
     if cog is not None:
         try:
             await post_update_announcement(bot, cog)
-        except (discord.DiscordException, OSError) as error:
-            print(f"Could not post update announcement: {error}")
+        except (discord.DiscordException, OSError, TypeError, ValueError) as error:
+            print(f"Could not post or publish update announcement: {error}")
 
 
 @bot.event

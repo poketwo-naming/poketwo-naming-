@@ -8,11 +8,12 @@ import discord
 ANNOUNCEMENT_CHANNEL_ID = 1574489953444827146
 ANNOUNCEMENT_ROLE_ID = 1574502724370825286
 ANNOUNCEMENT_STATE_KEY = "last_update_announcement"
+PENDING_PUBLICATION_KEY = "pending_update_publication"
 UPDATE_ANNOUNCEMENT = (
     "**What's new**\n"
-    "- Added a ready-up queue: add users from `v!grab`, run `v!readyup` for "
-    "a Ready button that pings queued users, and use `v!readyup clear` to reset "
-    "the queue."
+    "- Improved recognition of Deerling's seasonal forms.\n"
+    "- Ready-up commands are restricted to staff with permission.\n"
+    "- Update announcements are now automatically published to followers."
 )
 
 
@@ -29,9 +30,10 @@ class AnnouncementBot(Protocol):
 
 
 async def post_update_announcement(bot: AnnouncementBot, cog: AnnouncementCog) -> bool:
-    """Post the current update once, using bot state to avoid restart duplicates."""
+    """Post and publish the update once, retrying any pending publication."""
     digest = hashlib.sha256(UPDATE_ANNOUNCEMENT.encode("utf-8")).hexdigest()
-    if cog.bot_state.get(ANNOUNCEMENT_STATE_KEY) == digest:
+    pending = cog.bot_state.get(PENDING_PUBLICATION_KEY)
+    if cog.bot_state.get(ANNOUNCEMENT_STATE_KEY) == digest and pending is None:
         return False
 
     channel = bot.get_channel(ANNOUNCEMENT_CHANNEL_ID)
@@ -42,7 +44,24 @@ async def post_update_announcement(bot: AnnouncementBot, cog: AnnouncementCog) -
             f"Announcement channel {ANNOUNCEMENT_CHANNEL_ID} cannot receive messages"
         )
 
-    await channel.send(
+    async def publish_pending(message: discord.Message) -> None:
+        if not message.flags.crossposted:
+            await message.publish()
+        pending_id = cog.bot_state.pop(PENDING_PUBLICATION_KEY)
+        try:
+            cog.save_bot_state()
+        except OSError:
+            cog.bot_state[PENDING_PUBLICATION_KEY] = pending_id
+            raise
+
+    if pending is not None:
+        if not isinstance(pending, int):
+            raise ValueError("Invalid pending update announcement message ID")
+        await publish_pending(await channel.fetch_message(pending))
+        if cog.bot_state.get(ANNOUNCEMENT_STATE_KEY) == digest:
+            return False
+
+    message = await channel.send(
         f"<@&{ANNOUNCEMENT_ROLE_ID}> {UPDATE_ANNOUNCEMENT}",
         allowed_mentions=discord.AllowedMentions(
             roles=[discord.Object(id=ANNOUNCEMENT_ROLE_ID)],
@@ -53,12 +72,15 @@ async def post_update_announcement(bot: AnnouncementBot, cog: AnnouncementCog) -
     had_previous_digest = ANNOUNCEMENT_STATE_KEY in cog.bot_state
     previous_digest = cog.bot_state.get(ANNOUNCEMENT_STATE_KEY)
     cog.bot_state[ANNOUNCEMENT_STATE_KEY] = digest
+    cog.bot_state[PENDING_PUBLICATION_KEY] = message.id
     try:
         cog.save_bot_state()
     except OSError:
+        cog.bot_state.pop(PENDING_PUBLICATION_KEY)
         if had_previous_digest:
             cog.bot_state[ANNOUNCEMENT_STATE_KEY] = previous_digest
         else:
             cog.bot_state.pop(ANNOUNCEMENT_STATE_KEY)
         raise
+    await publish_pending(message)
     return True
