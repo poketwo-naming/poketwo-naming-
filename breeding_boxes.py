@@ -1,9 +1,11 @@
 """Breeding box and daycare commands."""
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 import asyncio
 import random
 import re
 import shlex
+from time import monotonic
 
 import aiohttp
 import discord
@@ -11,6 +13,15 @@ import discord
 
 BREEDING_BOX_LIMIT = 7_500
 POKETWO_DAYCARE_COMMAND = "@Pokétwo#8236 daycare"
+APPEND_SESSION_SECONDS = 30 * 60
+
+
+@dataclass
+class AppendSession:
+    box: dict
+    status_message: discord.Message | None
+    expires_at: float
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
 def _gender_from_line(line: str) -> str | None:
@@ -277,9 +288,11 @@ class DaycareSettingsView(discord.ui.View):
 class BreedingBoxService:
     """Implement the public v!box and v!dc command surfaces."""
 
-    def __init__(self, cog):
+    def __init__(self, cog, poketwo_bot_id: int):
         self.cog = cog
+        self.poketwo_bot_id = poketwo_bot_id
         self.species_cache: dict[int, dict] = {}
+        self.append_sessions: dict[tuple[int, int, int, int], AppendSession] = {}
 
     def user_boxes(self, guild_id: int, user_id: int) -> dict:
         return self.cog.bot_state.setdefault("breeding_boxes", {}).setdefault(
@@ -336,7 +349,8 @@ class BreedingBoxService:
                     "`v!box` — show your boxes and their capacity\n"
                     "`v!box create <name>` — make a box\n"
                     "Reply to a Pokétwo list with `v!box append [box] [--c]` "
-                    "to store its Pokémon; pages keep adding. `--c` clears first.\n"
+                    "to store numbered Pokémon; page arrows keep adding for "
+                    "30 minutes. `--c` clears first.\n"
                     "`v!box list [box]` — browse boxes or their contents\n"
                     "`v!box remove <box> <number|Pokémon> [all]` — delete stored Pokémon\n"
                     "`v!box transfer <from> <to> [number|Pokémon] [all]` — move Pokémon\n"
@@ -348,7 +362,7 @@ class BreedingBoxService:
                     "`v!box rename <box> <new name>` / `v!box delete <box>`\n"
                     "`v!box clear <box>` — empty one box\n"
                     "`v!box reset` — confirm before removing all your boxes\n"
-                    "`v!dc [box]` — pull two compatible breedable pairs\n"
+                    "`v!dc [box]` — get one compatible pair using Pokémon numbers\n"
                     "`v!dc settings` — choose first, random, or tagged-first pairs "
                     "and display\n"
                     "`v!boxhelp` — show this command list"
@@ -435,13 +449,12 @@ class BreedingBoxService:
 
     async def replied_message(self, ctx):
         reference = ctx.message.reference
-        if reference is None:
+        if reference is None or reference.message_id is None:
             return None
-        if reference.resolved is not None:
-            return reference.resolved
         try:
             return await ctx.channel.fetch_message(reference.message_id)
-        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        except discord.HTTPException as error:
+            print(f"Could not fetch the replied-to Pokémon list: {error}")
             return None
 
     async def read_pokemon(self, message) -> list[dict]:
@@ -465,6 +478,12 @@ class BreedingBoxService:
         )
         found = []
         for line in text.splitlines():
+            number_match = re.match(
+                r"^\s*(?:[-•]\s*)?`?(\d+)`?(?=\s|[.):]|$)",
+                line,
+            )
+            if number_match is None:
+                continue
             for name in names:
                 if not re.search(
                     rf"(?<![\w]){re.escape(name)}(?![\w])",
@@ -479,17 +498,119 @@ class BreedingBoxService:
                             "name": resolved,
                             "gender": _gender_from_line(line),
                             "tags": [],
+                            "pokemon_id": str(int(number_match.group(1))),
                         }
                     )
                 break
         return found
+
+    @staticmethod
+    def add_unique_items(box: dict, items: list[dict]) -> tuple[int, int]:
+        """Append new Pokétwo numbers, retaining distinct same-species Pokémon."""
+        stored = box.setdefault("items", [])
+        seen = {
+            str(item["pokemon_id"])
+            for item in stored
+            if item.get("pokemon_id") is not None
+        }
+        added = 0
+        skipped_for_capacity = 0
+        for item in items:
+            pokemon_id = item["pokemon_id"]
+            if pokemon_id in seen:
+                continue
+            seen.add(pokemon_id)
+            if len(stored) >= BREEDING_BOX_LIMIT:
+                skipped_for_capacity += 1
+                continue
+            stored.append(item)
+            added += 1
+        return added, skipped_for_capacity
+
+    def prune_append_sessions(self):
+        now = monotonic()
+        for key, session in list(self.append_sessions.items()):
+            if session.expires_at <= now:
+                del self.append_sessions[key]
+
+    async def handle_list_edit(self, message):
+        """Append each edited page of a list that a user chose to follow."""
+        if message.guild is None:
+            return
+        self.prune_append_sessions()
+        matching = [
+            (key, session)
+            for key, session in self.append_sessions.items()
+            if key[:3] == (message.guild.id, message.channel.id, message.id)
+        ]
+        if not matching:
+            return
+        items = await self.read_pokemon(message)
+        for key, session in matching:
+            async with session.lock:
+                if self.append_sessions.get(key) is not session:
+                    continue
+                boxes = self.cog.bot_state.get("breeding_boxes", {}).get(
+                    str(key[0]), {}
+                ).get(str(key[3]), {})
+                box_name = next(
+                    (name for name, box in boxes.items() if box is session.box),
+                    None,
+                )
+                if box_name is None:
+                    self.append_sessions.pop(key, None)
+                    continue
+                session.expires_at = monotonic() + APPEND_SESSION_SECONDS
+                if items:
+                    added, overflow = self.add_unique_items(session.box, items)
+                    if added:
+                        self.cog.save_bot_state()
+                    status = self.append_status(box_name, session.box, added, overflow)
+                else:
+                    status = (
+                        f"⚠️ No numbered Pokémon were recognized on this page. "
+                        f"Box **{box_name}** still has "
+                        f"**{self.item_count(session.box)}/{BREEDING_BOX_LIMIT}**."
+                    )
+                if session.status_message is None:
+                    continue
+                try:
+                    await session.status_message.edit(content=status)
+                except discord.HTTPException as error:
+                    print(f"Could not update breeding box import status: {error}")
+                    try:
+                        await message.channel.send(status)
+                    except discord.HTTPException as send_error:
+                        print(f"Could not send breeding box import status: {send_error}")
+
+    def append_status(self, box_name: str, box: dict, added: int, overflow: int) -> str:
+        status = (
+            f"✅ Added **{added}** Pokémon to **{box_name}**. "
+            f"Box total: **{self.item_count(box)}/{BREEDING_BOX_LIMIT}**.\n"
+            "Use the Pokétwo page arrows to add more; duplicates are skipped. "
+            "Tracking lasts 30 minutes after the last page change or until restart."
+        )
+        if overflow:
+            status += f"\n⚠️ Box full; {overflow} Pokémon could not be added."
+        if any(item.get("pokemon_id") is None for item in box.get("items", [])):
+            status += (
+                "\n⚠️ Older entries have no Pokétwo number and cannot be deduplicated. "
+                "Clear and re-import the box to remove old duplicates."
+            )
+        return status
 
     async def append_box(self, ctx, boxes: dict, arguments: list[str]):
         copy_then_clear = bool(arguments and arguments[-1].casefold() == "--c")
         selectors = arguments[:-1] if copy_then_clear else arguments
         source = await self.replied_message(ctx)
         if source is None:
-            await ctx.send("Reply to a Pokétwo list with `v!box append [box] [--c]`.")
+            await ctx.send(
+                "❌ Reply to an accessible Pokétwo list with "
+                "`v!box append [box] [--c]`."
+            )
+            return
+        if source.author.id != self.poketwo_bot_id:
+            await ctx.send("❌ Reply to a Pokémon list sent by Pokétwo.")
             return
         create_default_box = False
         if selectors:
@@ -513,30 +634,29 @@ class BreedingBoxService:
 
         items = await self.read_pokemon(source)
         if not items:
-            await ctx.send("No Pokémon were recognized in the replied-to list.")
+            await ctx.send(
+                "❌ No numbered Pokémon were recognized in the current list page."
+            )
             return
         if copy_then_clear:
             box["items"] = []
-        available = BREEDING_BOX_LIMIT - self.item_count(box)
-        if available <= 0:
-            await ctx.send(f"❌ Box **{box_name}** is full.")
-            return
         if create_default_box:
             boxes[box_name] = box
-        added = items[:available]
-        box.setdefault("items", []).extend(added)
-        self.cog.save_bot_state()
-        suffix = (
-            f" {len(items) - len(added)} Pokémon could not be added because "
-            "the box reached its 7,500 limit."
-            if len(added) < len(items)
-            else ""
-        )
-        await ctx.send(
-            f"✅ Added **{len(added)}** Pokémon to **{box_name}**. "
-            "Reply to the next page and append again."
-            + suffix
-        )
+        added, overflow = self.add_unique_items(box, items)
+        if added or copy_then_clear:
+            self.cog.save_bot_state()
+        self.prune_append_sessions()
+        key = (ctx.guild.id, ctx.channel.id, source.id, ctx.author.id)
+        session = AppendSession(box, None, monotonic() + APPEND_SESSION_SECONDS)
+        self.append_sessions[key] = session
+        async with session.lock:
+            try:
+                session.status_message = await ctx.send(
+                    self.append_status(box_name, box, added, overflow)
+                )
+            except discord.HTTPException:
+                self.append_sessions.pop(key, None)
+                raise
 
     async def list_box(self, ctx, boxes: dict, selector: str):
         if not selector:
@@ -858,7 +978,14 @@ class BreedingBoxService:
             return
         items = box.get("items", [])
         candidates = []
+        seen_ids = set()
         for index, item in enumerate(items):
+            pokemon_id = item.get("pokemon_id")
+            if not isinstance(pokemon_id, str) or not pokemon_id.isdigit():
+                continue
+            if pokemon_id in seen_ids:
+                continue
+            seen_ids.add(pokemon_id)
             name = self.cog.resolve_pokemon_name(str(item.get("name", "")))
             species_id = self.cog.pokemon_species.get(name) if name else None
             if species_id is not None:
@@ -894,20 +1021,20 @@ class BreedingBoxService:
             species_data,
             settings["selection"],
         )
-        if len(pairs) != 2:
+        if not pairs:
             await ctx.send(
-                f"Only **{len(pairs)}** compatible pair(s) were found in "
-                f"**{box_name}**; two are required. Stored list entries need a "
-                "visible gender when the Pokémon can be either male or female."
+                f"No compatible numbered pair was found in **{box_name}**. "
+                "Append a current Pokétwo list to store Pokémon numbers and "
+                "visible genders."
             )
             return
         output = []
-        for pair_number, (left, right) in enumerate(pairs, start=1):
+        for pair_number, (left, right) in enumerate(pairs[:1], start=1):
             first = candidates[left]
             second = candidates[right]
             daycare_command = (
-                f"{POKETWO_DAYCARE_COMMAND} {first['name'].casefold()} "
-                f"{second['name'].casefold()}"
+                f"{POKETWO_DAYCARE_COMMAND} add {first['pokemon_id']} "
+                f"{second['pokemon_id']}"
             )
             if settings["display"] == "details":
                 genders = (

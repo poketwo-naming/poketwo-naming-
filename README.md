@@ -63,24 +63,27 @@ Every `v!` command also works with a capital `V!` prefix.
 | `v!commands [page]` | `v!commands 1` | Categorized command list |
 | `v!box` | `v!box` | Show all boxes and how full they are (limit 7,500 each) |
 | `v!box create <name>` | `v!box create Daycare` | Make a new box |
-| `v!box append [box] [--c]` | Reply to a Pokétwo list with `v!box append Daycare` | Append Pokémon from each replied page; `--c` clears the box first |
+| `v!box append [box] [--c]` | Reply to a Pokétwo list with `v!box append Daycare` | Append the current page and follow page arrows; `--c` clears the box first |
 | `v!box list [box]` | `v!box list Daycare` | Browse boxes or the Pokémon in one box |
 | `v!box remove <box> <number\|Pokémon> [all]` | `v!box remove Daycare Pikachu all` | Delete stored Pokémon |
 | `v!box transfer <from> <to> <number\|Pokémon> [all]` | `v!box transfer Daycare Eggs Pikachu` | Move Pokémon between boxes |
 | `v!box copy <source> <new name>` | `v!box copy Daycare Backup` | Duplicate a box; add a destination to copy entries into an existing box |
 | `v!box tag / untag / tags / tagged` | `v!box tag Daycare 1 egg-move` | Track and browse egg-move tags |
 | `v!box rename / delete / clear / reset` | `v!box rename Daycare Eggs` | Rename, delete, or wipe boxes |
-| `v!dc [box]` | `v!dc Daycare` | Pull up to two compatible breedable pairs with ready-to-paste daycare commands |
+| `v!dc [box]` | `v!dc Daycare` | Pull one compatible pair with a ready-to-paste command using their Pokétwo numbers |
 | `v!dc settings` | `v!dc settings` | Change pair selection and display |
 | `v!boxhelp` | `v!boxhelp` | Show the full list of box commands |
 
 Use quotes around multiword box names when a command has more than one box
 argument, for example `v!box transfer "Main Box" "Egg Box" 1`.
-`v!box append` reads Pokémon lists in message embeds and Discord text
-components. Reply to each page to add it to the box.
-`v!dc` returns two pairs only when it can find four distinct, compatible stored
-Pokémon. Pair compatibility uses Pokémon egg groups and gender; mixed-gender
-species need their gender visible in the list that was appended.
+`v!box append` reads the current page of a replied Pokétwo list and follows its
+page-arrow edits for 30 minutes after the latest page change, or until the bot
+restarts. Each Pokémon number is added only once per box; the status shows
+the number newly added and the total currently stored. Pages not visited while
+tracking are not imported. Pokémon stored before numbers were saved cannot be
+deduplicated or used by `v!dc`; clear and re-import that box to replace them.
+`v!dc` finds one pair of distinct numbered Pokémon using egg groups and gender;
+mixed-gender species need their gender visible in the list that was appended.
 
 In grabbed lists, `Booster` is treated as a heading rather than Flareon's
 localized name when a Pokémon follows the member mention.

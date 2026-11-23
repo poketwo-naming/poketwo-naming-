@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, Mock
 
 import discord
 
+from bot import PokéTwoNamingBot
 from breeding_boxes import (
     BREEDING_BOX_LIMIT,
     BreedingBoxService,
@@ -24,13 +25,15 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
             }.get(name.casefold()),
             pokemon_species={"Pikachu": 25, "Eevee": 133, "Ditto": 132},
             http_session=None,
+            poketwo_bot_id=716390085896962058,
         )
-        self.service = BreedingBoxService(self.cog)
+        self.service = BreedingBoxService(self.cog, 716390085896962058)
+        self.cog.breeding_box_service = self.service
         self.ctx = SimpleNamespace(
             guild=SimpleNamespace(id=123),
             author=SimpleNamespace(id=456, display_name="Trainer"),
             message=SimpleNamespace(reference=None),
-            channel=SimpleNamespace(),
+            channel=SimpleNamespace(id=789, fetch_message=AsyncMock(), send=AsyncMock()),
             send=AsyncMock(),
         )
 
@@ -67,12 +70,20 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
 
         async def message(content):
             return SimpleNamespace(
+                id=555,
+                author=SimpleNamespace(id=716390085896962058),
+                guild=self.ctx.guild,
+                channel=self.ctx.channel,
                 content=content,
                 embeds=[],
             )
 
+        self.ctx.channel.fetch_message.return_value = await message(
+            "`101` Pikachu ♂\n`102` Pikachu ♀"
+        )
         self.ctx.message.reference = SimpleNamespace(
-            resolved=await message("Pikachu ♂\nPikachu ♀"),
+            message_id=555,
+            resolved=await message("`999` Pikachu ♂"),
         )
         await self.command("box", "append Daycare")
         self.assertEqual(len(boxes["Daycare"]["items"]), 3)
@@ -81,13 +92,11 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
             ["male", "female"],
         )
 
-        self.ctx.message.reference = SimpleNamespace(
-            resolved=await message("Eevee"),
-        )
+        self.ctx.channel.fetch_message.return_value = await message("`103` Eevee")
         await self.command("box", "append Daycare --c")
         self.assertEqual(
             boxes["Daycare"]["items"],
-            [{"name": "Eevee", "gender": None, "tags": []}],
+            [{"name": "Eevee", "gender": None, "tags": [], "pokemon_id": "103"}],
         )
 
     async def test_append_reads_poketwo_component_list(self):
@@ -116,20 +125,169 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
             },
             None,
         )
-        self.ctx.message.reference = SimpleNamespace(
-            resolved=SimpleNamespace(content="", embeds=[], components=[container]),
+        source = SimpleNamespace(
+            id=555, author=SimpleNamespace(id=716390085896962058),
+            guild=self.ctx.guild, channel=self.ctx.channel,
+            content="", embeds=[], components=[container],
         )
+        self.ctx.message.reference = SimpleNamespace(message_id=555, resolved=source)
+        self.ctx.channel.fetch_message.return_value = source
 
         await self.command("box", "append purmel")
 
         self.assertEqual(
             boxes["purmel"]["items"],
             [
-                {"name": "Scatterbug", "gender": "female", "tags": []},
-                {"name": "Scatterbug", "gender": "male", "tags": []},
+                {"name": "Scatterbug", "gender": "female", "tags": [], "pokemon_id": "16289"},
+                {"name": "Scatterbug", "gender": "male", "tags": [], "pokemon_id": "10501"},
             ],
         )
         self.assertIn("Added **2**", self.ctx.send.await_args.args[0])
+        next_page = discord.components.Container(
+            {
+                "type": 17,
+                "components": [
+                    {
+                        "type": 10,
+                        "content": "`11000` <:pokemon:123456789> **Scatterbug** ♂ • Lvl. 18 • 76.34%",
+                    },
+                ],
+            },
+            None,
+        )
+        edited = SimpleNamespace(
+            id=555, guild=self.ctx.guild, channel=self.ctx.channel,
+            content="", embeds=[], components=[next_page],
+        )
+        await PokéTwoNamingBot.on_raw_message_edit(
+            self.cog,
+            SimpleNamespace(data={"components": []}, message=edited),
+        )
+        self.assertEqual(
+            [item["pokemon_id"] for item in boxes["purmel"]["items"]],
+            ["16289", "10501", "11000"],
+        )
+
+    async def test_append_tracks_edits_and_deduplicates_by_pokemon_id(self):
+        boxes = self.service.user_boxes(123, 456)
+        boxes["purmel"] = {"items": []}
+        source = SimpleNamespace(
+            id=555, author=SimpleNamespace(id=716390085896962058),
+            guild=self.ctx.guild, channel=self.ctx.channel,
+            content="`101` Pikachu ♂\n`102` Pikachu ♀", embeds=[], components=[],
+        )
+        self.ctx.message.reference = SimpleNamespace(message_id=555, resolved=source)
+        self.ctx.channel.fetch_message.return_value = source
+        confirmation = SimpleNamespace(edit=AsyncMock())
+        self.ctx.send.return_value = confirmation
+        await self.command("box", "append purmel")
+        await self.command("box", "append purmel")
+        self.assertEqual(len(boxes["purmel"]["items"]), 2)
+
+        updated = SimpleNamespace(
+            id=555, guild=self.ctx.guild, channel=self.ctx.channel,
+            content="`102` Pikachu ♀\n`103` Pikachu ♂", embeds=[], components=[],
+        )
+        await self.service.handle_list_edit(updated)
+        self.assertEqual(
+            [item["pokemon_id"] for item in boxes["purmel"]["items"]],
+            ["101", "102", "103"],
+        )
+        self.assertIn("3/7500", confirmation.edit.await_args.kwargs["content"])
+
+        await self.service.handle_list_edit(updated)
+        self.assertEqual(len(boxes["purmel"]["items"]), 3)
+
+    async def test_append_uses_current_message_not_stale_reply_snapshot(self):
+        boxes = self.service.user_boxes(123, 456)
+        boxes["purmel"] = {"items": []}
+        self.ctx.message.reference = SimpleNamespace(
+            message_id=555,
+            resolved=SimpleNamespace(content="`101` Pikachu ♂", embeds=[]),
+        )
+        self.ctx.channel.fetch_message.return_value = SimpleNamespace(
+            id=555, author=SimpleNamespace(id=716390085896962058),
+            guild=self.ctx.guild, channel=self.ctx.channel,
+            content="`141` Pikachu ♀", embeds=[], components=[],
+        )
+        await self.command("box", "append purmel")
+        self.assertEqual(boxes["purmel"]["items"][0]["pokemon_id"], "141")
+
+    async def test_page_arrows_accumulate_to_160_and_revisiting_does_not_duplicate(self):
+        boxes = self.service.user_boxes(123, 456)
+        boxes["purmel"] = {"items": []}
+
+        def page(start):
+            return SimpleNamespace(
+                id=555,
+                author=SimpleNamespace(id=716390085896962058),
+                guild=self.ctx.guild,
+                channel=self.ctx.channel,
+                content="\n".join(
+                    f"`{number}` Pikachu ♂" for number in range(start, start + 20)
+                ),
+                embeds=[],
+                components=[],
+            )
+
+        self.ctx.message.reference = SimpleNamespace(message_id=555)
+        self.ctx.channel.fetch_message.return_value = page(1)
+        confirmation = SimpleNamespace(edit=AsyncMock())
+        self.ctx.send.return_value = confirmation
+        await self.command("box", "append purmel")
+        for start in range(21, 142, 20):
+            payload = SimpleNamespace(
+                data={"components": []},
+                message=page(start),
+            )
+            await PokéTwoNamingBot.on_raw_message_edit(self.cog, payload)
+        self.assertEqual(len(boxes["purmel"]["items"]), 160)
+        self.assertIn("160/7500", confirmation.edit.await_args.kwargs["content"])
+
+        await self.service.handle_list_edit(page(121))
+        self.assertEqual(len(boxes["purmel"]["items"]), 160)
+        self.assertIn("Added **0**", confirmation.edit.await_args.kwargs["content"])
+
+    async def test_append_respects_box_capacity_after_deduplication(self):
+        boxes = self.service.user_boxes(123, 456)
+        boxes["full"] = {
+            "items": [
+                {"name": "Pikachu", "pokemon_id": str(number), "tags": []}
+                for number in range(1, BREEDING_BOX_LIMIT)
+            ]
+        }
+        source = SimpleNamespace(
+            id=555, author=SimpleNamespace(id=716390085896962058),
+            guild=self.ctx.guild, channel=self.ctx.channel,
+            content="`1` Pikachu ♂\n`7500` Pikachu ♀\n`7501` Pikachu ♂",
+            embeds=[], components=[],
+        )
+        self.ctx.message.reference = SimpleNamespace(message_id=555)
+        self.ctx.channel.fetch_message.return_value = source
+
+        await self.command("box", "append full")
+
+        self.assertEqual(len(boxes["full"]["items"]), BREEDING_BOX_LIMIT)
+        self.assertEqual(boxes["full"]["items"][-1]["pokemon_id"], "7500")
+        self.assertIn("1 Pokémon could not be added", self.ctx.send.await_args.args[0])
+
+    async def test_removed_box_is_not_recreated_by_an_edit(self):
+        boxes = self.service.user_boxes(123, 456)
+        boxes["purmel"] = {"items": []}
+        source = SimpleNamespace(
+            id=555, author=SimpleNamespace(id=716390085896962058),
+            guild=self.ctx.guild, channel=self.ctx.channel,
+            content="`1` Pikachu ♂", embeds=[], components=[],
+        )
+        self.ctx.message.reference = SimpleNamespace(message_id=555)
+        self.ctx.channel.fetch_message.return_value = source
+        await self.command("box", "append purmel")
+        del boxes["purmel"]
+
+        await self.service.handle_list_edit(source)
+
+        self.assertEqual(boxes, {})
+        self.assertEqual(self.service.append_sessions, {})
 
     async def test_remove_transfer_copy_tag_and_rename(self):
         boxes = self.service.user_boxes(123, 456)
@@ -232,10 +390,8 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
         boxes = self.service.user_boxes(123, 456)
         boxes["Daycare"] = {
             "items": [
-                {"name": "Pikachu", "gender": "male", "tags": []},
-                {"name": "Pikachu", "gender": "female", "tags": []},
-                {"name": "Pikachu", "gender": "male", "tags": []},
-                {"name": "Pikachu", "gender": "female", "tags": []},
+                {"name": "Pikachu", "gender": "male", "tags": [], "pokemon_id": "23580"},
+                {"name": "Pikachu", "gender": "female", "tags": [], "pokemon_id": "28179"},
             ]
         }
         self.service.species_cache[25] = {
@@ -246,5 +402,26 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
         await self.service.daycare_command(self.ctx, "Daycare")
 
         embed = self.ctx.send.await_args.kwargs["embed"]
-        self.assertIn("@Pokétwo#8236 daycare pikachu pikachu", embed.description)
-        self.assertEqual(embed.description.count("`@Pokétwo#8236 daycare"), 2)
+        self.assertEqual(
+            embed.description,
+            "`@Pokétwo#8236 daycare add 23580 28179`",
+        )
+
+    async def test_daycare_does_not_pair_duplicate_numbers_or_old_numberless_entries(self):
+        boxes = self.service.user_boxes(123, 456)
+        boxes["Daycare"] = {
+            "items": [
+                {"name": "Pikachu", "gender": "male", "tags": [], "pokemon_id": "5"},
+                {"name": "Pikachu", "gender": "female", "tags": [], "pokemon_id": "5"},
+                {"name": "Pikachu", "gender": "female", "tags": []},
+            ]
+        }
+        self.service.species_cache[25] = {
+            "gender_rate": 4,
+            "egg_groups": ("field",),
+        }
+
+        await self.service.daycare_command(self.ctx, "Daycare")
+
+        self.assertNotIn("embed", self.ctx.send.await_args.kwargs)
+        self.assertIn("No compatible", self.ctx.send.await_args.args[0])

@@ -122,7 +122,7 @@ COMMAND_CATALOG = (
     (
         "Breeding Boxes & Daycare",
         "v!box append [box] [--c]",
-        "Replies to a Pokétwo list to store its Pokémon; append each page to keep adding.",
+        "Replies to a Pokétwo list to store its Pokémon; page arrows keep adding.",
     ),
     (
         "Breeding Boxes & Daycare",
@@ -142,7 +142,7 @@ COMMAND_CATALOG = (
     (
         "Breeding Boxes & Daycare",
         "v!dc [box]",
-        "Pulls two breedable pairs with ready-to-paste daycare commands.",
+        "Pulls one breedable pair with a ready-to-paste daycare command.",
     ),
     (
         "Breeding Boxes & Daycare",
@@ -1362,7 +1362,7 @@ class PokéTwoNamingBot(commands.Cog):
         self.pokemon_species = self.load_pokemon_species()
         self.reviewed_spawn_count = self.load_collected_training_count()
         self.bot_state = self.load_bot_state()
-        self.breeding_box_service = BreedingBoxService(self)
+        self.breeding_box_service = BreedingBoxService(self, POKETWO_BOT_ID)
         self.seed_restricted_roles()
         self.active_incenses = {
             int(channel_id): float(expires_at)
@@ -2741,6 +2741,12 @@ class PokéTwoNamingBot(commands.Cog):
                 message
             ):
                 await self.handle_poketwo_spawn(message)
+
+    @commands.Cog.listener()
+    async def on_raw_message_edit(self, payload):
+        """Follow edited Pokétwo list pages, even if the message is uncached."""
+        if {"content", "embeds", "components"}.intersection(payload.data):
+            await self.breeding_box_service.handle_list_edit(payload.message)
 
     @commands.Cog.listener()
     async def on_message_edit(self, before, after):
