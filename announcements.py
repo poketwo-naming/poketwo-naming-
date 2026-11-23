@@ -21,7 +21,13 @@ UPDATE_ANNOUNCEMENT = (
     "💔 **Improved Daycare Pairing** - Shows all compatible breeding pairs\n"
     "  - Ditto takes priority: pairs with any compatible Pokémon first\n"
     "  - Male-female pairs: then matches remaining Pokémon by egg group\n"
-    "  - Use `v!dc <boxname>` to see all pairs in your daycare box"
+    "  - Use `v!dc <boxname>` to see all pairs in your daycare box\n\n"
+    "⚙️ **Naming Settings** - Customize Pokémon prediction behavior\n"
+    "  - Use `v!settings` → Naming to access configuration\n"
+    "  - Naming: Enable/disable predictions entirely\n"
+    "  - Mode: Choose between Assisted (copy-paste) or Embed Mode (code block)\n"
+    "  - Only Pings: Filter output to only names with configured pings\n"
+    "  - Best Name: Show or hide the fastest normalized catch alias"
 )
 
 
