@@ -76,6 +76,8 @@ Every `v!` command also works with a capital `V!` prefix.
 
 Use quotes around multiword box names when a command has more than one box
 argument, for example `v!box transfer "Main Box" "Egg Box" 1`.
+`v!box append` reads Pokémon lists in message embeds and Discord text
+components. Reply to each page to add it to the box.
 `v!dc` returns two pairs only when it can find four distinct, compatible stored
 Pokémon. Pair compatibility uses Pokémon egg groups and gender; mixed-gender
 species need their gender visible in the list that was appended.

@@ -1,4 +1,5 @@
 """Breeding box and daycare commands."""
+from collections.abc import Sequence
 import asyncio
 import random
 import re
@@ -23,6 +24,20 @@ def _gender_from_line(line: str) -> str | None:
 def _is_breedable_species(data: dict) -> bool:
     egg_groups = data.get("egg_groups", ())
     return bool(egg_groups) and "undiscovered" not in egg_groups
+
+
+def component_text(components: Sequence[discord.components.Component]) -> list[str]:
+    """Extract text displays from nested Discord message components."""
+    texts = []
+    for component in components:
+        if isinstance(component, discord.components.TextDisplay):
+            texts.append(component.content)
+        elif isinstance(
+            component,
+            (discord.components.Container, discord.components.SectionComponent),
+        ):
+            texts.extend(component_text(component.children))
+    return texts
 
 
 def find_daycare_pairs(
@@ -445,6 +460,7 @@ class BreedingBoxService:
                     for embed in message.embeds
                     for field in embed.fields
                 ),
+                *component_text(getattr(message, "components", [])),
             ]
         )
         found = []

@@ -90,6 +90,47 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
             [{"name": "Eevee", "gender": None, "tags": []}],
         )
 
+    async def test_append_reads_poketwo_component_list(self):
+        boxes = self.service.user_boxes(123, 456)
+        boxes["purmel"] = {"items": []}
+        self.cog.report_pokemon_names = lambda: ["Scatterbug"]
+        self.cog.resolve_pokemon_name = lambda name: (
+            "Scatterbug" if name.casefold() == "scatterbug" else None
+        )
+        container = discord.components.Container(
+            {
+                "type": 17,
+                "components": [
+                    {
+                        "type": 10,
+                        "content": (
+                            "`16289` <:pokemon:123456789> **Scatterbug** ♀ • Lvl. 13 • 76.34%\n"
+                            "`10501` <:pokemon:123456789> **Scatterbug** ♂ • Lvl. 17 • 76.34%"
+                        ),
+                    },
+                    {
+                        "type": 10,
+                        "content": "Showing entries 1–20 out of 9529.",
+                    },
+                ],
+            },
+            None,
+        )
+        self.ctx.message.reference = SimpleNamespace(
+            resolved=SimpleNamespace(content="", embeds=[], components=[container]),
+        )
+
+        await self.command("box", "append purmel")
+
+        self.assertEqual(
+            boxes["purmel"]["items"],
+            [
+                {"name": "Scatterbug", "gender": "female", "tags": []},
+                {"name": "Scatterbug", "gender": "male", "tags": []},
+            ],
+        )
+        self.assertIn("Added **2**", self.ctx.send.await_args.args[0])
+
     async def test_remove_transfer_copy_tag_and_rename(self):
         boxes = self.service.user_boxes(123, 456)
         boxes["Eggs"] = {
