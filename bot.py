@@ -1409,7 +1409,7 @@ class ReadyupView(discord.ui.View):
         self.completed = False
         self.completion_notified = False
         self.ended = False
-        self.message = None
+        self.message: discord.Message | None = None
         self.lock = asyncio.Lock()
 
     def build_embed(self) -> discord.Embed:

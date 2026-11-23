@@ -23,6 +23,22 @@ class CollectionCallback(Protocol):
     ) -> None: ...
 
 
+class ReadyupClearCallback(Protocol):
+    async def __call__(
+        self,
+        cog: PokéTwoNamingBot,
+        ctx: commands.Context,
+    ) -> None: ...
+
+
+def button_named(view: discord.ui.View, label: str) -> discord.ui.Button:
+    return next(
+        child
+        for child in view.children
+        if isinstance(child, discord.ui.Button) and child.label == label
+    )
+
+
 class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.cog = PokéTwoNamingBot.__new__(PokéTwoNamingBot)
@@ -119,9 +135,9 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
             guild=SimpleNamespace(id=123),
             response=SimpleNamespace(send_message=AsyncMock()),
         )
-        button = next(child for child in view.children if child.label == "Readyup")
+        button = button_named(view, "Readyup")
 
-        await button.callback(interaction)
+        await button.callback(cast(discord.Interaction, interaction))
 
         self.assertEqual(
             self.cog.bot_state["readyup_queues"]["123"],
@@ -142,9 +158,9 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
             response=SimpleNamespace(send_message=AsyncMock()),
             followup=SimpleNamespace(send=AsyncMock()),
         )
-        button = next(child for child in view.children if child.label == "Ready")
+        button = button_named(view, "Ready")
 
-        await button.callback(interaction)
+        await button.callback(cast(discord.Interaction, interaction))
 
         self.assertEqual(view.ready_user_ids, set())
         interaction.response.send_message.assert_awaited_once_with(
@@ -158,7 +174,8 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
         self.cog.save_bot_state = lambda: None
         readyup_view = ReadyupView(self.cog, 123, 101, ["456"])
         readyup_view.ready_user_ids.add("456")
-        readyup_view.message = SimpleNamespace(edit=AsyncMock())
+        readyup_message = SimpleNamespace(edit=AsyncMock())
+        readyup_view.message = cast(discord.Message, readyup_message)
         self.cog.readyup_views["123"] = readyup_view
         grab_view = GrabReservesView(
             self.cog,
@@ -170,22 +187,22 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
             guild=SimpleNamespace(id=123),
             response=SimpleNamespace(send_message=AsyncMock()),
         )
-        button = next(child for child in grab_view.children if child.label == "Readyup")
+        button = button_named(grab_view, "Readyup")
 
-        await button.callback(interaction)
+        await button.callback(cast(discord.Interaction, interaction))
 
         self.assertEqual(readyup_view.user_ids, ["456", "789"])
         self.assertEqual(readyup_view.ready_user_ids, {"456"})
         self.assertIn(
             "<@789>",
-            readyup_view.message.edit.await_args.kwargs["embed"].fields[0].value,
+            readyup_message.edit.await_args.kwargs["embed"].fields[0].value,
         )
 
     async def test_readyup_marks_members_and_notifies_runner_once(self):
         self.cog.readyup_views = {}
         view = ReadyupView(self.cog, 123, 101, ["456", "789"])
         self.cog.readyup_views["123"] = view
-        button = next(child for child in view.children if child.label == "Ready")
+        button = button_named(view, "Ready")
 
         first_interaction = SimpleNamespace(
             guild=SimpleNamespace(id=123),
@@ -193,7 +210,7 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
             response=SimpleNamespace(edit_message=AsyncMock()),
             followup=SimpleNamespace(send=AsyncMock()),
         )
-        await button.callback(first_interaction)
+        await button.callback(cast(discord.Interaction, first_interaction))
         first_interaction.response.edit_message.assert_awaited_once()
         first_embed = first_interaction.response.edit_message.await_args.kwargs[
             "embed"
@@ -207,7 +224,7 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
             response=SimpleNamespace(edit_message=AsyncMock()),
             followup=SimpleNamespace(send=AsyncMock()),
         )
-        await button.callback(second_interaction)
+        await button.callback(cast(discord.Interaction, second_interaction))
 
         embed = second_interaction.response.edit_message.await_args.kwargs["embed"]
         self.assertEqual(embed.title, "All Ready")
@@ -224,18 +241,23 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
         self.cog.bot_state["readyup_queues"] = {"123": ["456", "789"]}
         self.cog.save_bot_state = lambda: None
         view = ReadyupView(self.cog, 123, 101, ["456", "789"])
-        view.message = SimpleNamespace(edit=AsyncMock())
+        readyup_message = SimpleNamespace(edit=AsyncMock())
+        view.message = cast(discord.Message, readyup_message)
         self.cog.readyup_views["123"] = view
         ctx = SimpleNamespace(
             guild=SimpleNamespace(id=123),
             send=AsyncMock(),
         )
 
-        await PokéTwoNamingBot.clear_readyup.callback(self.cog, ctx)
+        callback = cast(
+            ReadyupClearCallback,
+            PokéTwoNamingBot.clear_readyup.callback,
+        )
+        await callback(self.cog, cast(commands.Context, ctx))
 
         self.assertNotIn("123", self.cog.bot_state["readyup_queues"])
         self.assertTrue(view.ended)
-        view.message.edit.assert_awaited_once_with(
+        readyup_message.edit.assert_awaited_once_with(
             content="Ready-up queue cleared.",
             embed=None,
             view=None,
