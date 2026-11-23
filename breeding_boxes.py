@@ -1039,12 +1039,16 @@ class BreedingBoxService:
             )
             return
         displayed_pairs = pairs
-        output = [
+        header = [
             f"**Daycare Pairs — {box_name}**",
             f"Name: {box_name}",
             f"Pairs formed: {len(displayed_pairs)}",
             "",
         ]
+        
+        messages = []
+        current_chunk = header.copy()
+        
         for pair_number, (left, right) in enumerate(displayed_pairs, start=1):
             first = candidates[left]
             second = candidates[right]
@@ -1052,8 +1056,7 @@ class BreedingBoxService:
                 f"{POKETWO_DAYCARE_COMMAND} add {first['pokemon_id']} "
                 f"{second['pokemon_id']}"
             )
-            output.append(f"`{daycare_command}`")
-            output.extend(("", f"```\n{daycare_command}\n```"))
+            pair_lines = [f"`{daycare_command}`", "", f"```\n{daycare_command}\n```"]
             if settings["display"] == "details":
                 genders = (
                     first.get("gender") or "fixed gender",
@@ -1068,8 +1071,21 @@ class BreedingBoxService:
                     if tags
                     else ""
                 )
-                output.append(
+                pair_lines.append(
                     f"\n**Pair {pair_number}:** {first['name']} ({genders[0]}) + "
                     f"{second['name']} ({genders[1]}){tag_text}"
                 )
-        await ctx.send("\n".join(output))
+            
+            test_chunk = current_chunk + pair_lines
+            test_content = "\n".join(test_chunk)
+            if len(test_content) > 3900:
+                messages.append("\n".join(current_chunk))
+                current_chunk = [f"**Daycare Pairs — {box_name}** (continued)", ""]
+            
+            current_chunk.extend(pair_lines)
+        
+        if current_chunk != [f"**Daycare Pairs — {box_name}** (continued)", ""]:
+            messages.append("\n".join(current_chunk))
+        
+        for message_content in messages:
+            await ctx.send(message_content)
