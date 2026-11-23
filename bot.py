@@ -1840,13 +1840,13 @@ class PokéTwoNamingBot(commands.Cog):
                         f"<@{user_id}>" for user_id in collection_owners
                     )
                     content.append(f"Collection pings: {mentions}")
-            if not is_missingno:
                 type_pingers = self.type_ping_owners(pokemon_name)
                 if type_pingers:
                     mentions = ", ".join(
                         f"<@{user_id}>" for user_id in type_pingers
                     )
                     content.append(f"Type pings: {mentions}")
+            if not is_missingno:
                 content.append(f"Click to Copy -> `{copy_command}`")
         elif not is_missingno:
             content.append(f"Click to Copy -> `{copy_command}`")
@@ -1927,6 +1927,7 @@ class PokéTwoNamingBot(commands.Cog):
             for user_id, selected in self.bot_state.get("type_pings", {}).items()
             if isinstance(selected, list)
             and any(pokemon_type in selected for pokemon_type in pokemon_types)
+            and self.pings_enabled(user_id, "typeping")
         ]
 
     def reserve_user_ids(self, guild_id, pokemon_name: str) -> list[str]:

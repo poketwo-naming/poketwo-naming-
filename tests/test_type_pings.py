@@ -95,6 +95,36 @@ class TypePingTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("<@789>", content)
         self.assertEqual(self.cog.type_ping_owners("Bulbasaur"), ["456"])
 
+    async def test_type_ping_respects_user_ping_preference(self):
+        self.cog.bot_state["type_pings"] = {
+            "456": ["grass"],
+            "789": ["grass"],
+        }
+        self.cog.bot_state["afk"] = {
+            "789": {"typeping": True},
+        }
+
+        content, _ = self.cog.format_spawn_prediction("Bulbasaur", 99.0, 123)
+
+        self.assertIn("Type pings: <@456>", content)
+        self.assertNotIn("<@789>", content)
+        self.assertEqual(self.cog.type_ping_owners("Bulbasaur"), ["456"])
+
+    async def test_reserve_override_hides_type_pings(self):
+        self.cog.bot_state["type_pings"] = {
+            "456": ["grass"],
+        }
+        self.cog.bot_state["reserves"] = {
+            "123": {
+                "Bulbasaur": "789",
+            }
+        }
+
+        content, _ = self.cog.format_spawn_prediction("Bulbasaur", 99.0, 123)
+
+        self.assertIn("Reserved: <@789>", content)
+        self.assertNotIn("Type pings:", content)
+
 
 if __name__ == "__main__":
     unittest.main()
