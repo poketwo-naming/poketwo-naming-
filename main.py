@@ -162,36 +162,25 @@ async def load_cogs():
             print(f"Loaded cog: {filename}")
 
 
+@bot.event
+async def on_connect():
+    """Sync app commands when bot connects"""
+    try:
+        synced = await bot.tree.sync()
+        print(f"✅ Synced {len(synced)} app command(s)")
+    except discord.app_commands.errors.AppCommandSyncError as e:
+        if "50240" in str(e):
+            print("⚠️  Entry Point command cannot be modified (expected)")
+        else:
+            print(f"⚠️  Failed to sync app commands: {e}")
+    except Exception as e:
+        print(f"⚠️  Failed to sync app commands: {e}")
+
+
 async def main():
     """Start the bot"""
     async with bot:
         await bot.load_extension("bot")
-        
-        # Schedule sync after cog loads
-        @bot.event
-        async def on_connect():
-            # Sync app commands when bot connects
-            try:
-                synced = await bot.tree.sync()
-                print(f"✅ Synced {len(synced)} app command(s) after cog load")
-            except discord.app_commands.errors.AppCommandSyncError as e:
-                if "50240" in str(e):
-                    print("⚠️  Entry Point command cannot be modified (expected)")
-                else:
-                    print(f"⚠️  Failed to sync app commands: {e}")
-            except Exception as e:
-                print(f"⚠️  Failed to sync app commands: {e}")
-            
-            # Try to post announcement after cog loads
-            cog = bot.get_cog("PokéTwoNamingBot")
-            if cog is not None:
-                try:
-                    result = await post_update_announcement(bot, cog)
-                    if result:
-                        print("✅ Update announcement posted")
-                except Exception as e:
-                    print(f"⚠️  Announcement post failed: {e}")
-        
         await bot.start(TOKEN)
 
 
