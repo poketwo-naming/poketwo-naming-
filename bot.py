@@ -14,7 +14,7 @@ import os
 import re
 from time import perf_counter, time
 from typing import cast
-from urllib.parse import quote
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 from zipfile import ZIP_DEFLATED, ZipFile
 from zoneinfo import ZoneInfo
 
@@ -42,6 +42,7 @@ INCENSE_INACTIVITY_SECONDS = float(
 )
 TRAINING_ROOT = "pokemon_images/training_data"
 TRAINING_COLLECTION_FILE = "pokemon_images/new_training_images.json"
+SPAWN_DOWNLOAD_SIZE = 232
 MODEL_READ_VERSION = "V2.0.0"
 TRAINING_REVIEWER_USER_IDS = {217819108329259008}
 BOT_STATE_FILE = os.getenv("BOT_STATE_FILE", "bot_state.json")
@@ -1634,8 +1635,18 @@ class PokéTwoNamingBot(commands.Cog):
 
     async def cog_load(self):
         """Create shared HTTP resources for spawn image downloads."""
+        connector = aiohttp.TCPConnector(
+            limit=20,
+            ttl_dns_cache=300,
+            keepalive_timeout=60,
+        )
         self.http_session = aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=10)
+            connector=connector,
+            timeout=aiohttp.ClientTimeout(
+                total=8,
+                connect=2,
+                sock_read=4,
+            ),
         )
 
     async def cog_unload(self):
@@ -2558,14 +2569,36 @@ class PokéTwoNamingBot(commands.Cog):
         started = perf_counter()
         for attachment in message.attachments:
             if (attachment.content_type or "").startswith("image/"):
+                optimized_url = self.optimized_spawn_image_url(attachment)
+                if optimized_url is not None and getattr(
+                    self, "http_session", None
+                ) is not None:
+                    downloads = {
+                        asyncio.create_task(
+                            self._read_spawn_image_url(optimized_url)
+                        ),
+                        asyncio.create_task(attachment.read(use_cached=True)),
+                    }
+                    image_data = await self.first_spawn_download(downloads)
+                    if image_data is not None:
+                        return image_data, perf_counter() - started
+                else:
+                    try:
+                        image_data = await attachment.read(use_cached=True)
+                        return image_data, perf_counter() - started
+                    except discord.HTTPException as error:
+                        print(
+                            "Could not download Pokétwo spawn image from Discord's "
+                            f"cached media URL; retrying the original URL: {error}"
+                        )
                 try:
-                    image_data = await attachment.read(use_cached=True)
+                    image_data = await attachment.read()
                 except discord.HTTPException as error:
                     print(
                         "Could not download Pokétwo spawn image from Discord's "
-                        f"cached media URL; retrying the original URL: {error}"
+                        f"original URL: {error}"
                     )
-                    image_data = await attachment.read()
+                    return None, perf_counter() - started
                 return image_data, perf_counter() - started
 
         image_url = self.spawn_image_url(message)
@@ -2582,6 +2615,68 @@ class PokéTwoNamingBot(commands.Cog):
         except (aiohttp.ClientError, TimeoutError) as error:
             print(f"Could not download Pokétwo spawn image: {error}")
             return None, perf_counter() - started
+
+    @staticmethod
+    def optimized_spawn_image_url(attachment) -> str | None:
+        """Request a proxy image no larger than the recognizer's input."""
+        proxy_url = getattr(attachment, "proxy_url", None)
+        if not proxy_url:
+            return None
+        parts = urlsplit(proxy_url)
+        query = dict(parse_qsl(parts.query, keep_blank_values=True))
+        query.update(
+            {
+                "width": str(SPAWN_DOWNLOAD_SIZE),
+                "height": str(SPAWN_DOWNLOAD_SIZE),
+                "format": "webp",
+            }
+        )
+        return urlunsplit(
+            (parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment)
+        )
+
+    async def _read_spawn_image_url(self, image_url: str) -> bytes:
+        """Download one optimized spawn image URL."""
+        if self.http_session is None:
+            raise RuntimeError("Pokétwo image HTTP session is not initialized")
+        async with self.http_session.get(image_url) as response:
+            response.raise_for_status()
+            return await response.read()
+
+    @staticmethod
+    async def first_spawn_download(
+        downloads: set[asyncio.Task[bytes]],
+    ) -> bytes | None:
+        """Return the first successful image download and cancel slower requests."""
+        errors = []
+        try:
+            pending = set(downloads)
+            while pending:
+                done, pending = await asyncio.wait(
+                    pending,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                for task in done:
+                    try:
+                        image_data = task.result()
+                    except (
+                        aiohttp.ClientError,
+                        discord.HTTPException,
+                        TimeoutError,
+                    ) as error:
+                        errors.append(error)
+                    else:
+                        return image_data
+            if errors:
+                print(
+                    "Could not download Pokétwo spawn image from Discord's "
+                    f"fast media URLs: {errors[-1]}"
+                )
+            return None
+        finally:
+            for download in downloads:
+                download.cancel()
+            await asyncio.gather(*downloads, return_exceptions=True)
 
     async def pause_missingno_channel(self, channel):
         """Deny only Pokétwo permission to send in a MissingNo channel."""

@@ -1,3 +1,4 @@
+import asyncio
 import unittest
 from collections import OrderedDict, deque
 from hashlib import sha256
@@ -158,6 +159,37 @@ class SpawnThumbnailTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(attachment.read.await_args_list[1].args, ())
         self.assertEqual(attachment.read.await_args_list[1].kwargs, {})
+
+    async def test_spawn_image_download_races_optimized_proxy_image(self):
+        async def slow_download(**_kwargs):
+            await asyncio.sleep(1)
+            return self.image_data
+
+        attachment = SimpleNamespace(
+            content_type="image/png",
+            proxy_url="https://media.discordapp.net/image.png?ex=123&is=456",
+            read=AsyncMock(side_effect=slow_download),
+        )
+        self.cog.http_session = object()
+        self.cog._read_spawn_image_url = AsyncMock(return_value=self.image_data)
+
+        image_data, _ = await PokéTwoNamingBot._get_spawn_image(
+            self.cog,
+            self.message_for_attachment(attachment),
+        )
+
+        self.assertEqual(image_data, self.image_data)
+        optimized_url = self.cog._read_spawn_image_url.await_args.args[0]
+        self.assertIn("width=232", optimized_url)
+        self.assertIn("height=232", optimized_url)
+        self.assertIn("format=webp", optimized_url)
+        self.assertIn("ex=123", optimized_url)
+
+    def message_for_attachment(self, attachment):
+        return SimpleNamespace(
+            attachments=[attachment],
+            embeds=[],
+        )
 
     async def test_low_confidence_spawn_still_sends_review(self):
         self.channel.id = TRAINING_REVIEW_CHANNEL_ID
