@@ -315,25 +315,31 @@ class BreedingBoxService:
 
     async def show_help(self, ctx):
         await ctx.send(
-            "**Breeding Boxes & Daycare**\n"
-            "`v!box` — show your boxes and their capacity\n"
-            "`v!box create <name>` — make a box\n"
-            "Reply to a Pokétwo list with `v!box append [box] [--c]` "
-            "to store its Pokémon; pages keep adding. `--c` clears first.\n"
-            "`v!box list [box]` — browse boxes or their contents\n"
-            "`v!box remove <box> <number|Pokémon> [all]` — delete stored Pokémon\n"
-            "`v!box transfer <from> <to> [number|Pokémon] [all]` — move Pokémon\n"
-            "`v!box copy <source> <new name>` — duplicate a box; use an existing "
-            "destination to copy entries\n"
-            "`v!box tag <box> <number|Pokémon> <tag>` / "
-            "`v!box untag <box> <number|Pokémon> [tag]`\n"
-            "`v!box tags [box]` / `v!box tagged <tag>`\n"
-            "`v!box rename <box> <new name>` / `v!box delete <box>`\n"
-            "`v!box clear <box>` — empty one box\n"
-            "`v!box reset` — confirm before removing all your boxes\n"
-            "`v!dc [box]` — pull two compatible breedable pairs\n"
-            "`v!dc settings` — choose first, random, or tagged-first pairs and display\n"
-            "`v!boxhelp` — show this command list"
+            embed=discord.Embed(
+                title="Breeding Boxes & Daycare",
+                description=(
+                    "`v!box` — show your boxes and their capacity\n"
+                    "`v!box create <name>` — make a box\n"
+                    "Reply to a Pokétwo list with `v!box append [box] [--c]` "
+                    "to store its Pokémon; pages keep adding. `--c` clears first.\n"
+                    "`v!box list [box]` — browse boxes or their contents\n"
+                    "`v!box remove <box> <number|Pokémon> [all]` — delete stored Pokémon\n"
+                    "`v!box transfer <from> <to> [number|Pokémon] [all]` — move Pokémon\n"
+                    "`v!box copy <source> <new name>` — duplicate a box; use an "
+                    "existing destination to copy entries\n"
+                    "`v!box tag <box> <number|Pokémon> <tag>` / "
+                    "`v!box untag <box> <number|Pokémon> [tag]`\n"
+                    "`v!box tags [box]` / `v!box tagged <tag>`\n"
+                    "`v!box rename <box> <new name>` / `v!box delete <box>`\n"
+                    "`v!box clear <box>` — empty one box\n"
+                    "`v!box reset` — confirm before removing all your boxes\n"
+                    "`v!dc [box]` — pull two compatible breedable pairs\n"
+                    "`v!dc settings` — choose first, random, or tagged-first pairs "
+                    "and display\n"
+                    "`v!boxhelp` — show this command list"
+                ),
+                color=discord.Color.green(),
+            )
         )
 
     async def box_command(self, ctx, entry: str):

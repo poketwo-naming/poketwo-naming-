@@ -2,6 +2,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
+import discord
+
 from breeding_boxes import (
     BREEDING_BOX_LIMIT,
     BreedingBoxService,
@@ -50,6 +52,14 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
 
         await self.command("box", "delete Daycare")
         self.assertEqual(boxes, {})
+
+    async def test_boxhelp_is_sent_as_an_embed(self):
+        await self.command("boxhelp")
+
+        embed = self.ctx.send.await_args.kwargs["embed"]
+        self.assertIsInstance(embed, discord.Embed)
+        self.assertEqual(embed.title, "Breeding Boxes & Daycare")
+        self.assertIn("`v!dc settings`", embed.description)
 
     async def test_append_adds_each_page_and_clear_flag_replaces_contents(self):
         boxes = self.service.user_boxes(123, 456)
