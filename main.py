@@ -55,30 +55,19 @@ async def on_ready():
     """Called when the bot is ready"""
     print(f"{bot.user} has connected to Discord!")
     print(f"Bot is in {len(bot.guilds)} guild(s)")
-    print(f"DEBUG: App commands in tree: {len(bot.tree._get_all_commands())}")
     
-    # Sync app commands with timeout
     try:
-        print("DEBUG: Starting app command sync...")
         synced = await asyncio.wait_for(bot.tree.sync(), timeout=30.0)
         print(f"✅ Synced {len(synced)} app command(s)")
-        if synced:
-            print(f"DEBUG: Synced commands: {[cmd.name for cmd in synced]}")
-        else:
-            print("DEBUG: No new commands to sync (already up to date)")
     except asyncio.TimeoutError:
         print("⚠️  App command sync timed out (30s)")
     except discord.app_commands.errors.AppCommandSyncError as e:
-        # Handle Discord's Entry Point command restriction error
         if "50240" in str(e):
             print("⚠️  Warning: Entry Point command cannot be modified in bulk sync.")
-            print("   This is expected behavior. App commands should still work.")
         else:
             print(f"❌ AppCommandSyncError: {e}")
     except Exception as e:
         print(f"❌ Sync failed with exception: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
     
     asyncio.create_task(run_update_announcement(bot))
 

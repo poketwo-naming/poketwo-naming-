@@ -1,7 +1,5 @@
 """Automatic update announcements for the Poketwo Naming server."""
 import asyncio
-import traceback
-
 import discord
 
 
@@ -14,7 +12,9 @@ UPDATE_ANNOUNCEMENT = (
     "🔧 **Breeding Box Slash Commands** - Manage boxes and daycare pairs with `/` commands\n"
     "  - Use `/box` for create, list, append, remove, transfer, copy, tags, rename, and reset\n"
     "  - Use `/dc` to find pairs or open daycare settings\n"
-    "  - Use `/boxhelp` for the breeding box command guide"
+    "  - Use `/boxhelp` for the breeding box command guide\n"
+    "🔧 **Automatic Update Announcements** - New bot updates now post and publish automatically\n"
+    "  - Update notices retry automatically if sending or publishing fails"
 )
 
 
@@ -91,6 +91,5 @@ async def run_update_announcement(bot, retries: int = 12, delay_seconds: float =
                 f"⚠️ Could not send/publish update announcement "
                 f"(attempt {attempt + 1}/{retries}): {error}"
             )
-            traceback.print_exc()
             if attempt + 1 < retries:
                 await asyncio.sleep(delay_seconds)
