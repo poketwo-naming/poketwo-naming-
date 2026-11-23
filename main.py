@@ -72,9 +72,13 @@ async def on_ready():
     cog = bot.get_cog("PokéTwoNamingBot")
     if cog is not None:
         try:
-            await post_update_announcement(bot, cog)
+            result = await post_update_announcement(bot, cog)
+            if result:
+                print("✅ Update announcement posted successfully")
+            else:
+                print("ℹ️ Announcement unchanged from last post")
         except (discord.DiscordException, OSError, TypeError, ValueError) as error:
-            print(f"Could not post or publish update announcement: {error}")
+            print(f"❌ Could not post or publish update announcement: {error}")
 
 
 @bot.event
