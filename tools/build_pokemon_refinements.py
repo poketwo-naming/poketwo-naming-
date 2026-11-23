@@ -43,6 +43,7 @@ DEFAULT_CLASSES = [
     "Pikipek",
     "Rattata",
     "Sableye",
+    "Smoliv",
     "Summer Deerling",
     "Trevenant",
     "Winter Deerling",

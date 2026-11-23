@@ -15,6 +15,8 @@ UPDATE_ANNOUNCEMENT = (
     "  - Use `/boxhelp` for the breeding box command guide\n"
     "🔧 **Slash Command Registration Fix** - Vivillon now registers its slash "
     "commands even when Discord blocks bulk syncing for an Activity\n"
+    "🌿 **Smoliv Recognition** - Improved recognition of Smoliv images that "
+    "could be mistaken for Applin\n"
     "🔧 **Automatic Update Announcements** - New bot updates now post and publish automatically\n"
     "  - Update notices retry automatically if sending or publishing fails"
 )
