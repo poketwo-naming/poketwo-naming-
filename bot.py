@@ -4202,6 +4202,9 @@ class PokéTwoNamingBot(commands.Cog):
     @commands.command(name="tz")
     async def timezone_command(self, ctx, *, phase: str = ""):
         """Find one place currently experiencing the requested local-time phase."""
+        if not self.has_restricted_permission(ctx):
+            await ctx.send("❌ You do not have permission to use this command.")
+            return
         phase = phase.strip().casefold()
         if phase not in TIMEZONE_PHASE_EMOJIS:
             await ctx.send("Use `v!tz day`, `v!tz night`, `v!tz dawn`, or `v!tz dusk`.")
@@ -4305,6 +4308,9 @@ class PokéTwoNamingBot(commands.Cog):
     @commands.command(name="premiumservers", aliases=["ps"])
     async def premium_servers_list(self, ctx):
         """List connected servers and their premium tier."""
+        if not self.has_restricted_permission(ctx):
+            await ctx.send("❌ You do not have permission to view premium servers.")
+            return
         guilds = sorted(self.bot.guilds, key=lambda guild: guild.name.casefold())
         if not guilds:
             await ctx.send("This bot is not connected to any servers.")
@@ -5020,6 +5026,9 @@ class PokéTwoNamingBot(commands.Cog):
     @commands.command(name="grab")
     async def grab_reserves_command(self, ctx):
         """Import reservations from the replied-to user/Pokémon list."""
+        if not self.has_restricted_permission(ctx):
+            await ctx.send("❌ You do not have permission to grab reserves.")
+            return
         await self.grab_reserves(ctx, h_mode=False)
 
     @commands.group(name="readyup", invoke_without_command=True)
@@ -5437,6 +5446,9 @@ class PokéTwoNamingBot(commands.Cog):
     @commands.command(name="servers")
     async def servers(self, ctx):
         """List every Discord server this bot is connected to."""
+        if not self.has_restricted_permission(ctx):
+            await ctx.send("❌ You do not have permission to view servers.")
+            return
         guilds = sorted(self.bot.guilds, key=lambda guild: guild.name.casefold())
         if not guilds:
             await ctx.send("This bot is not connected to any servers.")
