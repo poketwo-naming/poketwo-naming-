@@ -50,28 +50,23 @@ bot = commands.Bot(
 )
 
 
-async def sync_application_commands(tree: discord.app_commands.CommandTree) -> int:
-    """Sync global commands, preserving Discord's managed Activity entry point."""
-    try:
-        return len(await tree.sync())
-    except discord.HTTPException as error:
-        if error.code != 50240:
-            raise
+REMOVED_SLASH_COMMANDS = frozenset({
+    "ping", "box", "dc", "boxhelp", "typeping", "questping", "sr", "afk",
+    "permission", "help", "resume", "pause", "settings", "support",
+})
 
-    application_id = tree.client.application_id
-    if application_id is None:
-        raise discord.app_commands.MissingApplicationID
-    commands_to_sync = tree.get_commands()
-    translator = tree.translator
-    for command in commands_to_sync:
-        payload = (
-            await command.get_translated_payload(tree, translator)
-            if translator is not None
-            else command.to_dict(tree)
-        )
-        # discord.py exposes no public API for individual command upserts.
-        await tree._http.upsert_global_command(application_id, payload=payload)
-    return len(commands_to_sync)
+
+async def remove_old_slash_commands(tree: discord.app_commands.CommandTree) -> int:
+    """Remove previously registered slash commands without touching other commands."""
+    removed = 0
+    for command in await tree.fetch_commands():
+        if (
+            command.type == discord.AppCommandType.chat_input
+            and command.name in REMOVED_SLASH_COMMANDS
+        ):
+            await command.delete()
+            removed += 1
+    return removed
 
 
 @bot.event
@@ -82,14 +77,15 @@ async def on_ready():
     asyncio.create_task(run_update_announcement(bot))
 
     try:
-        synced_count = await asyncio.wait_for(
-            sync_application_commands(bot.tree), timeout=120.0
+        removed_count = await asyncio.wait_for(
+            remove_old_slash_commands(bot.tree), timeout=120.0
         )
-        print(f"✅ Synced {synced_count} app command(s)")
+        if removed_count:
+            print(f"✅ Removed {removed_count} old slash command(s)")
     except asyncio.TimeoutError:
-        print("⚠️  App command sync timed out (120s)")
+        print("⚠️  Old slash command removal timed out (120s)")
     except (discord.DiscordException, discord.app_commands.AppCommandError) as error:
-        print(f"❌ Failed to sync app commands: {error}")
+        print(f"❌ Failed to remove old slash commands: {error}")
 
 
 @bot.event

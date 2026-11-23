@@ -375,10 +375,7 @@ class BreedingBoxService:
                     "`v!dc [box]` — get one compatible pair using Pokémon numbers\n"
                     "`v!dc settings` — choose first, random, or tagged-first pairs "
                     "and display\n"
-                    "`v!boxhelp` — show this command list\n"
-                    "`/box` — use breeding box commands with slash options\n"
-                    "`/dc [box]` — use daycare pairs from a slash command\n"
-                    "`/boxhelp` — show this command list"
+                    "`v!boxhelp` — show this command list"
                 ),
                 color=discord.Color.green(),
             )

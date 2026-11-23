@@ -10,8 +10,8 @@ PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
     "**What's new**\n"
-    "📦 **Breeding Boxes** - Slash commands now accept box names containing "
-    "spaces or apostrophes."
+    "Slash commands have been removed. Continue using Vivillon's `v!` commands, "
+    "including `v!box`, `v!dc`, and `v!boxhelp`."
 )
 
 
