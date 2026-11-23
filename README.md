@@ -6,6 +6,7 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 
 - **Recognize Spawns** - Identify every Pokétwo spawn from its image and display confidence
 - **Type Icons** - Prefix each prediction with its primary and secondary type emojis
+- **Type Pings** - Choose Pokémon types to get pinged for, including dual-type spawns
 - **Best Names** - Show the shortest localized name, romanized for nicknames
 - **Bot Status** - Check if the bot is online
 
@@ -24,6 +25,7 @@ Every `v!` command also works with a capital `V!` prefix.
 | Command | Usage | Description |
 |---------|-------|-------------|
 | `v!ping` | `v!ping` | Check bot status and latency |
+| `v!tp` / `v!typeping` | `v!tp` | Choose Pokémon types to receive spawn pings for |
 | `v!support` | `v!support` | Show the optional GoFundMe support link |
 | `v!tz <day\|night\|dawn\|dusk>` | `v!tz night` | Find one place in that local-time phase and get a Pokétwo timezone command |
 | `v!sr <pokemon>` | `v!sr Pikachu` | Show a Pokémon's spawn rate and artwork |

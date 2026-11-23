@@ -9,8 +9,8 @@ ANNOUNCEMENT_CHANNEL_ID = 1574489953444827146
 ANNOUNCEMENT_STATE_KEY = "last_update_announcement"
 UPDATE_ANNOUNCEMENT = (
     "**What's new**\n"
-    "- Daycare results are plain messages with the selected box name and "
-    "pair count, plus an inline phone copy and a fenced PC copy."
+    "- Added `v!tp` / `v!typeping` to choose type-based spawn pings, including "
+    "dual-type Pokémon."
 )
 
 

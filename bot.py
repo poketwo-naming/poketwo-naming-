@@ -110,6 +110,11 @@ SPAWN_RATE_PRICES = (
 COMMAND_CATALOG = (
     ("General", "v!ping", "Shows the bot's gateway latency."),
     (
+        "General",
+        "v!typeping",
+        "Chooses Pokémon types to receive pings for (alias: v!tp).",
+    ),
+    (
         "Breeding Boxes & Daycare",
         "v!box",
         "Shows all of your boxes and how full they are (limit 7,500 each).",
@@ -322,6 +327,7 @@ TYPE_EMOJIS = {
     "electric": "<:Electric:1560306053164572732>",
     "dragon": "<:Dragon:1564786673840160818>",
 }
+TYPE_NAMES = tuple(sorted(TYPE_EMOJIS))
 
 
 def phase_at_location_time(
@@ -655,6 +661,109 @@ class AfkView(discord.ui.View):
                 await self.message.edit(view=self)
             except discord.HTTPException:
                 pass
+
+
+class TypePingView(discord.ui.View):
+    """Choose which Pokémon types trigger spawn pings."""
+
+    class TypeSelect(discord.ui.Select):
+        def __init__(self, owner: "TypePingView"):
+            self.owner = owner
+            selected = owner.cog.type_ping_types(owner.user_id)
+            super().__init__(
+                placeholder="Select type(s) to receive pings...",
+                min_values=0,
+                max_values=len(TYPE_NAMES),
+                options=[
+                    discord.SelectOption(
+                        label=pokemon_type.title(),
+                        value=pokemon_type,
+                        emoji=TYPE_EMOJIS[pokemon_type],
+                        default=pokemon_type in selected,
+                    )
+                    for pokemon_type in TYPE_NAMES
+                ],
+            )
+
+        async def callback(self, interaction: discord.Interaction) -> None:
+            await self.owner.update_types(interaction, self.values)
+
+    class ToggleButton(discord.ui.Button):
+        def __init__(self, owner: "TypePingView", enabled: bool):
+            super().__init__(
+                label="All On" if enabled else "All Off",
+                style=discord.ButtonStyle.success
+                if enabled
+                else discord.ButtonStyle.danger,
+            )
+            self.owner = owner
+            self.enabled = enabled
+
+        async def callback(self, interaction: discord.Interaction) -> None:
+            types = TYPE_NAMES if self.enabled else ()
+            await self.owner.update_types(interaction, types)
+
+    def __init__(self, cog, user_id: int):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.user_id = user_id
+        self.refresh_components()
+
+    def build_embed(self) -> discord.Embed:
+        selected = set(self.cog.type_ping_types(self.user_id))
+        lines = [
+            f"{TYPE_EMOJIS[pokemon_type]} {pokemon_type.title()} "
+            f"{'✅' if pokemon_type in selected else '❌'}"
+            for pokemon_type in TYPE_NAMES
+        ]
+        return discord.Embed(
+            title="Type Pings",
+            description="\n".join(lines),
+            color=discord.Color.blurple(),
+        )
+
+    def refresh_components(self) -> None:
+        self.clear_items()
+        self.add_item(self.TypeSelect(self))
+        self.add_item(self.ToggleButton(self, enabled=True))
+        self.add_item(self.ToggleButton(self, enabled=False))
+
+    async def update_types(
+        self,
+        interaction: discord.Interaction,
+        selected_types: list[str] | tuple[str, ...],
+    ) -> None:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(
+                "Only the person who ran v!tp can change these settings.",
+                ephemeral=True,
+            )
+            return
+
+        type_pings = self.cog.bot_state.setdefault("type_pings", {})
+        user_key = str(self.user_id)
+        previous = type_pings.get(user_key)
+        selected = sorted(set(selected_types) & set(TYPE_NAMES))
+        type_pings[user_key] = selected
+        try:
+            self.cog.save_bot_state()
+        except OSError:
+            if previous is None:
+                type_pings.pop(user_key, None)
+            else:
+                type_pings[user_key] = previous
+            logging.getLogger(__name__).exception("Could not save type-ping settings")
+            await interaction.response.send_message(
+                "❌ I couldn't save your type-ping settings. Check the bot logs.",
+                ephemeral=True,
+            )
+            return
+
+        self.refresh_components()
+        await interaction.response.edit_message(
+            embed=self.build_embed(),
+            view=self,
+        )
 
 
 class HelpPagesView(discord.ui.View):
@@ -1559,6 +1668,12 @@ class PokéTwoNamingBot(commands.Cog):
                     )
                     content.append(f"Collection pings: {mentions}")
             if not is_missingno:
+                type_pingers = self.type_ping_owners(pokemon_name)
+                if type_pingers:
+                    mentions = ", ".join(
+                        f"<@{user_id}>" for user_id in type_pingers
+                    )
+                    content.append(f"Type pings: {mentions}")
                 content.append(f"Click to Copy -> `{copy_command}`")
         elif not is_missingno:
             content.append(f"Click to Copy -> `{copy_command}`")
@@ -1623,6 +1738,23 @@ class PokéTwoNamingBot(commands.Cog):
         """Return whether a user receives pings of this kind (default: yes)."""
         muted = self.bot_state.get("afk", {}).get(str(user_id), {})
         return not muted.get(kind, False)
+
+    def type_ping_types(self, user_id: int) -> list[str]:
+        """Return the valid Pokémon types selected by one user."""
+        selected = self.bot_state.get("type_pings", {}).get(str(user_id), [])
+        if not isinstance(selected, list):
+            return []
+        return [pokemon_type for pokemon_type in TYPE_NAMES if pokemon_type in selected]
+
+    def type_ping_owners(self, pokemon_name: str) -> list[str]:
+        """Return users who selected at least one type of this Pokémon."""
+        pokemon_types = set(self.pokemon_types[pokemon_name])
+        return [
+            user_id
+            for user_id, selected in self.bot_state.get("type_pings", {}).items()
+            if isinstance(selected, list)
+            and any(pokemon_type in selected for pokemon_type in pokemon_types)
+        ]
 
     def reserve_user_ids(self, guild_id, pokemon_name: str) -> list[str]:
         """Return all reserving user IDs, accepting legacy single-ID values."""
@@ -1720,6 +1852,7 @@ class PokéTwoNamingBot(commands.Cog):
             "active_incenses": {},
             "shiny_hunts": {},
             "collections": {},
+            "type_pings": {},
             "categories": {},
             "afk": {},
             "breeding_boxes": {},
@@ -1755,6 +1888,7 @@ class PokéTwoNamingBot(commands.Cog):
         state.setdefault("active_incenses", {})
         state.setdefault("shiny_hunts", {})
         state.setdefault("collections", {})
+        state.setdefault("type_pings", {})
         state.setdefault("categories", {})
         state.setdefault("afk", {})
         state.setdefault("breeding_boxes", {})
@@ -3738,6 +3872,12 @@ class PokéTwoNamingBot(commands.Cog):
     async def ping(self, ctx):
         """Check if the bot is responsive"""
         await ctx.send(f"Pong! {self.bot.latency * 1000:.2f}ms")
+
+    @commands.command(name="typeping", aliases=["tp"])
+    async def type_ping_command(self, ctx):
+        """Choose Pokémon types to receive pings for."""
+        view = TypePingView(self, ctx.author.id)
+        await ctx.send(embed=view.build_embed(), view=view)
 
     @commands.command(name="sr")
     async def spawn_rate_command(self, ctx, *, pokemon_name: str = ""):
