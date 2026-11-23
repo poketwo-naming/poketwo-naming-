@@ -91,7 +91,7 @@ deduplicated or used by `v!dc`; clear and re-import that box to replace them.
 mixed-gender species need their gender visible in the list that was appended.
 The plain-text result shows the selected box name and pair count, with an
 inline daycare command for phone copying and a fenced command block for PC
-copying.
+copying. Large pair lists are split across multiple messages.
 
 On startup, the bot posts the current `UPDATE_ANNOUNCEMENT` from
 `announcements.py` to channel `1574489953444827146` once per announcement text.

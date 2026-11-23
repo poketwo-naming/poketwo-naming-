@@ -10,9 +10,8 @@ PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
     "**What's new**\n"
-    "The other slash commands have been removed. `/dc` is the only slash "
-    "command and finds one compatible daycare pair. Existing `v!` commands "
-    "remain available."
+    "`v!dc` now splits large daycare pair lists into Discord-sized messages, "
+    "so large breeding boxes no longer fail to display their pairs."
 )
 
 

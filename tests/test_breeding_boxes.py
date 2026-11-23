@@ -413,6 +413,73 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertNotIn("embed", self.ctx.send.await_args.kwargs)
 
+    async def test_daycare_splits_many_pairs_within_discord_message_limit(self):
+        boxes = self.service.user_boxes(123, 456)
+        boxes["purmel"] = {
+            "items": [
+                {"name": "Pikachu", "gender": "male" if number % 2 else "female",
+                 "tags": [], "pokemon_id": str(number)}
+                for number in range(1, 101)
+            ]
+        }
+        self.service.species_cache[25] = {"gender_rate": 4, "egg_groups": ("field",)}
+
+        await self.service.daycare_command(self.ctx, "purmel")
+
+        messages = [call.args[0] for call in self.ctx.send.await_args_list]
+        self.assertGreater(len(messages), 1)
+        self.assertTrue(all(len(message.encode("utf-16-le")) // 2 <= 2000
+                            for message in messages))
+        self.assertIn("Pairs formed: 50", messages[0])
+        for number in range(1, 101, 2):
+            command = f"daycare add {number} {number + 1}"
+            self.assertEqual(sum(message.count(command) for message in messages), 2)
+
+    async def test_daycare_splits_single_pair_with_long_unicode_details(self):
+        self.service.user_boxes(123, 456)["purmel"] = {
+            "items": [
+                {"name": "Pikachu", "gender": "male", "tags": ["😀" * 1500],
+                 "pokemon_id": "1"},
+                {"name": "Pikachu", "gender": "female", "tags": [],
+                 "pokemon_id": "2"},
+            ]
+        }
+        self.service.species_cache[25] = {"gender_rate": 4, "egg_groups": ("field",)}
+        self.service.daycare_settings(123, 456)["display"] = "details"
+
+        await self.service.daycare_command(self.ctx, "purmel")
+
+        messages = [call.args[0] for call in self.ctx.send.await_args_list]
+        self.assertGreater(len(messages), 1)
+        self.assertTrue(all(len(message.encode("utf-16-le")) // 2 <= 2000
+                            for message in messages))
+        self.assertEqual(sum(message.count("😀") for message in messages), 1500)
+        self.assertEqual(sum(message.count("daycare add 1 2") for message in messages), 2)
+
+    async def test_daycare_message_limit_boundary(self):
+        items = [
+            {"name": "Pikachu", "gender": "male", "tags": ["x"], "pokemon_id": "1"},
+            {"name": "Pikachu", "gender": "female", "tags": [], "pokemon_id": "2"},
+        ]
+        self.service.user_boxes(123, 456)["purmel"] = {"items": items}
+        self.service.species_cache[25] = {"gender_rate": 4, "egg_groups": ("field",)}
+        self.service.daycare_settings(123, 456)["display"] = "details"
+        await self.service.daycare_command(self.ctx, "purmel")
+        base_length = len(self.ctx.send.await_args.args[0])
+
+        items[0]["tags"] = ["x" * (2001 - base_length)]
+        self.ctx.send.reset_mock()
+        await self.service.daycare_command(self.ctx, "purmel")
+        self.assertEqual(self.ctx.send.await_count, 1)
+        self.assertEqual(len(self.ctx.send.await_args.args[0]), 2000)
+
+        items[0]["tags"][0] += "x"
+        self.ctx.send.reset_mock()
+        await self.service.daycare_command(self.ctx, "purmel")
+        self.assertEqual(self.ctx.send.await_count, 2)
+        self.assertTrue(all(len(call.args[0]) <= 2000
+                            for call in self.ctx.send.await_args_list))
+
     async def test_slash_daycare_returns_only_one_pair_from_named_box(self):
         boxes = self.service.user_boxes(123, 456)
         boxes["Trainer's Box"] = {

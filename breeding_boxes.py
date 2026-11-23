@@ -1051,7 +1051,12 @@ class BreedingBoxService:
         ]
         
         messages = []
-        current_chunk = header.copy()
+        current_chunk = "\n".join(header)
+        continuation = f"**Daycare Pairs — {box_name}** (continued)\n"
+        chunk_has_content = False
+
+        def message_length(text: str) -> int:
+            return len(text.encode("utf-16-le")) // 2
         
         for pair_number, (left, right) in enumerate(displayed_pairs, start=1):
             first = candidates[left]
@@ -1080,16 +1085,33 @@ class BreedingBoxService:
                     f"{second['name']} ({genders[1]}){tag_text}"
                 )
             
-            test_chunk = current_chunk + pair_lines
-            test_content = "\n".join(test_chunk)
-            if len(test_content) > 3900:
-                messages.append("\n".join(current_chunk))
-                current_chunk = [f"**Daycare Pairs — {box_name}** (continued)", ""]
-            
-            current_chunk.extend(pair_lines)
-        
-        if current_chunk != [f"**Daycare Pairs — {box_name}** (continued)", ""]:
-            messages.append("\n".join(current_chunk))
+            remaining = "\n".join(pair_lines)
+            if chunk_has_content and message_length(current_chunk + "\n" + remaining) > 2000:
+                messages.append(current_chunk)
+                current_chunk = continuation
+                chunk_has_content = False
+
+            while remaining:
+                available = 2000 - message_length(current_chunk) - 1
+                units = 0
+                end = 0
+                for character in remaining:
+                    size = 2 if ord(character) > 0xFFFF else 1
+                    if units + size > available:
+                        break
+                    units += size
+                    end += 1
+                if end:
+                    current_chunk += "\n" + remaining[:end]
+                    remaining = remaining[end:]
+                    chunk_has_content = True
+                if remaining:
+                    messages.append(current_chunk)
+                    current_chunk = continuation
+                    chunk_has_content = False
+
+        if chunk_has_content:
+            messages.append(current_chunk)
         
         for message_content in messages:
             await ctx.send(message_content)
