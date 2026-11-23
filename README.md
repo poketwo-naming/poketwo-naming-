@@ -80,6 +80,7 @@ Every `v!` command also works with a capital `V!` prefix.
 
 Use quotes around multiword box names when a command has more than one box
 argument, for example `v!box transfer "Main Box" "Egg Box" 1`.
+Slash command box-name options accept spaces directly, without quotes.
 `v!box append` reads the current page of a replied Pokétwo list and follows its
 page-arrow edits for 30 minutes after the latest page change, or until the bot
 restarts. Each Pokémon number is added only once per box; the status shows

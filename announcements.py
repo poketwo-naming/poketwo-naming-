@@ -10,8 +10,8 @@ PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
     "**What's new**\n"
-    "🔧 **Update Announcements** - New announcements now describe only the "
-    "latest update instead of repeating previous changes."
+    "📦 **Breeding Boxes** - Slash commands now accept box names containing "
+    "spaces or apostrophes."
 )
 
 

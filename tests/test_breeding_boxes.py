@@ -40,6 +40,48 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
     async def command(self, command, entry=""):
         await self.service.dispatch(self.ctx, command, entry)
 
+    def slash_interaction(self):
+        return SimpleNamespace(
+            guild=self.ctx.guild,
+            user=self.ctx.author,
+            channel=self.ctx.channel,
+            response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
+        )
+
+    async def test_slash_box_preserves_spaces_and_apostrophes_in_names(self):
+        interaction = self.slash_interaction()
+        boxes = self.service.user_boxes(123, 456)
+        boxes["Trainer's Box"] = {
+            "items": [{"name": "Pikachu", "tags": []}]
+        }
+        boxes["Egg Box"] = {"items": []}
+
+        await PokéTwoNamingBot.slash_box.callback(
+            self.cog,
+            interaction,
+            discord.app_commands.Choice(name="Transfer", value="transfer"),
+            box_name="Trainer's Box",
+            destination="Egg Box",
+            item="Pikachu",
+        )
+
+        self.assertEqual(len(boxes["Trainer's Box"]["items"]), 0)
+        self.assertEqual(boxes["Egg Box"]["items"][0]["name"], "Pikachu")
+        self.assertIn("Transferred", interaction.followup.send.await_args.args[0])
+
+    async def test_slash_daycare_accepts_box_name_with_apostrophe(self):
+        interaction = self.slash_interaction()
+        self.service.user_boxes(123, 456)["Trainer's Box"] = {"items": []}
+
+        await PokéTwoNamingBot.slash_daycare.callback(
+            self.cog, interaction, box_name="Trainer's Box"
+        )
+
+        response = interaction.followup.send.await_args.args[0]
+        self.assertIn("Trainer's Box", response)
+        self.assertNotIn("Invalid command syntax", response)
+
     async def test_create_list_contents_delete_and_limit(self):
         await self.command("box", "create Daycare")
         boxes = self.service.user_boxes(123, 456)

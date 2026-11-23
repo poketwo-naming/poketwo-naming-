@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import re
+import shlex
 from time import perf_counter, time
 from types import CoroutineType, SimpleNamespace
 from typing import Any, cast
@@ -6094,7 +6095,7 @@ class PokéTwoNamingBot(commands.Cog):
         await self.breeding_box_service.dispatch(
             ctx,
             "box",
-            " ".join(entry_parts),
+            shlex.join(entry_parts),
         )
 
     @app_commands.command(name="dc", description="Find compatible daycare pairs")
@@ -6118,7 +6119,11 @@ class PokéTwoNamingBot(commands.Cog):
 
         await interaction.response.defer()
         ctx = SlashBreedingContext(interaction)
-        entry = "settings" if settings else (box_name or "")
+        entry = ""
+        if settings:
+            entry = "settings"
+        elif box_name:
+            entry = shlex.quote(box_name)
         await self.breeding_box_service.dispatch(ctx, "dc", entry)
 
     @app_commands.command(name="boxhelp", description="Show breeding box and daycare help")
