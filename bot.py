@@ -63,6 +63,20 @@ PREMIUM_CAPACITIES = {
     "gold": 300,
 }
 REGIONAL_PREFIXES = ("Alolan ", "Galarian ", "Hisuian ", "Paldean ")
+REGIONS = {
+    "Kanto": None,
+    "Johto": None,
+    "Hoenn": None,
+    "Sinnoh": None,
+    "Unova": None,
+    "Kalos": None,
+    "Alola": "Alolan ",
+    "Galar": "Galarian ",
+    "Hisui": "Hisuian ",
+    "Paldea": "Paldean ",
+    "Kitakami": None,
+    "Paradox": None,
+}
 TIMEZONE_PHASE_EMOJIS = {
     "day": "☀️",
     "night": "🌙",
@@ -114,6 +128,11 @@ COMMAND_CATALOG = (
         "General",
         "v!typeping",
         "Chooses Pokémon types to receive pings for (alias: v!tp).",
+    ),
+    (
+        "General",
+        "v!questping",
+        "Chooses regions to receive quest pings for (alias: v!qp).",
     ),
     (
         "Breeding Boxes & Daycare",
@@ -773,6 +792,107 @@ class TypePingView(discord.ui.View):
             logging.getLogger(__name__).exception("Could not save type-ping settings")
             await interaction.response.send_message(
                 "❌ I couldn't save your type-ping settings. Check the bot logs.",
+                ephemeral=True,
+            )
+            return
+
+        self.refresh_components()
+        await interaction.response.edit_message(
+            embed=self.build_embed(),
+            view=self,
+        )
+
+
+class QuestPingView(discord.ui.View):
+    """Choose which regions trigger quest pings."""
+
+    class RegionSelect(discord.ui.Select):
+        def __init__(self, owner: "QuestPingView"):
+            self.owner = owner
+            selected = owner.cog.quest_ping_regions(owner.user_id)
+            super().__init__(
+                placeholder="Select regions to receive quest pings...",
+                min_values=0,
+                max_values=len(REGIONS),
+                options=[
+                    discord.SelectOption(
+                        label=region,
+                        value=region,
+                        default=region in selected,
+                    )
+                    for region in REGIONS
+                ],
+            )
+
+        async def callback(self, interaction: discord.Interaction) -> None:
+            await self.owner.update_regions(interaction, self.values)
+
+    class ToggleButton(discord.ui.Button):
+        def __init__(self, owner: "QuestPingView", enabled: bool):
+            super().__init__(
+                label="All On" if enabled else "All Off",
+                style=discord.ButtonStyle.success
+                if enabled
+                else discord.ButtonStyle.danger,
+            )
+            self.owner = owner
+            self.enabled = enabled
+
+        async def callback(self, interaction: discord.Interaction) -> None:
+            regions = tuple(REGIONS.keys()) if self.enabled else ()
+            await self.owner.update_regions(interaction, regions)
+
+    def __init__(self, cog, user_id: int):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.user_id = user_id
+        self.refresh_components()
+
+    def build_embed(self) -> discord.Embed:
+        selected = set(self.cog.quest_ping_regions(self.user_id))
+        lines = [
+            f"{region} {'✅' if region in selected else '❌'}"
+            for region in REGIONS
+        ]
+        return discord.Embed(
+            title="Quest Pings",
+            description="\n".join(lines),
+            color=discord.Color.blurple(),
+        )
+
+    def refresh_components(self) -> None:
+        self.clear_items()
+        self.add_item(self.RegionSelect(self))
+        self.add_item(self.ToggleButton(self, enabled=True))
+        self.add_item(self.ToggleButton(self, enabled=False))
+
+    async def update_regions(
+        self,
+        interaction: discord.Interaction,
+        selected_regions: list[str] | tuple[str, ...],
+    ) -> None:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(
+                "Only the person who ran v!qp can change these settings.",
+                ephemeral=True,
+            )
+            return
+
+        quest_pings = self.cog.bot_state.setdefault("quest_pings", {})
+        user_key = str(self.user_id)
+        previous = quest_pings.get(user_key)
+        selected = sorted(set(selected_regions) & set(REGIONS.keys()))
+        quest_pings[user_key] = selected
+        try:
+            self.cog.save_bot_state()
+        except OSError:
+            if previous is None:
+                quest_pings.pop(user_key, None)
+            else:
+                quest_pings[user_key] = previous
+            logging.getLogger(__name__).exception("Could not save quest-ping settings")
+            await interaction.response.send_message(
+                "❌ I couldn't save your quest-ping settings. Check the bot logs.",
                 ephemeral=True,
             )
             return
@@ -1846,6 +1966,12 @@ class PokéTwoNamingBot(commands.Cog):
                         f"<@{user_id}>" for user_id in type_pingers
                     )
                     content.append(f"Type pings: {mentions}")
+                quest_pingers = self.quest_ping_owners(pokemon_name)
+                if quest_pingers:
+                    mentions = ", ".join(
+                        f"<@{user_id}>" for user_id in quest_pingers
+                    )
+                    content.append(f"Quest pings: {mentions}")
             if not is_missingno:
                 content.append(f"Click to Copy -> `{copy_command}`")
         elif not is_missingno:
@@ -1929,6 +2055,36 @@ class PokéTwoNamingBot(commands.Cog):
             and any(pokemon_type in selected for pokemon_type in pokemon_types)
             and self.pings_enabled(user_id, "typeping")
         ]
+
+    def quest_ping_regions(self, user_id: int) -> list[str]:
+        """Return the regions selected by one user for quest pings."""
+        selected = self.bot_state.get("quest_pings", {}).get(str(user_id), [])
+        if not isinstance(selected, list):
+            return []
+        return [region for region in REGIONS if region in selected]
+
+    def quest_ping_owners(self, pokemon_name: str) -> list[str]:
+        """Return users who selected regions for quest pings of this Pokémon."""
+        pokemon_regions = self._get_pokemon_regions(pokemon_name)
+        return [
+            user_id
+            for user_id, selected in self.bot_state.get("quest_pings", {}).items()
+            if isinstance(selected, list)
+            and any(region in selected for region in pokemon_regions)
+            and self.pings_enabled(user_id, "questping")
+        ]
+
+    def _get_pokemon_regions(self, pokemon_name: str) -> list[str]:
+        """Return which regions a Pokémon belongs to."""
+        regions = []
+        for region, prefix in REGIONS.items():
+            if prefix and pokemon_name.startswith(prefix):
+                regions.append(region)
+            elif not prefix and not any(
+                pokemon_name.startswith(p) for p in REGIONAL_PREFIXES
+            ):
+                regions.append(region)
+        return regions
 
     def reserve_user_ids(self, guild_id, pokemon_name: str) -> list[str]:
         """Return all reserving user IDs, accepting legacy single-ID values."""
@@ -4128,6 +4284,12 @@ class PokéTwoNamingBot(commands.Cog):
     async def type_ping_command(self, ctx):
         """Choose Pokémon types to receive pings for."""
         view = TypePingView(self, ctx.author.id)
+        await ctx.send(embed=view.build_embed(), view=view)
+
+    @commands.command(name="questping", aliases=["qp"])
+    async def quest_ping_command(self, ctx):
+        """Choose regions to receive quest pings for."""
+        view = QuestPingView(self, ctx.author.id)
         await ctx.send(embed=view.build_embed(), view=view)
 
     @commands.command(name="sr")
