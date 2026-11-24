@@ -1106,6 +1106,13 @@ class FFAReserveView(discord.ui.View):
     async def release(self, interaction: discord.Interaction, name: str):
         if not await self.interaction_check(interaction):
             return
+        message = interaction.message
+        if message is None:
+            await interaction.response.send_message(
+                "❌ The reserve message is unavailable. Run v!rafk again.",
+                ephemeral=True,
+            )
+            return
         if self.released is not None:
             await interaction.response.send_message(
                 "Run v!rafk again to release another Pokémon.", ephemeral=True
@@ -1124,7 +1131,7 @@ class FFAReserveView(discord.ui.View):
         reserves = self.cog.bot_state["reserves"][str(self.guild_id)]
         previous = reserves[chosen]
         releases = self.cog.bot_state.setdefault("ffa_releases", {})
-        message_id = str(interaction.message.id)
+        message_id = str(message.id)
         self.cog.remove_reserve_owner(self.guild_id, chosen, self.user_id)
         releases[message_id] = {
             "guild_id": self.guild_id, "guild_name": self.guild_name,
@@ -1168,6 +1175,13 @@ class FFAReserveView(discord.ui.View):
     async def announcement(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
+        origin_message = interaction.message
+        if origin_message is None:
+            await interaction.response.send_message(
+                "❌ The reserve message is unavailable. Check the original v!rafk message.",
+                ephemeral=True,
+            )
+            return
         if self.released is None:
             await interaction.response.send_message(
                 "❌ Release a reserve with FFA first.", ephemeral=True
@@ -1177,7 +1191,7 @@ class FFAReserveView(discord.ui.View):
         key = (self.guild_id, name)
         requests = self.cog.bot_state.setdefault("ffa_requests", {})
         releases = self.cog.bot_state.setdefault("ffa_releases", {})
-        if str(interaction.message.id) not in releases:
+        if str(origin_message.id) not in releases:
             await interaction.response.send_message(
                 "❌ An announcement has already been requested for this release.",
                 ephemeral=True,
@@ -1246,7 +1260,7 @@ class FFAReserveView(discord.ui.View):
                 raise
             button.disabled = True
             try:
-                await interaction.message.edit(embed=self.build_embed(), view=self)
+                await origin_message.edit(embed=self.build_embed(), view=self)
             except discord.HTTPException:
                 logging.getLogger(__name__).exception("Could not update FFA request controls")
             self.stop()
@@ -1297,10 +1311,17 @@ class FFAReviewView(discord.ui.View):
                 ephemeral=True,
             )
             return
+        message = interaction.message
+        if message is None:
+            await interaction.response.send_message(
+                "❌ The review message is unavailable. Please use the original review message.",
+                ephemeral=True,
+            )
+            return
         await interaction.response.defer(ephemeral=True)
         async with self.lock:
             request = self.cog.bot_state.get("ffa_requests", {}).get(
-                str(interaction.message.id)
+                str(message.id)
             )
             if request is None or request["status"] != "pending":
                 await interaction.followup.send(
@@ -1317,6 +1338,7 @@ class FFAReviewView(discord.ui.View):
                     ephemeral=True,
                 )
                 return
+            channel = None
             if approve:
                 try:
                     channel = self.cog.bot.get_channel(FFA_ANNOUNCEMENT_CHANNEL_ID)
@@ -1328,6 +1350,13 @@ class FFAReviewView(discord.ui.View):
                     discord.DiscordException, aiohttp.ClientError, OSError, asyncio.TimeoutError
                 ):
                     logging.getLogger(__name__).exception("Could not find FFA announcement channel")
+                    await interaction.followup.send(
+                        "❌ Could not access the announcement channel. Please retry.",
+                        ephemeral=True,
+                    )
+                    return
+                if channel is None:
+                    logging.getLogger(__name__).error("FFA announcement channel was not found")
                     await interaction.followup.send(
                         "❌ Could not access the announcement channel. Please retry.",
                         ephemeral=True,
@@ -1349,7 +1378,7 @@ class FFAReviewView(discord.ui.View):
                     "❌ Could not save the review decision. Please retry.", ephemeral=True
                 )
                 return
-            if approve:
+            if approve and channel is not None:
                 try:
                     await channel.send(
                         f"<@&{FFA_ROLE_ID}> {discord.utils.escape_markdown(request['pokemon'])} "
@@ -1389,8 +1418,8 @@ class FFAReviewView(discord.ui.View):
                     child.disabled = True
             result = "Approved and announced" if approve else "Denied"
             try:
-                await interaction.message.edit(
-                    content=f"{interaction.message.content}\n\n{result} by `{interaction.user.id}`.",
+                await message.edit(
+                    content=f"{message.content}\n\n{result} by `{interaction.user.id}`.",
                     view=self,
                     allowed_mentions=discord.AllowedMentions.none(),
                 )

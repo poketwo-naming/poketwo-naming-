@@ -124,6 +124,48 @@ class ReserveFFATests(unittest.IsolatedAsyncioTestCase):
         await view.ffa.callback(self.interaction())
         self.assertEqual(self.cog.reserve_user_ids(123, "Pikachu"), [])
 
+    async def test_missing_interaction_message_does_not_release_or_request(self):
+        view = await self.open_view()
+        interaction = self.interaction()
+        interaction.message = None
+        await view.release(interaction, "Pikachu")
+        self.assertEqual(self.cog.reserve_user_ids(123, "Pikachu"), ["456"])
+        self.cog.save_bot_state.assert_not_called()
+        self.assertIn("message", interaction.response.send_message.await_args.args[0])
+
+        await view.release(self.interaction(), "Pikachu")
+        interaction = self.interaction()
+        interaction.message = None
+        await view.announcement.callback(interaction)
+        self.review_channel.send.assert_not_awaited()
+        self.assertIn("message", interaction.response.send_message.await_args.args[0])
+
+    async def test_missing_review_message_does_not_decide_or_announce(self):
+        await self.request_pikachu()
+        view = self.review_channel.send.await_args.kwargs["view"]
+        for button in (view.approve, view.deny):
+            with self.subTest(button=button.label):
+                reviewer = self.reviewer()
+                reviewer.message = None
+                await button.callback(reviewer)
+                self.assertEqual(
+                    self.cog.bot_state["ffa_requests"]["100"]["status"], "pending"
+                )
+                self.announce_channel.send.assert_not_awaited()
+                self.assertIn("message", reviewer.response.send_message.await_args.args[0])
+
+    async def test_missing_announcement_channel_keeps_review_pending(self):
+        await self.request_pikachu()
+        view = self.review_channel.send.await_args.kwargs["view"]
+        reviewer = self.reviewer()
+        self.cog.bot.get_channel = Mock(return_value=None)
+        self.cog.bot.fetch_channel = AsyncMock(return_value=None)
+        with self.assertLogs("bot", level="ERROR"):
+            await view.approve.callback(reviewer)
+        self.assertEqual(self.cog.bot_state["ffa_requests"]["100"]["status"], "pending")
+        self.announce_channel.send.assert_not_awaited()
+        self.assertIn("announcement channel", reviewer.followup.send.await_args.args[0])
+
     async def test_other_reserver_blocks_request_but_not_own_release(self):
         view = await self.open_view()
         await view.release(self.interaction(), "Eevee")
