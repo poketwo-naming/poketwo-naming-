@@ -9,18 +9,16 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**📋 Comprehensive Daycare Settings Menu**\n\n"
-    "Use `v!dc menu` to access a powerful new settings menu with 25+ toggles and options:\n\n"
-    "**Output Format** — Choose mobile+pc (both), mobile only, or pc only copy-paste format\n"
-    "**Show Details** — Toggle to see/hide paired Pokémon, genders, and egg moves\n"
-    "**Show Remaining** — Display how many compatible pairs are left in the box\n"
-    "**Add Options** — Quickly add flags to commands: `-y`, `-xb`, `-y -xb`, or none\n"
-    "**Pairing Mode** — Best IV, High Compact, or IV Coverage\n"
-    "**IV Direction** — Pair highest or lowest IVs together\n"
-    "**Pair Count** — Show 1–4 pairs at a time (default depends on setting)\n"
-    "**Shinies** — Allow or block shiny Pokémon from pairing\n\n"
-    "`v!dc <box>` returns **1 pair** with a **Put Back** button to remove used pairs from the box\n"
-    "`/dc box=<box> count=<count>` slash command for quick pair retrieval without opening the menu"
+    "**🎛️ Dynamic Button Labels in Settings Menu**\n\n"
+    "All buttons in `v!dc menu` now display their **current setting** as the label:\n\n"
+    "• **Output** — Shows current setting: Both, Mobile, PC, or None\n"
+    "• **Details** — Shows: On or Off\n"
+    "• **Remaining** — Shows: On or Off\n"
+    "• **Add Options** — Shows: None, Confirm, XP Blocker, or Both\n"
+    "• **Pairing Mode** — Shows: Best IV, High Compact, or IV Coverage\n"
+    "• **IV Direction** — Shows: Highest IV or Lowest IV\n"
+    "• **Shinies** — Shows: Allow or Block\n\n"
+    "Every button updates its label instantly when you click it, making it crystal clear what each setting is currently enabled."
 )
 
 
