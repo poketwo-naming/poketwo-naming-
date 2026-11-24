@@ -634,6 +634,18 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
             [],
         )
 
+    async def test_slash_box_autocomplete_handles_storage_errors(self):
+        self.cog.breeding_box_service.user_boxes = Mock(
+            side_effect=RuntimeError("state unavailable")
+        )
+        interaction = SimpleNamespace(guild=self.ctx.guild, user=self.ctx.author)
+
+        choices = await PokéTwoNamingBot.daycare_box_autocomplete(
+            self.cog, interaction, ""
+        )
+
+        self.assertEqual(choices, [])
+
     async def test_slash_daycare_treats_settings_as_a_box_name(self):
         self.service.user_boxes(123, 456)["settings"] = {"items": []}
         interaction = SimpleNamespace(

@@ -548,10 +548,13 @@ class BreedingBoxService:
                         if user_boxes[box_name] == box:
                             continue
                         base_name = f"{box_name} (Server {guild_id})"
-                        migrated_name = base_name
+                        migrated_name = base_name[:100]
                         suffix = 2
                         while migrated_name in user_boxes:
-                            migrated_name = f"{base_name} {suffix}"
+                            suffix_text = f" {suffix}"
+                            migrated_name = (
+                                f"{base_name[:100 - len(suffix_text)]}{suffix_text}"
+                            )
                             suffix += 1
                         user_boxes[migrated_name] = box
 

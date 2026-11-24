@@ -6015,15 +6015,32 @@ class PokéTwoNamingBot(commands.Cog):
     async def daycare_box_autocomplete(
         self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
-        guild_id = interaction.guild.id if interaction.guild is not None else 0
-        boxes = self.breeding_box_service.user_boxes(
-            guild_id, interaction.user.id
-        )
-        return [
-            app_commands.Choice(name=name, value=str(index) if name.isdigit() else name)
-            for index, name in enumerate(boxes, start=1)
-            if current.casefold() in name.casefold()
-        ][:25]
+        try:
+            guild_id = interaction.guild.id if interaction.guild is not None else 0
+            boxes = self.breeding_box_service.user_boxes(
+                guild_id, interaction.user.id
+            )
+            choices = []
+            query = str(current).casefold()
+            for index, box_name in enumerate(boxes, start=1):
+                name = str(box_name)
+                if query not in name.casefold():
+                    continue
+                choices.append(
+                    app_commands.Choice(
+                        name=name[:100],
+                        value=str(index) if name.isdigit() else name[:100],
+                    )
+                )
+                if len(choices) == 25:
+                    break
+            return choices
+        except Exception as error:
+            print(
+                "Could not load global daycare box autocomplete "
+                f"for user {getattr(interaction.user, 'id', 'unknown')}: {error}"
+            )
+            return []
 
     @app_commands.command(name="dc", description="Find compatible daycare pairs")
     @app_commands.allowed_installs(guilds=True, users=True)

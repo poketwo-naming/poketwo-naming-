@@ -14,7 +14,8 @@ UPDATE_ANNOUNCEMENT = (
     "server. `/dc` can use your saved boxes in any server, including servers where "
     "the app is installed only for you. Existing boxes and daycare settings are "
     "automatically carried over, and conflicting box names from different servers "
-    "are kept under unique names."
+    "are kept under unique names. The box picker now stays usable even if saved "
+    "data has an invalid or unusually long name."
 )
 
 
