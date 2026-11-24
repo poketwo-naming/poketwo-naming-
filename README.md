@@ -8,6 +8,7 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 - **Type Icons** - Prefix each prediction with its primary and secondary type emojis
 - **Type Pings** - Choose Pokémon types to get pinged for, including dual-type spawns
 - **Best Names** - Show the shortest localized name, romanized for nicknames
+- **Catch Starboards** - Post rare/regional, shiny, and Gigantamax or extreme-IV catches
 - **Bot Status** - Check if the bot is online
 
 When Vivillon joins a server, it posts a naming introduction and the optional
@@ -21,6 +22,19 @@ send messages, and embed links to post the introduction.
 ## Commands
 
 Every `v!` command also works with a capital `V!` prefix.
+
+Use `v!settings` → **Starboard** to select separate channels for the main
+(listed rare and regional Pokémon), shiny, and Vivillon (Gigantamax, IV below
+10%, or IV above 90%) boards. Clear a channel selection to disable that board.
+Changing these channels requires Manage Server. Catches can appear on multiple
+boards, and Gigantamax and extreme-IV matches each receive their own post.
+Posts link to the original catch. Chain values are shown when present in the
+catch message; missing spawn rates (including Gigantamax rates not in the
+dataset) are labelled unknown. The shiny board
+increments the trailing number in its channel name after every shiny post,
+respecting a higher manually set number. The bot needs View Channel, Send
+Messages, Embed Links and, for the counter, Manage Channels. Discord rate limits
+channel renames; errors are logged.
 
 | Command | Usage | Description |
 |---------|-------|-------------|

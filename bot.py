@@ -28,6 +28,7 @@ from PIL import Image, UnidentifiedImageError
 
 from breeding_boxes import BreedingBoxService
 from pokemon_recognition import PokemonImageRecognizer
+from starboard import StarboardService, StarboardSettingsView
 from tools.build_pokemon_types import (
     CUSTOM_SPRITE_IDENTIFIERS,
     normalize as normalize_pokemon_alias,
@@ -1353,7 +1354,7 @@ class ServerSettingsView(discord.ui.LayoutView):
             "Configure ping roles and rare, regional, hunt, collection, "
             "reserve, and quest output.",
         ),
-        ("Starboard", "Configure the main starboard and the separate shinyboard system."),
+        ("Starboard", "Configure the main, shiny, and Vivillon starboards."),
         ("Modules", "Control server-level Profile Tracking and Analytics data collection."),
         ("Appearance", "Set the bot's server profile, banner, and embed color."),
     )
@@ -1388,6 +1389,8 @@ class ServerSettingsView(discord.ui.LayoutView):
             button = discord.ui.Button(label="Open", style=discord.ButtonStyle.primary)
             if name == "Naming" and cog is not None and guild_id is not None:
                 button.callback = self.open_naming_settings
+            elif name == "Starboard" and cog is not None and guild_id is not None:
+                button.callback = self.open_starboard_settings
             else:
                 button.callback = self.placeholder
             container.add_item(
@@ -1420,6 +1423,22 @@ class ServerSettingsView(discord.ui.LayoutView):
             return
         view = NamingSettingsView(self.cog, interaction.user.id, self.guild_id)
         await interaction.response.edit_message(view=view)
+
+    async def open_starboard_settings(self, interaction: discord.Interaction):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(
+                "Only the person who ran v!settings can open these settings.",
+                ephemeral=True,
+            )
+            return
+        if self.cog is None or self.guild_id is None:
+            await interaction.response.send_message(
+                "These settings can only be opened in a server.", ephemeral=True
+            )
+            return
+        await interaction.response.edit_message(
+            view=StarboardSettingsView(self.cog, self.user_id, self.guild_id)
+        )
 
     async def placeholder(self, interaction: discord.Interaction):
         await interaction.response.defer()
@@ -1980,6 +1999,7 @@ class PokéTwoNamingBot(commands.Cog):
         self.pokemon_species = self.load_pokemon_species()
         self.reviewed_spawn_count = self.load_collected_training_count()
         self.bot_state = self.load_bot_state()
+        self.starboard_service = StarboardService(self)
         self.readyup_views = {}
         self.breeding_box_service = BreedingBoxService(self, POKETWO_BOT_ID)
         self.seed_restricted_roles()
@@ -3483,6 +3503,10 @@ class PokéTwoNamingBot(commands.Cog):
         if message.author.id == POKETWO_BOT_ID:
             self.track_incense(message)
             await self.maybe_pause_after_incense_purchase(message)
+            if message.guild and self.bot_state.get("guild_settings", {}).get(
+                str(message.guild.id), {}
+            ).get("starboard"):
+                await self.starboard_service.handle(message)
             if message.guild and self.premium_tier(message.guild.id) is None:
                 return
             if self.is_spawn_message(message) and self.channel_within_incense_capacity(
@@ -3505,6 +3529,10 @@ class PokéTwoNamingBot(commands.Cog):
         if after.author.id == POKETWO_BOT_ID:
             self.track_incense(after)
             await self.maybe_pause_after_incense_purchase(after)
+            if after.guild and self.bot_state.get("guild_settings", {}).get(
+                str(after.guild.id), {}
+            ).get("starboard"):
+                await self.starboard_service.handle(after)
 
     @staticmethod
     def is_incense_purchase_confirmation(message) -> bool:
