@@ -22,6 +22,10 @@ send messages, and embed links to post the introduction.
 ## Commands
 
 Every `v!` command also works with a capital `V!` prefix.
+The `/tp` and `/qp` slash commands share selections with their `v!`
+counterparts. Their `add` and `remove` options accept space-separated names;
+you can use both together as long as a name isn't in both options. With no
+options, the slash commands open a private settings menu.
 
 Use `v!settings` → **Starboard** to select separate channels for the main
 (listed rare and regional Pokémon, Partner Eevee, and Partner Pikachu), shiny, and Vivillon (Gigantamax, IV below
@@ -43,6 +47,8 @@ channel renames; errors are logged.
 | `v!ping` | `v!ping` | Check bot status and latency |
 | `v!tp` / `v!typeping` | `v!tp`, `v!tp water fire`, or `v!tp remove water fire` | Open the type-ping menu, enable types, or remove types |
 | `v!qp` / `v!questping` | `v!qp`, `v!qp kanto johto`, or `v!qp remove kanto johto` | Open the quest-ping menu, enable regions, or remove regions |
+| `/tp` | `/tp add:water fire` or `/tp remove:water fire` | Add or remove type pings using the slash command's options |
+| `/qp` | `/qp add:kanto johto` or `/qp remove:kanto johto` | Add or remove quest-ping regions using the slash command's options |
 | `v!support` | `v!support` | Show the optional GoFundMe support link |
 | `v!tz <day\|night\|dawn\|dusk>` | `v!tz night` | Find one place in that local-time phase and get a Pokétwo timezone command |
 | `v!sr <pokemon>` | `v!sr Pikachu` | Show a Pokémon's spawn rate and artwork |

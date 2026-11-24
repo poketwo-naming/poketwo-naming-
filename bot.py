@@ -129,12 +129,12 @@ COMMAND_CATALOG = (
     (
         "General",
         "v!typeping",
-        "Chooses Pokémon types for pings; add with v!tp water fire or remove with v!tp remove water fire.",
+        "Manage type pings with v!tp water fire, v!tp remove water fire, or /tp add/remove.",
     ),
     (
         "General",
         "v!questping",
-        "Chooses quest-ping regions; add with v!qp kanto johto or remove with v!qp remove kanto johto.",
+        "Manage quest pings with v!qp kanto johto, v!qp remove kanto johto, or /qp add/remove.",
     ),
     (
         "Breeding Boxes & Daycare",
@@ -789,7 +789,7 @@ class TypePingView(discord.ui.View):
     ) -> None:
         if interaction.user.id != self.user_id:
             await interaction.response.send_message(
-                "Only the person who ran v!tp can change these settings.",
+                "Only the person who opened these type-ping settings can change them.",
                 ephemeral=True,
             )
             return
@@ -882,7 +882,7 @@ class QuestPingView(discord.ui.View):
     ) -> None:
         if interaction.user.id != self.user_id:
             await interaction.response.send_message(
-                "Only the person who ran v!qp can change these settings.",
+                "Only the person who opened these quest-ping settings can change them.",
                 ephemeral=True,
             )
             return
@@ -4586,59 +4586,126 @@ class PokéTwoNamingBot(commands.Cog):
         """Check if the bot is responsive"""
         await ctx.send(f"Pong! {self.bot.latency * 1000:.2f}ms")
 
-    async def update_ping_selections(
-        self, ctx, names, valid_names, current, state_key, label
-    ) -> bool:
-        if not names:
-            return True
-        remove = names[0].casefold() == "remove"
-        if remove:
-            names = names[1:]
-            if not names:
-                await ctx.send(f"❌ Specify at least one {label} option to remove.")
-                return False
+    def update_ping_selections(
+        self, user_id, add_names, remove_names, valid_names, current, state_key, label
+    ) -> str | None:
+        if not add_names and not remove_names:
+            return None
         lookup = {name.casefold(): name for name in valid_names}
-        invalid = [name for name in names if name.casefold() not in lookup]
+        invalid = [
+            name for name in (*add_names, *remove_names)
+            if name.casefold() not in lookup
+        ]
         if invalid:
-            await ctx.send(
+            return (
                 f"❌ Unknown {label}: {discord.utils.escape_mentions(', '.join(invalid))}. "
                 f"Valid options: {', '.join(valid_names)}."
             )
-            return False
-        requested = {lookup[name.casefold()] for name in names}
-        selected = (
-            [name for name in current if name not in requested]
-            if remove else current + list(requested)
-        )
+        added = {lookup[name.casefold()] for name in add_names}
+        removed = {lookup[name.casefold()] for name in remove_names}
+        if added & removed:
+            return "❌ You cannot add and remove the same option at once."
+        selected = [name for name in current if name not in removed] + list(added)
         try:
-            save_ping_selection(self, state_key, ctx.author.id, selected)
+            save_ping_selection(self, state_key, user_id, selected)
         except OSError:
             logging.getLogger(__name__).exception("Could not save %s settings", label)
-            await ctx.send(f"❌ I couldn't save your {label} settings. Check the bot logs.")
-            return False
-        return True
+            return f"❌ I couldn't save your {label} settings. Check the bot logs."
+        return None
+
+    async def prefix_ping_command(
+        self, ctx, names, valid_names, current, state_key, label, view_type
+    ):
+        remove = bool(names) and names[0].casefold() == "remove"
+        if remove and len(names) == 1:
+            await ctx.send(f"❌ Specify at least one {label} option to remove.")
+            return
+        error = self.update_ping_selections(
+            ctx.author.id, () if remove else names, names[1:] if remove else (),
+            valid_names, current, state_key, label,
+        )
+        if error:
+            await ctx.send(error)
+            return
+        view = view_type(self, ctx.author.id)
+        await ctx.send(embed=view.build_embed(), view=view)
 
     @commands.command(name="typeping", aliases=["tp"])
     async def type_ping_command(self, ctx, *types: str):
         """Choose Pokémon types to receive pings for."""
-        if not await self.update_ping_selections(
+        await self.prefix_ping_command(
             ctx, types, TYPE_NAMES, self.type_ping_types(ctx.author.id),
-            "type_pings", "type-ping",
-        ):
-            return
-        view = TypePingView(self, ctx.author.id)
-        await ctx.send(embed=view.build_embed(), view=view)
+            "type_pings", "type-ping", TypePingView,
+        )
 
     @commands.command(name="questping", aliases=["qp"])
     async def quest_ping_command(self, ctx, *regions: str):
         """Choose regions to receive quest pings for."""
-        if not await self.update_ping_selections(
+        await self.prefix_ping_command(
             ctx, regions, REGIONS, self.quest_ping_regions(ctx.author.id),
-            "quest_pings", "quest-ping",
-        ):
+            "quest_pings", "quest-ping", QuestPingView,
+        )
+
+    async def slash_ping_command(
+        self, interaction, add, remove, valid_names, current, state_key, label, view_type
+    ):
+        for action, value in (("add", add), ("remove", remove)):
+            if value is not None and not value.strip():
+                await interaction.response.send_message(
+                    f"❌ Specify at least one {label} option to {action}.",
+                    ephemeral=True,
+                )
+                return
+        error = self.update_ping_selections(
+            interaction.user.id, add.split() if add is not None else (),
+            remove.split() if remove is not None else (),
+            valid_names, current, state_key, label,
+        )
+        if error:
+            await interaction.response.send_message(error, ephemeral=True)
             return
-        view = QuestPingView(self, ctx.author.id)
-        await ctx.send(embed=view.build_embed(), view=view)
+        view = view_type(self, interaction.user.id)
+        await interaction.response.send_message(
+            embed=view.build_embed(), view=view, ephemeral=True,
+        )
+
+    @app_commands.command(name="tp", description="Manage Pokémon type pings")
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    @app_commands.describe(
+        add="Types to add, separated by spaces",
+        remove="Types to remove, separated by spaces",
+    )
+    async def slash_type_ping(
+        self,
+        interaction: discord.Interaction,
+        add: str | None = None,
+        remove: str | None = None,
+    ):
+        await self.slash_ping_command(
+            interaction, add, remove, TYPE_NAMES,
+            self.type_ping_types(interaction.user.id),
+            "type_pings", "type-ping", TypePingView,
+        )
+
+    @app_commands.command(name="qp", description="Manage quest-ping regions")
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    @app_commands.describe(
+        add="Regions to add, separated by spaces",
+        remove="Regions to remove, separated by spaces",
+    )
+    async def slash_quest_ping(
+        self,
+        interaction: discord.Interaction,
+        add: str | None = None,
+        remove: str | None = None,
+    ):
+        await self.slash_ping_command(
+            interaction, add, remove, REGIONS,
+            self.quest_ping_regions(interaction.user.id),
+            "quest_pings", "quest-ping", QuestPingView,
+        )
 
     @commands.command(name="sr")
     async def spawn_rate_command(self, ctx, *, pokemon_name: str = ""):
