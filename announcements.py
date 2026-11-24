@@ -9,13 +9,11 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**🌐 Breeding Boxes Now Work Everywhere**\n\n"
-    "Breeding boxes are now tied to your Discord account instead of a single "
-    "server. `/dc` can use your saved boxes in any server, including servers where "
-    "the app is installed only for you. Existing boxes and daycare settings are "
-    "automatically carried over, and conflicting box names from different servers "
-    "are kept under unique names. The box picker now stays usable even if saved "
-    "data has an invalid or unusually long name."
+    "**⚡ Faster Spawn Naming**\n\n"
+    "Pokémon names and catch commands now post in a lightweight message without "
+    "waiting for Discord to process the full card. The embed and Pokémon thumbnail "
+    "are added just after the prediction, so naming stays responsive while keeping "
+    "the same prediction and ping details."
 )
 
 

@@ -37,6 +37,7 @@ class SpawnThumbnailTests(unittest.IsolatedAsyncioTestCase):
         self.cog.image_download_times = deque(maxlen=100)
         self.cog.message_send_times = deque(maxlen=100)
         self.cog.spawn_metrics = deque(maxlen=100)
+        self.cog.spawn_preview_tasks = set()
         self.cog.spawn_prediction_cache = OrderedDict()
         self.cog.recognized_spawn_count = 0
         self.channel = SimpleNamespace(id=1, send=AsyncMock())
@@ -60,11 +61,15 @@ class SpawnThumbnailTests(unittest.IsolatedAsyncioTestCase):
 
                 self.channel.send.assert_awaited_once()
                 sent = self.channel.send.await_args.kwargs
+                self.assertNotIn("embed", sent)
+                await asyncio.sleep(0)
+                response_message = self.channel.send.return_value
+                edited = response_message.edit.await_args.kwargs
                 self.assertEqual(
-                    sent["embed"].thumbnail.url,
+                    edited["embed"].thumbnail.url,
                     "attachment://pokemon.webp",
                 )
-                self.assertEqual(sent["file"].filename, "pokemon.webp")
+                self.assertEqual(edited["attachments"][0].filename, "pokemon.webp")
 
     async def test_custom_variant_reuses_spawn_url_without_uploading_file(self):
         self.message.attachments = []
@@ -80,8 +85,11 @@ class SpawnThumbnailTests(unittest.IsolatedAsyncioTestCase):
             await self.cog.handle_poketwo_spawn(self.message)
 
         sent = self.channel.send.await_args.kwargs
+        self.assertNotIn("embed", sent)
+        await asyncio.sleep(0)
+        edited = self.channel.send.return_value.edit.await_args.kwargs
         self.assertEqual(
-            sent["embed"].thumbnail.url,
+            edited["embed"].thumbnail.url,
             "https://cdn.example/spawn.png",
         )
         self.assertNotIn("file", sent)
@@ -93,8 +101,11 @@ class SpawnThumbnailTests(unittest.IsolatedAsyncioTestCase):
             await self.cog.handle_poketwo_spawn(self.message)
 
         sent = self.channel.send.await_args.kwargs
+        self.assertNotIn("embed", sent)
+        await asyncio.sleep(0)
+        edited = self.channel.send.return_value.edit.await_args.kwargs
         self.assertEqual(
-            sent["embed"].thumbnail.url,
+            edited["embed"].thumbnail.url,
             (
                 "https://raw.githubusercontent.com/"
                 "poketwo-naming/poketwo-naming-/main/"
@@ -110,12 +121,35 @@ class SpawnThumbnailTests(unittest.IsolatedAsyncioTestCase):
             await self.cog.handle_poketwo_spawn(self.message)
 
         sent = self.channel.send.await_args.kwargs
-        self.assertIn("/25.png", sent["embed"].thumbnail.url)
+        self.assertNotIn("embed", sent)
+        await asyncio.sleep(0)
+        edited = self.channel.send.return_value.edit.await_args.kwargs
+        self.assertIn("/25.png", edited["embed"].thumbnail.url)
         self.assertEqual(list(self.cog.image_download_times), [0.01])
         self.assertEqual(len(self.cog.message_send_times), 1)
         assert self.cog.last_spawn_metrics is not None
         self.assertEqual(self.cog.last_spawn_metrics["send"], self.cog.message_send_times[0])
         self.assertEqual(list(self.cog.spawn_metrics), [self.cog.last_spawn_metrics])
+
+    async def test_thumbnail_edit_does_not_delay_spawn_response(self):
+        self.recognize.return_value = ("Pikachu", 99.0, 0.02)
+        self.cog.pokemon_sprite_ids["Pikachu"] = 25
+        edit_started = asyncio.Event()
+        allow_edit = asyncio.Event()
+
+        async def delayed_edit(**_kwargs):
+            edit_started.set()
+            await allow_edit.wait()
+
+        self.channel.send.return_value.edit.side_effect = delayed_edit
+
+        with patch("bot.os.path.isfile", return_value=False):
+            await asyncio.wait_for(self.cog.handle_poketwo_spawn(self.message), 0.2)
+
+        self.channel.send.assert_awaited_once()
+        await asyncio.wait_for(edit_started.wait(), 0.2)
+        allow_edit.set()
+        await asyncio.gather(*self.cog.spawn_preview_tasks)
 
     async def test_spawn_image_download_uses_discord_cached_media_url(self):
         attachment = SimpleNamespace(

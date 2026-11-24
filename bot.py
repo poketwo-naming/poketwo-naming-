@@ -1965,6 +1965,7 @@ class PokéTwoNamingBot(commands.Cog):
         self.image_download_times = deque(maxlen=100)
         self.message_send_times = deque(maxlen=100)
         self.spawn_metrics = deque(maxlen=100)
+        self.spawn_preview_tasks: set[asyncio.Task[None]] = set()
         self.spawn_prediction_cache: OrderedDict[bytes, tuple[str, float]] = OrderedDict()
         self.store_times = deque(maxlen=100)
         self.last_spawn_metrics = None
@@ -2433,6 +2434,10 @@ class PokéTwoNamingBot(commands.Cog):
 
     async def cog_unload(self):
         """Close shared resources."""
+        for task in self.spawn_preview_tasks:
+            task.cancel()
+        if self.spawn_preview_tasks:
+            await asyncio.gather(*self.spawn_preview_tasks, return_exceptions=True)
         if self.http_session is not None:
             await self.http_session.close()
 
@@ -3598,6 +3603,9 @@ class PokéTwoNamingBot(commands.Cog):
             if message.guild
             else []
         )
+        thumbnail_url = None
+        thumbnail_file = None
+        defer_prediction_preview = False
         if (
             message.channel.id == TRAINING_REVIEW_CHANNEL_ID
             and confidence < REVIEW_CONFIDENCE_THRESHOLD
@@ -3667,6 +3675,7 @@ class PokéTwoNamingBot(commands.Cog):
                 "view": SpawnReviewView(self, pokemon_name, image_data),
             }
         else:
+            defer_prediction_preview = True
             content, embed = self.format_spawn_prediction(
                 pokemon_name,
                 confidence,
@@ -3679,19 +3688,12 @@ class PokéTwoNamingBot(commands.Cog):
             )
             if os.path.isfile(custom_sprite_path):
                 sprite_filename = quote(f"{pokemon_name}.png")
-                embed.set_thumbnail(
-                    url=f"{CUSTOM_SPRITE_BASE_URL}/{sprite_filename}",
+                thumbnail_url = (
+                    f"{CUSTOM_SPRITE_BASE_URL}/{sprite_filename}"
                 )
-                send_kwargs = {
-                    "content": content,
-                    "embed": embed,
-                }
             elif pokemon_name in CUSTOM_SPRITE_IDENTIFIERS:
-                spawn_image_url = self.spawn_image_url(message)
-                if spawn_image_url is not None:
-                    embed.set_thumbnail(url=spawn_image_url)
-                    send_kwargs = {"content": content, "embed": embed}
-                else:
+                thumbnail_url = self.spawn_image_url(message)
+                if thumbnail_url is None:
                     thumbnail_buffer = BytesIO()
                     with Image.open(BytesIO(image_data)) as image:
                         image.convert("RGB").save(
@@ -3700,30 +3702,39 @@ class PokéTwoNamingBot(commands.Cog):
                             quality=85,
                         )
                     thumbnail_buffer.seek(0)
-                    embed.set_thumbnail(url="attachment://pokemon.webp")
-                    send_kwargs = {
-                        "content": content,
-                        "embed": embed,
-                        "file": discord.File(
-                            thumbnail_buffer,
-                            filename="pokemon.webp",
-                        ),
-                    }
+                    thumbnail_file = discord.File(
+                        thumbnail_buffer,
+                        filename="pokemon.webp",
+                    )
             else:
                 sprite_id = self.pokemon_sprite_ids.get(pokemon_name)
                 if sprite_id is not None:
-                    embed.set_thumbnail(
-                        url=(
-                            "https://raw.githubusercontent.com/PokeAPI/sprites/master/"
-                            "sprites/pokemon/other/official-artwork/"
-                            f"{sprite_id}.png"
-                        )
+                    thumbnail_url = (
+                        "https://raw.githubusercontent.com/PokeAPI/sprites/master/"
+                        "sprites/pokemon/other/official-artwork/"
+                        f"{sprite_id}.png"
                     )
-                send_kwargs = {"content": content, "embed": embed}
+            send_kwargs = {"content": content}
 
         send_started = perf_counter()
-        await message.channel.send(**send_kwargs)
+        response_message = await message.channel.send(**send_kwargs)
         send_seconds = perf_counter() - send_started
+        if defer_prediction_preview:
+            preview_embed = embed.copy()
+            if thumbnail_url is not None or thumbnail_file is not None:
+                preview_embed.set_thumbnail(
+                    url=thumbnail_url or "attachment://pokemon.webp"
+                )
+            task = asyncio.create_task(
+                self.update_spawn_preview(
+                    response_message,
+                    preview_embed,
+                    thumbnail_file,
+                )
+            )
+            self.spawn_preview_tasks.add(task)
+            task.add_done_callback(self.spawn_preview_tasks.discard)
+            task.add_done_callback(self.report_spawn_preview_error)
 
         if pokemon_name.casefold() == "missingno":
             staff_mention = f"<@&{MISSINGNO_ALERT_ROLE_ID}>"
@@ -3749,6 +3760,30 @@ class PokéTwoNamingBot(commands.Cog):
         }
         self.spawn_metrics.append(self.last_spawn_metrics)
         self.recognized_spawn_count += 1
+
+    @staticmethod
+    def report_spawn_preview_error(task: asyncio.Task[None]) -> None:
+        """Report unexpected failures from deferred preview updates."""
+        if task.cancelled():
+            return
+        error = task.exception()
+        if error is not None:
+            print(f"Could not update spawn prediction preview: {error}")
+
+    @staticmethod
+    async def update_spawn_preview(
+        message,
+        embed: discord.Embed,
+        thumbnail_file: discord.File | None,
+    ) -> None:
+        """Add the full preview after the naming response has been posted."""
+        try:
+            if thumbnail_file is None:
+                await message.edit(embed=embed)
+            else:
+                await message.edit(embed=embed, attachments=[thumbnail_file])
+        except discord.HTTPException as error:
+            print(f"Could not update spawn prediction preview: {error}")
 
     async def recognize_cached_spawn_image(
         self, image_data: bytes
