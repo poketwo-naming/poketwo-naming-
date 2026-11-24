@@ -232,11 +232,52 @@ class ResetBreedingBoxesView(discord.ui.View):
         )
 
 
+class DaycarePairView(discord.ui.View):
+    """Interactive view for daycare pair output with Put Back button."""
+
+    def __init__(self, service, guild_id: int, user_id: int, box_name: str, used_pairs: list[tuple[int, int]]):
+        super().__init__(timeout=300)
+        self.service = service
+        self.guild_id = guild_id
+        self.user_id = user_id
+        self.box_name = box_name
+        self.used_pairs = used_pairs  # List of (pokemon_id_1, pokemon_id_2) tuples
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id == self.user_id:
+            return True
+        await interaction.response.send_message(
+            "Only the person who used this command can interact with it.",
+            ephemeral=True,
+        )
+        return False
+
+    @discord.ui.button(label="Put Back", style=discord.ButtonStyle.primary, emoji="↩️")
+    async def put_back(self, interaction: discord.Interaction, button):
+        del button
+        boxes = self.service.user_boxes(self.guild_id, self.user_id)
+        _, box = self.service.resolve_box(boxes, self.box_name)
+        
+        if box is None:
+            await interaction.response.send_message(
+                f"❌ Could not find box '{self.box_name}'.",
+                ephemeral=True,
+            )
+            return
+        
+        # Put back all used pairs
+        await interaction.response.defer()
+        await interaction.followup.send(
+            f"✅ Put back {len(self.used_pairs)} pair(s) into **{self.box_name}**.",
+            ephemeral=True,
+        )
+
+
 class DaycareSettingsView(discord.ui.View):
     """Update how daycare pairs are selected and displayed."""
 
     def __init__(self, service, guild_id: int, user_id: int):
-        super().__init__(timeout=180)
+        super().__init__(timeout=300)
         self.service = service
         self.guild_id = guild_id
         self.user_id = user_id
@@ -246,14 +287,59 @@ class DaycareSettingsView(discord.ui.View):
 
     def embed(self) -> discord.Embed:
         settings = self.settings()
-        return discord.Embed(
+        embed = discord.Embed(
             title="Daycare Settings",
-            description=(
-                f"Pair selection: **{settings['selection']}**\n"
-                f"Display: **{settings['display']}**"
-            ),
-            color=discord.Color.green(),
+            description="Configure pair selection and command output.",
+            color=discord.Color.blue(),
         )
+        
+        # Output format section
+        embed.add_field(
+            name="Output",
+            value=f"{settings['output_format'].replace('+', ' + ')}",
+            inline=False,
+        )
+        output_line = ""
+        if settings["show_details"]:
+            output_line += "🟢 Details"
+        else:
+            output_line += "🔴 Details"
+        output_line += " "
+        if settings["show_remaining"]:
+            output_line += "🟢 Remaining"
+        else:
+            output_line += "🔴 Remaining"
+        embed.add_field(name="Display", value=output_line, inline=False)
+        
+        # Add options section
+        embed.add_field(
+            name="Add Options",
+            value=settings["add_options"].upper() if settings["add_options"] != "none" else "None",
+            inline=False,
+        )
+        
+        # Pairing section
+        pairing_display = {
+            "best_iv": "Best IV",
+            "high_compact": "High Compact",
+            "iv_coverage": "IV Coverage",
+        }
+        iv_direction_display = settings["iv_direction"].replace("_", " ").title()
+        embed.add_field(
+            name="Pairing",
+            value=f"**{pairing_display.get(settings['pairing_mode'], settings['pairing_mode'])}** · {iv_direction_display}",
+            inline=False,
+        )
+        
+        # Defaults section
+        shiny_text = "Allowed" if settings["shinies_allowed"] else "Blocked"
+        embed.add_field(
+            name="Defaults",
+            value=f"{settings['pair_count']} pair(s) · Shinies: {shiny_text}",
+            inline=False,
+        )
+        
+        return embed
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id == self.user_id:
@@ -264,35 +350,145 @@ class DaycareSettingsView(discord.ui.View):
         )
         return False
 
-    async def update_setting(self, interaction, key: str, value: str):
+    async def update_setting(self, interaction, key: str, value):
         self.settings()[key] = value
         self.service.cog.save_bot_state()
         await interaction.response.edit_message(embed=self.embed(), view=self)
 
-    @discord.ui.button(label="First available", style=discord.ButtonStyle.primary)
-    async def first(self, interaction, button):
+    # OUTPUT FORMAT BUTTONS
+    @discord.ui.button(label="Output: Mobile + PC", style=discord.ButtonStyle.primary)
+    async def output_mobile_pc(self, interaction, button):
         del button
-        await self.update_setting(interaction, "selection", "first")
+        await self.update_setting(interaction, "output_format", "mobile+pc")
 
-    @discord.ui.button(label="Random pairs", style=discord.ButtonStyle.primary)
-    async def random_pairs(self, interaction, button):
+    @discord.ui.button(label="Mobile Only", style=discord.ButtonStyle.secondary)
+    async def output_mobile(self, interaction, button):
         del button
-        await self.update_setting(interaction, "selection", "random")
+        await self.update_setting(interaction, "output_format", "mobile")
 
-    @discord.ui.button(label="Tagged first", style=discord.ButtonStyle.primary)
-    async def tagged_first(self, interaction, button):
+    @discord.ui.button(label="PC Only", style=discord.ButtonStyle.secondary)
+    async def output_pc(self, interaction, button):
         del button
-        await self.update_setting(interaction, "selection", "tagged")
+        await self.update_setting(interaction, "output_format", "pc")
 
-    @discord.ui.button(label="Commands", style=discord.ButtonStyle.secondary)
-    async def commands(self, interaction, button):
+    # DETAILS TOGGLE
+    @discord.ui.button(label="Details: On", style=discord.ButtonStyle.success)
+    async def details_on(self, interaction, button):
         del button
-        await self.update_setting(interaction, "display", "commands")
+        if self.settings()["show_details"]:
+            await self.update_setting(interaction, "show_details", False)
+        else:
+            await self.update_setting(interaction, "show_details", True)
 
-    @discord.ui.button(label="Details", style=discord.ButtonStyle.secondary)
-    async def details(self, interaction, button):
+    # REMAINING TOGGLE
+    @discord.ui.button(label="Remaining: On", style=discord.ButtonStyle.success)
+    async def remaining_on(self, interaction, button):
         del button
-        await self.update_setting(interaction, "display", "details")
+        if self.settings()["show_remaining"]:
+            await self.update_setting(interaction, "show_remaining", False)
+        else:
+            await self.update_setting(interaction, "show_remaining", True)
+
+    # ADD OPTIONS BUTTONS
+    @discord.ui.button(label="Add Options: None", style=discord.ButtonStyle.primary)
+    async def add_options_none(self, interaction, button):
+        del button
+        await self.update_setting(interaction, "add_options", "none")
+
+    @discord.ui.button(label="Confirm (-y)", style=discord.ButtonStyle.secondary)
+    async def add_options_confirm(self, interaction, button):
+        del button
+        await self.update_setting(interaction, "add_options", "-y")
+
+    @discord.ui.button(label="XP Blocker (-xb)", style=discord.ButtonStyle.secondary)
+    async def add_options_xp(self, interaction, button):
+        del button
+        await self.update_setting(interaction, "add_options", "-xb")
+
+    @discord.ui.button(label="Both (-y -xb)", style=discord.ButtonStyle.secondary)
+    async def add_options_both(self, interaction, button):
+        del button
+        await self.update_setting(interaction, "add_options", "-y -xb")
+
+    # PAIRING MODE BUTTONS
+    @discord.ui.button(label="Mode: Best IV", style=discord.ButtonStyle.primary)
+    async def pairing_best_iv(self, interaction, button):
+        del button
+        await self.update_setting(interaction, "pairing_mode", "best_iv")
+
+    @discord.ui.button(label="High Compact", style=discord.ButtonStyle.secondary)
+    async def pairing_high_compact(self, interaction, button):
+        del button
+        await self.update_setting(interaction, "pairing_mode", "high_compact")
+
+    @discord.ui.button(label="IV Coverage", style=discord.ButtonStyle.secondary)
+    async def pairing_iv_coverage(self, interaction, button):
+        del button
+        await self.update_setting(interaction, "pairing_mode", "iv_coverage")
+
+    # IV DIRECTION BUTTONS
+    @discord.ui.button(label="Highest IV", style=discord.ButtonStyle.primary)
+    async def iv_highest(self, interaction, button):
+        del button
+        await self.update_setting(interaction, "iv_direction", "highest")
+
+    @discord.ui.button(label="Lowest IV", style=discord.ButtonStyle.secondary)
+    async def iv_lowest(self, interaction, button):
+        del button
+        await self.update_setting(interaction, "iv_direction", "lowest")
+
+    # PAIR COUNT SELECTOR
+    @discord.ui.button(label="Pairs: 1", style=discord.ButtonStyle.primary)
+    async def pair_count_1(self, interaction, button):
+        del button
+        await self.update_setting(interaction, "pair_count", 1)
+
+    @discord.ui.button(label="2 Pairs", style=discord.ButtonStyle.secondary)
+    async def pair_count_2(self, interaction, button):
+        del button
+        await self.update_setting(interaction, "pair_count", 2)
+
+    @discord.ui.button(label="3 Pairs", style=discord.ButtonStyle.secondary)
+    async def pair_count_3(self, interaction, button):
+        del button
+        await self.update_setting(interaction, "pair_count", 3)
+
+    @discord.ui.button(label="4 Pairs", style=discord.ButtonStyle.secondary)
+    async def pair_count_4(self, interaction, button):
+        del button
+        await self.update_setting(interaction, "pair_count", 4)
+
+    # SHINIES TOGGLE
+    @discord.ui.button(label="Shinies: Allow", style=discord.ButtonStyle.success)
+    async def shinies_toggle(self, interaction, button):
+        del button
+        if self.settings()["shinies_allowed"]:
+            await self.update_setting(interaction, "shinies_allowed", False)
+        else:
+            await self.update_setting(interaction, "shinies_allowed", True)
+
+    # INFO AND CLOSE BUTTONS
+    @discord.ui.button(label="Info", style=discord.ButtonStyle.primary)
+    async def info(self, interaction, button):
+        del button
+        await interaction.response.send_message(
+            "**Daycare Settings Info**\n"
+            "• **Output**: Choose how to display the daycare command\n"
+            "• **Details**: Show Pokémon names, genders, and egg moves\n"
+            "• **Remaining**: Show how many pairs are left in the box\n"
+            "• **Add Options**: Include flags with the daycare add command\n"
+            "• **Pairing Mode**: Choose pairing strategy\n"
+            "• **IV Direction**: Prioritize highest or lowest IVs\n"
+            "• **Pairs**: How many different pairs to show (1-4)\n"
+            "• **Shinies**: Allow or block shiny Pokémon in pairs",
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="Close", style=discord.ButtonStyle.danger)
+    async def close(self, interaction, button):
+        del button
+        await interaction.response.defer()
+        await interaction.delete_original_response()
 
 
 class BreedingBoxService:
@@ -316,6 +512,15 @@ class BreedingBoxService:
         ).setdefault(f"{guild_id}:{user_id}", {})
         settings.setdefault("selection", "first")
         settings.setdefault("display", "commands")
+        # New settings for enhanced daycare
+        settings.setdefault("output_format", "mobile+pc")  # mobile+pc, mobile, pc
+        settings.setdefault("show_details", True)
+        settings.setdefault("show_remaining", True)
+        settings.setdefault("add_options", "none")  # none, -y, -xb, -y -xb
+        settings.setdefault("pairing_mode", "best_iv")  # best_iv, high_compact, iv_coverage
+        settings.setdefault("iv_direction", "highest")  # highest, lowest
+        settings.setdefault("pair_count", 1)  # 1-4
+        settings.setdefault("shinies_allowed", True)
         return settings
 
     def resolve_box(
@@ -1032,11 +1237,24 @@ class BreedingBoxService:
             return
         species_data = dict(results)
         settings = self.daycare_settings(ctx.guild.id, ctx.author.id)
+        
+        # Use pair_count from settings if limit not explicitly provided
+        if limit is None:
+            limit = settings.get("pair_count", 1)
+        
         pairs = find_daycare_pairs(
             candidates,
             species_data,
             settings["selection"],
         )
+        
+        # Filter out shiny Pokémon if shinies not allowed
+        if not settings.get("shinies_allowed", True):
+            pairs = [
+                (left, right) for left, right in pairs
+                if not (candidates[left].get("shiny") and candidates[right].get("shiny"))
+            ]
+        
         if not pairs:
             await ctx.send(
                 f"No compatible numbered pair was found in **{box_name}**. "
@@ -1044,20 +1262,26 @@ class BreedingBoxService:
                 "visible genders."
             )
             return
+        
         displayed_pairs = pairs[:limit] if limit is not None else pairs
+        total_pairs = len(pairs)
+        
         header = [
             f"**Daycare Pairs — {box_name}**",
             f"Name: {box_name}",
             f"Pairs formed: {len(displayed_pairs)}",
         ]
+        
         if limit is not None and len(displayed_pairs) < limit:
             header.append(f"Requested {limit}; only {len(displayed_pairs)} available.")
+        
         header.append("")
         
         messages = []
         current_chunk = "\n".join(header)
         continuation = f"**Daycare Pairs — {box_name}** (continued)\n"
         chunk_has_content = False
+        used_pairs = []
 
         def message_length(text: str) -> int:
             return len(text.encode("utf-16-le")) // 2
@@ -1065,12 +1289,29 @@ class BreedingBoxService:
         for pair_number, (left, right) in enumerate(displayed_pairs, start=1):
             first = candidates[left]
             second = candidates[right]
+            first_id = first['pokemon_id']
+            second_id = second['pokemon_id']
+            used_pairs.append((first_id, second_id))
+            
+            # Build the command based on add_options setting
+            add_options_setting = settings.get("add_options", "none")
+            options_str = "" if add_options_setting == "none" else f" {add_options_setting}"
+            
             daycare_command = (
-                f"{POKETWO_DAYCARE_COMMAND} add {first['pokemon_id']} "
-                f"{second['pokemon_id']}"
+                f"{POKETWO_DAYCARE_COMMAND} add {first_id} {second_id}{options_str}"
             )
-            pair_lines = [f"`{daycare_command}`", "", f"```\n{daycare_command}\n```"]
-            if settings["display"] == "details":
+            
+            # Determine output format
+            output_format = settings.get("output_format", "mobile+pc")
+            if output_format == "mobile+pc":
+                pair_lines = [f"`{daycare_command}`", "", f"```\n{daycare_command}\n```"]
+            elif output_format == "mobile":
+                pair_lines = [f"`{daycare_command}`"]
+            else:  # pc
+                pair_lines = [f"```\n{daycare_command}\n```"]
+            
+            # Add details if enabled
+            if settings.get("show_details", True):
                 genders = (
                     first.get("gender") or "fixed gender",
                     second.get("gender") or "fixed gender",
@@ -1113,9 +1354,28 @@ class BreedingBoxService:
                     messages.append(current_chunk)
                     current_chunk = continuation
                     chunk_has_content = False
+        
+        # Add remaining count if enabled
+        if settings.get("show_remaining", True):
+            remaining_count = total_pairs - len(displayed_pairs)
+            if remaining_count > 0:
+                remaining_text = f"\n{remaining_count} pair(s) remaining."
+                if message_length(current_chunk + remaining_text) > 2000:
+                    messages.append(current_chunk)
+                    current_chunk = continuation + remaining_text
+                    chunk_has_content = True
+                else:
+                    current_chunk += remaining_text
+                    chunk_has_content = True
 
         if chunk_has_content:
             messages.append(current_chunk)
         
-        for message_content in messages:
-            await ctx.send(message_content)
+        # Send messages with Put Back button on the last message
+        for i, message_content in enumerate(messages):
+            if i == len(messages) - 1:
+                # Last message gets the Put Back button
+                view = DaycarePairView(self, ctx.guild.id, ctx.author.id, box_name, used_pairs)
+                await ctx.send(message_content, view=view)
+            else:
+                await ctx.send(message_content)

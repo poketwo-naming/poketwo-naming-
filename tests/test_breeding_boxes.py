@@ -345,10 +345,11 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
             user=SimpleNamespace(id=456),
             response=SimpleNamespace(edit_message=AsyncMock()),
         )
-        await view.random_pairs.callback(interaction)
+        # Test changing pairing mode
+        await view.pairing_high_compact.callback(interaction)
         self.assertEqual(
-            self.service.daycare_settings(123, 456)["selection"],
-            "random",
+            self.service.daycare_settings(123, 456)["pairing_mode"],
+            "high_compact",
         )
 
     def test_daycare_pair_selection_requires_compatible_gender_and_egg_group(self):
@@ -401,16 +402,11 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
 
         await self.service.daycare_command(self.ctx, "Daycare")
 
-        self.assertEqual(
-            self.ctx.send.await_args.args[0],
-            "**Daycare Pairs — Daycare**\n"
-            "Name: Daycare\n"
-            "Pairs formed: 1\n"
-            "\n"
-            "`@Pokétwo#8236 daycare add 23580 28179`\n"
-            "\n"
-            "```\n@Pokétwo#8236 daycare add 23580 28179\n```",
-        )
+        output = self.ctx.send.await_args.args[0]
+        self.assertIn("`@Pokétwo#8236 daycare add 23580 28179`", output)
+        self.assertIn("```\n@Pokétwo#8236 daycare add 23580 28179\n```", output)
+        self.assertIn("**Pair 1:** Pikachu (male) + Pikachu (female)", output)
+        self.assertIn("Pairs formed: 1", output)
         self.assertNotIn("embed", self.ctx.send.await_args.kwargs)
 
     async def test_daycare_splits_many_pairs_within_discord_message_limit(self):
@@ -424,7 +420,7 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
         }
         self.service.species_cache[25] = {"gender_rate": 4, "egg_groups": ("field",)}
 
-        await self.service.show_daycare_pairs(self.ctx, "purmel")
+        await self.service.show_daycare_pairs(self.ctx, "purmel", limit=50)
 
         messages = [call.args[0] for call in self.ctx.send.await_args_list]
         self.assertGreater(len(messages), 1)
@@ -445,9 +441,8 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
             ]
         }
         self.service.species_cache[25] = {"gender_rate": 4, "egg_groups": ("field",)}
-        self.service.daycare_settings(123, 456)["display"] = "details"
 
-        await self.service.daycare_command(self.ctx, "purmel")
+        await self.service.show_daycare_pairs(self.ctx, "purmel", limit=1)
 
         messages = [call.args[0] for call in self.ctx.send.await_args_list]
         self.assertGreater(len(messages), 1)
@@ -463,19 +458,18 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
         ]
         self.service.user_boxes(123, 456)["purmel"] = {"items": items}
         self.service.species_cache[25] = {"gender_rate": 4, "egg_groups": ("field",)}
-        self.service.daycare_settings(123, 456)["display"] = "details"
-        await self.service.daycare_command(self.ctx, "purmel")
+        await self.service.show_daycare_pairs(self.ctx, "purmel", limit=1)
         base_length = len(self.ctx.send.await_args.args[0])
 
         items[0]["tags"] = ["x" * (2001 - base_length)]
         self.ctx.send.reset_mock()
-        await self.service.daycare_command(self.ctx, "purmel")
+        await self.service.show_daycare_pairs(self.ctx, "purmel", limit=1)
         self.assertEqual(self.ctx.send.await_count, 1)
         self.assertEqual(len(self.ctx.send.await_args.args[0]), 2000)
 
         items[0]["tags"][0] += "x"
         self.ctx.send.reset_mock()
-        await self.service.daycare_command(self.ctx, "purmel")
+        await self.service.show_daycare_pairs(self.ctx, "purmel", limit=1)
         self.assertEqual(self.ctx.send.await_count, 2)
         self.assertTrue(all(len(call.args[0]) <= 2000
                             for call in self.ctx.send.await_args_list))
