@@ -9,11 +9,9 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**⚡ Faster Spawn Naming**\n\n"
-    "Pokémon names and catch commands now post in a lightweight message without "
-    "waiting for Discord to process the full card. The embed and Pokémon thumbnail "
-    "are added just after the prediction, so naming stays responsive while keeping "
-    "the same prediction and ping details."
+    "**🔄 Slash Command Refresh**\n\n"
+    "The bot now syncs its slash-command list with Discord during startup, so `/dc` "
+    "and future slash command updates are registered consistently."
 )
 
 
