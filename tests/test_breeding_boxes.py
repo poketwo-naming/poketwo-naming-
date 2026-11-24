@@ -346,7 +346,7 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
             response=SimpleNamespace(edit_message=AsyncMock()),
         )
         # Test changing pairing mode
-        await view.pairing_high_compact.callback(interaction)
+        await view.pairing_mode_display.callback(interaction)
         self.assertEqual(
             self.service.daycare_settings(123, 456)["pairing_mode"],
             "high_compact",

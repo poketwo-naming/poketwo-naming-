@@ -290,33 +290,27 @@ class DaycareSettingsView(discord.ui.View):
         embed = discord.Embed(
             title="Daycare Settings",
             description="Configure pair selection and command output.",
-            color=discord.Color.blue(),
+            color=discord.Color.from_rgb(55, 55, 55),  # Dark gray background
         )
         
-        # Output format section
-        embed.add_field(
-            name="Output",
-            value=f"{settings['output_format'].replace('+', ' + ')}",
-            inline=False,
-        )
-        output_line = ""
-        if settings["show_details"]:
-            output_line += "🟢 Details"
-        else:
-            output_line += "🔴 Details"
-        output_line += " "
-        if settings["show_remaining"]:
-            output_line += "🟢 Remaining"
-        else:
-            output_line += "🔴 Remaining"
-        embed.add_field(name="Display", value=output_line, inline=False)
+        # Output format line
+        output_format = settings["output_format"]
+        details_status = "On" if settings["show_details"] else "Off"
+        remaining_status = "On" if settings["show_remaining"] else "Off"
         
-        # Add options section
-        embed.add_field(
-            name="Add Options",
-            value=settings["add_options"].upper() if settings["add_options"] != "none" else "None",
-            inline=False,
-        )
+        field_name = f"Output {output_format.replace('+', '·')} · Details: {details_status} | Remaining: {remaining_status}"
+        
+        add_options_display = {
+            "none": "None",
+            "-y": "Confirm (-y)",
+            "-xb": "XP Blocker (-xb)",
+            "-y -xb": "Confirm + XP Blocker (-y -xb)",
+        }
+        
+        field_value = f"Add Options: {add_options_display.get(settings['add_options'], settings['add_options'])}\n"
+        field_value += "Controls command format, displayed details, and the flags appended to every daycare command."
+        
+        embed.add_field(name=field_name, value=field_value, inline=False)
         
         # Pairing section
         pairing_display = {
@@ -325,19 +319,26 @@ class DaycareSettingsView(discord.ui.View):
             "iv_coverage": "IV Coverage",
         }
         iv_direction_display = settings["iv_direction"].replace("_", " ").title()
-        embed.add_field(
-            name="Pairing",
-            value=f"**{pairing_display.get(settings['pairing_mode'], settings['pairing_mode'])}** · {iv_direction_display}",
-            inline=False,
-        )
+        pairing_name = pairing_display.get(settings["pairing_mode"], settings["pairing_mode"])
+        
+        field_name = f"Pairing {pairing_name} · {iv_direction_display}"
+        field_value = "Chooses the pairing strategy and preferred IV direction.\n"
+        
+        if settings["pairing_mode"] == "iv_coverage":
+            field_value += "IV Coverage requires all six stats, then prioritizes combined 3Is and total IV."
+        elif settings["pairing_mode"] == "high_compact":
+            field_value += "High Compact pairs Pokémon within tiers of combined IV."
+        else:
+            field_value += "Best IV prioritizes the highest or lowest combined IV based on direction."
+        
+        embed.add_field(name=field_name, value=field_value, inline=False)
         
         # Defaults section
         shiny_text = "Allowed" if settings["shinies_allowed"] else "Blocked"
-        embed.add_field(
-            name="Defaults",
-            value=f"{settings['pair_count']} pair(s) · Shinies: {shiny_text}",
-            inline=False,
-        )
+        field_name = f"Defaults {settings['pair_count']} pair(s) · Shinies: {shiny_text}"
+        field_value = "Sets the normal pull count, cooldown buffer, and box import behavior."
+        
+        embed.add_field(name=field_name, value=field_value, inline=False)
         
         return embed
 
@@ -355,136 +356,91 @@ class DaycareSettingsView(discord.ui.View):
         self.service.cog.save_bot_state()
         await interaction.response.edit_message(embed=self.embed(), view=self)
 
-    # OUTPUT FORMAT BUTTONS
-    @discord.ui.button(label="Output: Mobile + PC", style=discord.ButtonStyle.primary)
-    async def output_mobile_pc(self, interaction, button):
-        del button
-        await self.update_setting(interaction, "output_format", "mobile+pc")
-
-    @discord.ui.button(label="Mobile Only", style=discord.ButtonStyle.secondary)
+    # ROW 0: Output format selector
+    @discord.ui.button(label="Output: Mobile", style=discord.ButtonStyle.secondary, row=0)
     async def output_mobile(self, interaction, button):
         del button
         await self.update_setting(interaction, "output_format", "mobile")
 
-    @discord.ui.button(label="PC Only", style=discord.ButtonStyle.secondary)
-    async def output_pc(self, interaction, button):
-        del button
-        await self.update_setting(interaction, "output_format", "pc")
-
-    # DETAILS TOGGLE
-    @discord.ui.button(label="Details: On", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Details: On", style=discord.ButtonStyle.success, row=0)
     async def details_on(self, interaction, button):
         del button
-        if self.settings()["show_details"]:
-            await self.update_setting(interaction, "show_details", False)
-        else:
-            await self.update_setting(interaction, "show_details", True)
+        new_value = not self.settings()["show_details"]
+        await self.update_setting(interaction, "show_details", new_value)
 
-    # REMAINING TOGGLE
-    @discord.ui.button(label="Remaining: On", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Remaining: On", style=discord.ButtonStyle.success, row=0)
     async def remaining_on(self, interaction, button):
         del button
-        if self.settings()["show_remaining"]:
-            await self.update_setting(interaction, "show_remaining", False)
-        else:
-            await self.update_setting(interaction, "show_remaining", True)
+        new_value = not self.settings()["show_remaining"]
+        await self.update_setting(interaction, "show_remaining", new_value)
 
-    # ADD OPTIONS BUTTONS
-    @discord.ui.button(label="Add Options: None", style=discord.ButtonStyle.primary)
-    async def add_options_none(self, interaction, button):
+    # ROW 1: Add options selector (full width)
+    @discord.ui.button(label="Add Options: Confirm + XP Blocker (-y -xb)", style=discord.ButtonStyle.success, row=1)
+    async def add_options_display(self, interaction, button):
         del button
-        await self.update_setting(interaction, "add_options", "none")
+        # Cycle through options
+        current = self.settings()["add_options"]
+        options_cycle = ["none", "-y", "-xb", "-y -xb"]
+        next_option = options_cycle[(options_cycle.index(current) + 1) % len(options_cycle)]
+        await self.update_setting(interaction, "add_options", next_option)
 
-    @discord.ui.button(label="Confirm (-y)", style=discord.ButtonStyle.secondary)
-    async def add_options_confirm(self, interaction, button):
+    # ROW 2: Pairing mode and IV direction
+    @discord.ui.button(label="Mode: IV Coverage", style=discord.ButtonStyle.primary, row=2)
+    async def pairing_mode_display(self, interaction, button):
         del button
-        await self.update_setting(interaction, "add_options", "-y")
+        # Cycle through pairing modes
+        modes = ["best_iv", "high_compact", "iv_coverage"]
+        current = self.settings()["pairing_mode"]
+        next_mode = modes[(modes.index(current) + 1) % len(modes)]
+        await self.update_setting(interaction, "pairing_mode", next_mode)
 
-    @discord.ui.button(label="XP Blocker (-xb)", style=discord.ButtonStyle.secondary)
-    async def add_options_xp(self, interaction, button):
+    @discord.ui.button(label="Highest IV", style=discord.ButtonStyle.secondary, row=2)
+    async def iv_direction_display(self, interaction, button):
         del button
-        await self.update_setting(interaction, "add_options", "-xb")
+        new_value = "lowest" if self.settings()["iv_direction"] == "highest" else "highest"
+        await self.update_setting(interaction, "iv_direction", new_value)
 
-    @discord.ui.button(label="Both (-y -xb)", style=discord.ButtonStyle.secondary)
-    async def add_options_both(self, interaction, button):
-        del button
-        await self.update_setting(interaction, "add_options", "-y -xb")
+    # ROW 3: Pair count dropdown
+    @discord.ui.select(
+        cls=discord.ui.Select,
+        placeholder="1 pair",
+        min_values=1,
+        max_values=1,
+        options=[
+            discord.SelectOption(label="1 pair", value="1"),
+            discord.SelectOption(label="2 pairs", value="2"),
+            discord.SelectOption(label="3 pairs", value="3"),
+            discord.SelectOption(label="4 pairs", value="4"),
+        ],
+        row=3
+    )
+    async def pair_count_select(self, interaction, select):
+        await self.update_setting(interaction, "pair_count", int(select.values[0]))
 
-    # PAIRING MODE BUTTONS
-    @discord.ui.button(label="Mode: Best IV", style=discord.ButtonStyle.primary)
-    async def pairing_best_iv(self, interaction, button):
-        del button
-        await self.update_setting(interaction, "pairing_mode", "best_iv")
-
-    @discord.ui.button(label="High Compact", style=discord.ButtonStyle.secondary)
-    async def pairing_high_compact(self, interaction, button):
-        del button
-        await self.update_setting(interaction, "pairing_mode", "high_compact")
-
-    @discord.ui.button(label="IV Coverage", style=discord.ButtonStyle.secondary)
-    async def pairing_iv_coverage(self, interaction, button):
-        del button
-        await self.update_setting(interaction, "pairing_mode", "iv_coverage")
-
-    # IV DIRECTION BUTTONS
-    @discord.ui.button(label="Highest IV", style=discord.ButtonStyle.primary)
-    async def iv_highest(self, interaction, button):
-        del button
-        await self.update_setting(interaction, "iv_direction", "highest")
-
-    @discord.ui.button(label="Lowest IV", style=discord.ButtonStyle.secondary)
-    async def iv_lowest(self, interaction, button):
-        del button
-        await self.update_setting(interaction, "iv_direction", "lowest")
-
-    # PAIR COUNT SELECTOR
-    @discord.ui.button(label="Pairs: 1", style=discord.ButtonStyle.primary)
-    async def pair_count_1(self, interaction, button):
-        del button
-        await self.update_setting(interaction, "pair_count", 1)
-
-    @discord.ui.button(label="2 Pairs", style=discord.ButtonStyle.secondary)
-    async def pair_count_2(self, interaction, button):
-        del button
-        await self.update_setting(interaction, "pair_count", 2)
-
-    @discord.ui.button(label="3 Pairs", style=discord.ButtonStyle.secondary)
-    async def pair_count_3(self, interaction, button):
-        del button
-        await self.update_setting(interaction, "pair_count", 3)
-
-    @discord.ui.button(label="4 Pairs", style=discord.ButtonStyle.secondary)
-    async def pair_count_4(self, interaction, button):
-        del button
-        await self.update_setting(interaction, "pair_count", 4)
-
-    # SHINIES TOGGLE
-    @discord.ui.button(label="Shinies: Allow", style=discord.ButtonStyle.success)
+    # ROW 4: Shinies toggle, Info, and Close
+    @discord.ui.button(label="Shinies: Allow", style=discord.ButtonStyle.success, row=4)
     async def shinies_toggle(self, interaction, button):
         del button
-        if self.settings()["shinies_allowed"]:
-            await self.update_setting(interaction, "shinies_allowed", False)
-        else:
-            await self.update_setting(interaction, "shinies_allowed", True)
+        new_value = not self.settings()["shinies_allowed"]
+        await self.update_setting(interaction, "shinies_allowed", new_value)
 
-    # INFO AND CLOSE BUTTONS
-    @discord.ui.button(label="Info", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Info", style=discord.ButtonStyle.primary, row=4)
     async def info(self, interaction, button):
         del button
         await interaction.response.send_message(
-            "**Daycare Settings Info**\n"
-            "• **Output**: Choose how to display the daycare command\n"
-            "• **Details**: Show Pokémon names, genders, and egg moves\n"
-            "• **Remaining**: Show how many pairs are left in the box\n"
-            "• **Add Options**: Include flags with the daycare add command\n"
-            "• **Pairing Mode**: Choose pairing strategy\n"
-            "• **IV Direction**: Prioritize highest or lowest IVs\n"
-            "• **Pairs**: How many different pairs to show (1-4)\n"
-            "• **Shinies**: Allow or block shiny Pokémon in pairs",
+            "**Daycare Settings Help**\n"
+            "• **Output**: Format for copy-pasting daycare commands\n"
+            "• **Details**: Show Pokémon info and egg moves\n"
+            "• **Remaining**: Show how many pairs left\n"
+            "• **Add Options**: Flags to add to daycare commands\n"
+            "• **Mode**: Pairing strategy (Best IV / High Compact / IV Coverage)\n"
+            "• **IV Direction**: Prioritize high or low IVs\n"
+            "• **Pair Count**: How many pairs to show at once\n"
+            "• **Shinies**: Allow or block shiny Pokémon",
             ephemeral=True,
         )
 
-    @discord.ui.button(label="Close", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="Close", style=discord.ButtonStyle.danger, row=4)
     async def close(self, interaction, button):
         del button
         await interaction.response.defer()
