@@ -295,6 +295,7 @@ class DaycareSettingsView(discord.ui.View):
         self.pairing_mode_display.label = labels["pairing"]
         self.iv_direction_display.label = labels["iv_direction"]
         self.shinies_toggle.label = labels["shinies"]
+        self.pair_count_select.placeholder = labels["pair_count"]
 
     def settings(self) -> dict:
         return self.service.daycare_settings(self.guild_id, self.user_id)
@@ -1201,8 +1202,7 @@ class BreedingBoxService:
             await ctx.send(embed=view.embed(), view=view)
             return
         
-        # Otherwise, v!dc <box> returns 1 pair with Put Back button
-        await self.show_daycare_pairs(ctx, " ".join(args), limit=1)
+        await self.show_daycare_pairs(ctx, " ".join(args))
 
     async def show_daycare_pairs(
         self, ctx, box_selection: str, *, limit: int | None = None

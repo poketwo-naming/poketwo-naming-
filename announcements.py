@@ -9,16 +9,10 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**🎛️ Dynamic Button Labels in Settings Menu**\n\n"
-    "All buttons in `v!dc menu` now display their **current setting** as the label:\n\n"
-    "• **Output** — Shows current setting: Both, Mobile, PC, or None\n"
-    "• **Details** — Shows: On or Off\n"
-    "• **Remaining** — Shows: On or Off\n"
-    "• **Add Options** — Shows: None, Confirm, XP Blocker, or Both\n"
-    "• **Pairing Mode** — Shows: Best IV, High Compact, or IV Coverage\n"
-    "• **IV Direction** — Shows: Highest IV or Lowest IV\n"
-    "• **Shinies** — Shows: Allow or Block\n\n"
-    "Every button updates its label instantly when you click it, making it crystal clear what each setting is currently enabled."
+    "**🥚 Daycare Pair Count Selection**\n\n"
+    "The pair-count menu in `v!dc menu` now shows the selected count, and "
+    "`v!dc <box>` uses that setting to return the selected number of pairs. "
+    "Choose 1–4 pairs in the menu; `/dc` still accepts its own count."
 )
 
 

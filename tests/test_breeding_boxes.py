@@ -345,6 +345,16 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
             user=SimpleNamespace(id=456),
             response=SimpleNamespace(edit_message=AsyncMock()),
         )
+        view.pair_count_select._refresh_state(interaction, {"values": ["2"]})
+        await view.pair_count_select.callback(interaction)
+        self.assertEqual(
+            self.service.daycare_settings(123, 456)["pair_count"],
+            2,
+        )
+        updated_view = interaction.response.edit_message.await_args.kwargs["view"]
+        self.assertEqual(updated_view.pair_count_select.placeholder, "2 pairs")
+
+        view = updated_view
         # Test changing pairing mode
         await view.pairing_mode_display.callback(interaction)
         self.assertEqual(
@@ -408,6 +418,28 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("**Pair 1:** Pikachu (male) + Pikachu (female)", output)
         self.assertIn("Pairs formed: 1", output)
         self.assertNotIn("embed", self.ctx.send.await_args.kwargs)
+
+    async def test_daycare_command_uses_pair_count_selected_in_menu(self):
+        boxes = self.service.user_boxes(123, 456)
+        boxes["Daycare"] = {
+            "items": [
+                {"name": "Pikachu", "gender": gender, "tags": [],
+                 "pokemon_id": str(number)}
+                for number, gender in [(1, "male"), (2, "female"), (3, "male"), (4, "female")]
+            ]
+        }
+        self.service.species_cache[25] = {
+            "gender_rate": 4,
+            "egg_groups": ("field",),
+        }
+        self.service.daycare_settings(123, 456)["pair_count"] = 2
+
+        await self.service.daycare_command(self.ctx, "Daycare")
+
+        output = self.ctx.send.await_args.args[0]
+        self.assertIn("Pairs formed: 2", output)
+        self.assertIn("daycare add 1 2", output)
+        self.assertIn("daycare add 3 4", output)
 
     async def test_daycare_splits_many_pairs_within_discord_message_limit(self):
         boxes = self.service.user_boxes(123, 456)

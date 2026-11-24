@@ -74,9 +74,9 @@ Every `v!` command also works with a capital `V!` prefix.
 | `v!box copy <source> <new name>` | `v!box copy Daycare Backup` | Duplicate a box; add a destination to copy entries into an existing box |
 | `v!box tag / untag / tags / tagged` | `v!box tag Daycare 1 egg-move` | Track and browse egg-move tags |
 | `v!box rename / delete / clear / reset` | `v!box rename Daycare Eggs` | Rename, delete, or wipe boxes |
-| `v!dc [box]` | `v!dc Daycare` | Show a compatible pair, its box name, and two ready-to-paste commands for phone and PC |
+| `v!dc [box]` | `v!dc Daycare` | Show the selected number of compatible pairs from `v!dc menu`, with ready-to-paste commands for phone and PC |
 | `/dc [box] [count]` | `/dc box:Daycare count:2` | Choose a box and number of compatible pairs (defaults to the first box and one pair) |
-| `v!dc settings` | `v!dc settings` | Change pair selection and display |
+| `v!dc menu` | `v!dc menu` | Change pair selection, output, and the number of pairs returned by `v!dc` |
 | `v!boxhelp` | `v!boxhelp` | Show the full list of box commands |
 
 Use quotes around multiword box names when a command has more than one box
@@ -87,8 +87,9 @@ restarts. Each Pokémon number is added only once per box; the status shows
 the number newly added and the total currently stored. Pages not visited while
 tracking are not imported. Pokémon stored before numbers were saved cannot be
 deduplicated or used by `v!dc`; clear and re-import that box to replace them.
-`v!dc` finds one pair of distinct numbered Pokémon using egg groups and gender;
-mixed-gender species need their gender visible in the list that was appended.
+`v!dc` finds the selected number of pairs of distinct numbered Pokémon using
+egg groups and gender; mixed-gender species need their gender visible in the
+list that was appended.
 The plain-text result shows the selected box name and pair count, with an
 inline daycare command for phone copying and a fenced command block for PC
 copying. Large pair lists are split across multiple messages.
