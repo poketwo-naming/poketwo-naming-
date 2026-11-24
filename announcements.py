@@ -9,8 +9,10 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**⭐ Partner Pokémon on the Main Starboard**\n\n"
-    "Partner Eevee and Partner Pikachu catches now appear on the main starboard."
+    "**🔔 Type and Quest Ping Shortcuts**\n\n"
+    "Use `v!tp water fire fairy` to enable type pings and `v!qp kanto johto` "
+    "to enable quest-ping regions. Existing selections stay enabled, and "
+    "using either command without arguments opens its settings menu."
 )
 
 

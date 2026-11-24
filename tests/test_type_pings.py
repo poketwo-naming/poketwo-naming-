@@ -2,7 +2,15 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
-from bot import PokéTwoNamingBot, TYPE_EMOJIS, TYPE_NAMES, TypePingView
+from discord.ext.commands.view import StringView
+
+from bot import (
+    PokéTwoNamingBot,
+    QuestPingView,
+    TYPE_EMOJIS,
+    TYPE_NAMES,
+    TypePingView,
+)
 
 
 class TypePingTests(unittest.IsolatedAsyncioTestCase):
@@ -34,6 +42,94 @@ class TypePingTests(unittest.IsolatedAsyncioTestCase):
                 send_message=AsyncMock(),
             ),
         )
+
+    async def invoke_ping_command(self, command, arguments=""):
+        ctx = SimpleNamespace(
+            author=SimpleNamespace(id=self.user_id),
+            message=SimpleNamespace(attachments=[]),
+            view=StringView(arguments),
+            send=AsyncMock(),
+        )
+        await command._parse_arguments(ctx)
+        await command.callback(self.cog, *ctx.args, **ctx.kwargs)
+        return ctx
+
+    async def test_type_command_adds_names_and_menu_reflects_saved_selection(self):
+        self.cog.bot_state["type_pings"]["456"] = ["grass"]
+        ctx = await self.invoke_ping_command(
+            PokéTwoNamingBot.type_ping_command, "Water FIRE fairy water"
+        )
+
+        self.assertEqual(
+            self.cog.bot_state["type_pings"]["456"],
+            ["fairy", "fire", "grass", "water"],
+        )
+        view = ctx.send.await_args.kwargs["view"]
+        self.assertIsInstance(view, TypePingView)
+        self.assertEqual(
+            {option.value for option in view.children[0].options if option.default},
+            {"fairy", "fire", "grass", "water"},
+        )
+        self.assertEqual(self.cog.type_ping_owners("Charmander"), ["456"])
+        ctx = await self.invoke_ping_command(PokéTwoNamingBot.type_ping_command)
+        self.assertIn("Water ✅", ctx.send.await_args.kwargs["embed"].description)
+        self.cog.save_bot_state.assert_called_once()
+
+    async def test_region_command_adds_names_and_menu_reflects_saved_selection(self):
+        self.cog.bot_state["quest_pings"] = {"456": ["Alola"]}
+        ctx = await self.invoke_ping_command(
+            PokéTwoNamingBot.quest_ping_command, "kanto JOHTO kanto"
+        )
+
+        self.assertEqual(
+            self.cog.bot_state["quest_pings"]["456"], ["Alola", "Johto", "Kanto"]
+        )
+        view = ctx.send.await_args.kwargs["view"]
+        self.assertIsInstance(view, QuestPingView)
+        self.assertEqual(
+            {option.value for option in view.children[0].options if option.default},
+            {"Alola", "Johto", "Kanto"},
+        )
+        self.assertEqual(self.cog.quest_ping_owners("Alolan Raichu"), ["456"])
+        ctx = await self.invoke_ping_command(PokéTwoNamingBot.quest_ping_command)
+        self.assertIn("Kanto ✅", ctx.send.await_args.kwargs["embed"].description)
+        self.cog.save_bot_state.assert_called_once()
+
+    async def test_invalid_names_do_not_change_either_selection(self):
+        for command, state_key, existing, arguments in (
+            (PokéTwoNamingBot.type_ping_command, "type_pings", ["grass"], "fire typo"),
+            (PokéTwoNamingBot.quest_ping_command, "quest_pings", ["Alola"], "kanto typo"),
+        ):
+            with self.subTest(state_key=state_key):
+                self.cog.bot_state[state_key] = {"456": existing}
+                ctx = await self.invoke_ping_command(command, arguments)
+                self.assertEqual(self.cog.bot_state[state_key]["456"], existing)
+                self.assertIn("typo", ctx.send.await_args.args[0])
+        self.cog.save_bot_state.assert_not_called()
+
+    async def test_command_save_failure_restores_previous_selection(self):
+        self.cog.bot_state["type_pings"]["456"] = ["grass"]
+        self.cog.save_bot_state.side_effect = OSError("disk full")
+
+        with self.assertLogs("bot", level="ERROR"):
+            ctx = await self.invoke_ping_command(
+                PokéTwoNamingBot.type_ping_command, "fire"
+            )
+
+        self.assertEqual(self.cog.bot_state["type_pings"]["456"], ["grass"])
+        self.assertIn("couldn't save", ctx.send.await_args.args[0])
+
+    async def test_region_menu_still_saves_and_rolls_back_on_error(self):
+        view = QuestPingView(self.cog, self.user_id)
+        interaction = self.interaction()
+        await view.update_regions(interaction, ["Kanto", "Johto"])
+        self.assertEqual(self.cog.bot_state["quest_pings"]["456"], ["Johto", "Kanto"])
+
+        self.cog.save_bot_state.side_effect = OSError("disk full")
+        with self.assertLogs("bot", level="ERROR"):
+            await view.update_regions(interaction, ["Alola"])
+        self.assertEqual(self.cog.bot_state["quest_pings"]["456"], ["Johto", "Kanto"])
+        interaction.response.send_message.assert_awaited_once()
 
     async def test_menu_displays_all_types_and_initial_off_state(self):
         view = TypePingView(self.cog, self.user_id)

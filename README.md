@@ -41,7 +41,8 @@ channel renames; errors are logged.
 | Command | Usage | Description |
 |---------|-------|-------------|
 | `v!ping` | `v!ping` | Check bot status and latency |
-| `v!tp` / `v!typeping` | `v!tp` | Choose Pokémon types to receive spawn pings for |
+| `v!tp` / `v!typeping` | `v!tp` or `v!tp water fire fairy` | Open the type-ping menu or enable the listed types |
+| `v!qp` / `v!questping` | `v!qp` or `v!qp kanto johto` | Open the quest-ping menu or enable the listed regions |
 | `v!support` | `v!support` | Show the optional GoFundMe support link |
 | `v!tz <day\|night\|dawn\|dusk>` | `v!tz night` | Find one place in that local-time phase and get a Pokétwo timezone command |
 | `v!sr <pokemon>` | `v!sr Pikachu` | Show a Pokémon's spawn rate and artwork |
@@ -94,6 +95,10 @@ channel renames; errors are logged.
 | `/dc [box] [count]` | `/dc box:Daycare count:2` | Use your account's boxes in any server or DM, including as a user-installed app, and choose the number of pairs (defaults to one) |
 | `v!dc menu` | `v!dc menu` | Change pair selection, output, and the number of pairs returned by `v!dc` |
 | `v!boxhelp` | `v!boxhelp` | Show the full list of box commands |
+
+Type and region names are case-insensitive. Adding names preserves existing
+selections; use the menu to turn individual options off. If any name is
+unrecognized, no selections are changed.
 
 Use quotes around multiword box names when a command has more than one box
 argument, for example `v!box transfer "Main Box" "Egg Box" 1`.

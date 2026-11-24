@@ -129,12 +129,12 @@ COMMAND_CATALOG = (
     (
         "General",
         "v!typeping",
-        "Chooses Pokémon types to receive pings for (alias: v!tp).",
+        "Chooses Pokémon types to receive pings for; add types with v!tp water fire.",
     ),
     (
         "General",
         "v!questping",
-        "Chooses regions to receive quest pings for (alias: v!qp).",
+        "Chooses quest-ping regions; add regions with v!qp kanto johto.",
     ),
     (
         "Breeding Boxes & Daycare",
@@ -702,6 +702,21 @@ class AfkView(discord.ui.View):
                 pass
 
 
+def save_ping_selection(cog, state_key: str, user_id: int, selected: list[str]) -> None:
+    settings = cog.bot_state.setdefault(state_key, {})
+    user_key = str(user_id)
+    previous = settings.get(user_key)
+    settings[user_key] = sorted(set(selected))
+    try:
+        cog.save_bot_state()
+    except OSError:
+        if previous is None:
+            settings.pop(user_key, None)
+        else:
+            settings[user_key] = previous
+        raise
+
+
 class TypePingView(discord.ui.View):
     """Choose which Pokémon types trigger spawn pings."""
 
@@ -779,18 +794,10 @@ class TypePingView(discord.ui.View):
             )
             return
 
-        type_pings = self.cog.bot_state.setdefault("type_pings", {})
-        user_key = str(self.user_id)
-        previous = type_pings.get(user_key)
         selected = sorted(set(selected_types) & set(TYPE_NAMES))
-        type_pings[user_key] = selected
         try:
-            self.cog.save_bot_state()
+            save_ping_selection(self.cog, "type_pings", self.user_id, selected)
         except OSError:
-            if previous is None:
-                type_pings.pop(user_key, None)
-            else:
-                type_pings[user_key] = previous
             logging.getLogger(__name__).exception("Could not save type-ping settings")
             await interaction.response.send_message(
                 "❌ I couldn't save your type-ping settings. Check the bot logs.",
@@ -880,18 +887,10 @@ class QuestPingView(discord.ui.View):
             )
             return
 
-        quest_pings = self.cog.bot_state.setdefault("quest_pings", {})
-        user_key = str(self.user_id)
-        previous = quest_pings.get(user_key)
         selected = sorted(set(selected_regions) & set(REGIONS.keys()))
-        quest_pings[user_key] = selected
         try:
-            self.cog.save_bot_state()
+            save_ping_selection(self.cog, "quest_pings", self.user_id, selected)
         except OSError:
-            if previous is None:
-                quest_pings.pop(user_key, None)
-            else:
-                quest_pings[user_key] = previous
             logging.getLogger(__name__).exception("Could not save quest-ping settings")
             await interaction.response.send_message(
                 "❌ I couldn't save your quest-ping settings. Check the bot logs.",
@@ -4587,15 +4586,47 @@ class PokéTwoNamingBot(commands.Cog):
         """Check if the bot is responsive"""
         await ctx.send(f"Pong! {self.bot.latency * 1000:.2f}ms")
 
+    async def enable_ping_selections(
+        self, ctx, names, valid_names, current, state_key, label
+    ) -> bool:
+        if not names:
+            return True
+        lookup = {name.casefold(): name for name in valid_names}
+        invalid = [name for name in names if name.casefold() not in lookup]
+        if invalid:
+            await ctx.send(
+                f"❌ Unknown {label}: {discord.utils.escape_mentions(', '.join(invalid))}. "
+                f"Valid options: {', '.join(valid_names)}."
+            )
+            return False
+        selected = current + [lookup[name.casefold()] for name in names]
+        try:
+            save_ping_selection(self, state_key, ctx.author.id, selected)
+        except OSError:
+            logging.getLogger(__name__).exception("Could not save %s settings", label)
+            await ctx.send(f"❌ I couldn't save your {label} settings. Check the bot logs.")
+            return False
+        return True
+
     @commands.command(name="typeping", aliases=["tp"])
-    async def type_ping_command(self, ctx):
+    async def type_ping_command(self, ctx, *types: str):
         """Choose Pokémon types to receive pings for."""
+        if not await self.enable_ping_selections(
+            ctx, types, TYPE_NAMES, self.type_ping_types(ctx.author.id),
+            "type_pings", "type-ping",
+        ):
+            return
         view = TypePingView(self, ctx.author.id)
         await ctx.send(embed=view.build_embed(), view=view)
 
     @commands.command(name="questping", aliases=["qp"])
-    async def quest_ping_command(self, ctx):
+    async def quest_ping_command(self, ctx, *regions: str):
         """Choose regions to receive quest pings for."""
+        if not await self.enable_ping_selections(
+            ctx, regions, REGIONS, self.quest_ping_regions(ctx.author.id),
+            "quest_pings", "quest-ping",
+        ):
+            return
         view = QuestPingView(self, ctx.author.id)
         await ctx.send(embed=view.build_embed(), view=view)
 
