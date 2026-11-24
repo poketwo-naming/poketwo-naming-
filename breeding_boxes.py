@@ -281,6 +281,20 @@ class DaycareSettingsView(discord.ui.View):
         self.service = service
         self.guild_id = guild_id
         self.user_id = user_id
+        self._update_button_labels()
+
+    def _update_button_labels(self):
+        """Update all button labels based on current settings."""
+        labels = self._get_button_labels()
+        
+        # Update button labels
+        self.output_format_cycle.label = labels["output"]
+        self.details_on.label = labels["details"]
+        self.remaining_on.label = labels["remaining"]
+        self.add_options_display.label = labels["add_options"]
+        self.pairing_mode_display.label = labels["pairing"]
+        self.iv_direction_display.label = labels["iv_direction"]
+        self.shinies_toggle.label = labels["shinies"]
 
     def settings(self) -> dict:
         return self.service.daycare_settings(self.guild_id, self.user_id)
@@ -360,10 +374,53 @@ class DaycareSettingsView(discord.ui.View):
     async def update_setting(self, interaction, key: str, value):
         self.settings()[key] = value
         self.service.cog.save_bot_state()
-        await interaction.response.edit_message(embed=self.embed(), view=self)
+        # Reconstruct the view with updated button labels
+        new_view = DaycareSettingsView(self.service, self.guild_id, self.user_id)
+        await interaction.response.edit_message(embed=new_view.embed(), view=new_view)
+
+    def _get_button_labels(self) -> dict:
+        """Generate current button labels based on settings."""
+        settings = self.settings()
+        output_display = {
+            "both": "Both",
+            "mobile": "Mobile",
+            "pc": "PC",
+            "none": "None",
+        }
+        details_status = "On" if settings["show_details"] else "Off"
+        remaining_status = "On" if settings["show_remaining"] else "Off"
+        
+        add_options_display = {
+            "none": "None",
+            "-y": "Confirm (-y)",
+            "-xb": "XP Blocker (-xb)",
+            "-y -xb": "Confirm + XP Blocker (-y -xb)",
+        }
+        
+        pairing_display = {
+            "best_iv": "Best IV",
+            "high_compact": "High Compact",
+            "iv_coverage": "IV Coverage",
+        }
+        iv_direction_display = settings["iv_direction"].replace("_", " ").title()
+        
+        shinies_status = "Allow" if settings["shinies_allowed"] else "Block"
+        
+        pair_count = settings["pair_count"]
+        
+        return {
+            "output": f"Output: {output_display.get(settings['output_format'], settings['output_format'])}",
+            "details": f"Details: {details_status}",
+            "remaining": f"Remaining: {remaining_status}",
+            "add_options": f"Add Options: {add_options_display.get(settings['add_options'], settings['add_options'])}",
+            "pairing": f"Mode: {pairing_display.get(settings['pairing_mode'], settings['pairing_mode'])}",
+            "iv_direction": iv_direction_display,
+            "pair_count": f"{pair_count} pair{'s' if pair_count != 1 else ''}",
+            "shinies": f"Shinies: {shinies_status}",
+        }
 
     # ROW 0: Output format selector
-    @discord.ui.button(label="Output: Mobile", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label="Output: Both", style=discord.ButtonStyle.secondary, row=0)
     async def output_format_cycle(self, interaction, button):
         del button
         # Cycle through output formats
@@ -385,7 +442,7 @@ class DaycareSettingsView(discord.ui.View):
         await self.update_setting(interaction, "show_remaining", new_value)
 
     # ROW 1: Add options selector (full width)
-    @discord.ui.button(label="Add Options: Confirm + XP Blocker (-y -xb)", style=discord.ButtonStyle.success, row=1)
+    @discord.ui.button(label="Add Options: None", style=discord.ButtonStyle.success, row=1)
     async def add_options_display(self, interaction, button):
         del button
         # Cycle through options
@@ -395,7 +452,7 @@ class DaycareSettingsView(discord.ui.View):
         await self.update_setting(interaction, "add_options", next_option)
 
     # ROW 2: Pairing mode and IV direction
-    @discord.ui.button(label="Mode: IV Coverage", style=discord.ButtonStyle.primary, row=2)
+    @discord.ui.button(label="Mode: Best IV", style=discord.ButtonStyle.primary, row=2)
     async def pairing_mode_display(self, interaction, button):
         del button
         # Cycle through pairing modes
