@@ -107,6 +107,67 @@ class TypePingTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("typo", ctx.send.await_args.args[0])
         self.cog.save_bot_state.assert_not_called()
 
+    async def test_remove_names_updates_selection_and_menu(self):
+        for command, state_key, existing, arguments, expected in (
+            (PokéTwoNamingBot.type_ping_command, "type_pings",
+             ["fire", "grass", "water"], "remove FIRE water fire", ["grass"]),
+            (PokéTwoNamingBot.quest_ping_command, "quest_pings",
+             ["Alola", "Johto", "Kanto"], "REMOVE kanto JOHTO kanto", ["Alola"]),
+        ):
+            with self.subTest(state_key=state_key):
+                self.cog.bot_state[state_key] = {"456": existing}
+                ctx = await self.invoke_ping_command(command, arguments)
+                self.assertEqual(self.cog.bot_state[state_key]["456"], expected)
+                view = ctx.send.await_args.kwargs["view"]
+                self.assertEqual(
+                    [option.value for option in view.children[0].options if option.default],
+                    expected,
+                )
+        self.assertEqual(self.cog.save_bot_state.call_count, 2)
+
+    async def test_removing_last_and_unselected_names_stops_pings(self):
+        self.cog.bot_state["type_pings"]["456"] = ["fire"]
+        self.cog.bot_state["quest_pings"] = {"456": ["Alola"]}
+
+        await self.invoke_ping_command(
+            PokéTwoNamingBot.type_ping_command, "remove fire water"
+        )
+        await self.invoke_ping_command(
+            PokéTwoNamingBot.quest_ping_command, "remove alola kanto"
+        )
+
+        self.assertEqual(self.cog.bot_state["type_pings"]["456"], [])
+        self.assertEqual(self.cog.bot_state["quest_pings"]["456"], [])
+        self.assertEqual(self.cog.type_ping_owners("Charmander"), [])
+        self.assertEqual(self.cog.quest_ping_owners("Alolan Raichu"), [])
+
+    async def test_remove_invalid_or_missing_names_does_not_change_selection(self):
+        for command, state_key, existing, arguments in (
+            (PokéTwoNamingBot.type_ping_command, "type_pings", ["fire"], "remove fire typo"),
+            (PokéTwoNamingBot.quest_ping_command, "quest_pings", ["Kanto"], "remove kanto typo"),
+            (PokéTwoNamingBot.type_ping_command, "type_pings", ["fire"], "remove"),
+            (PokéTwoNamingBot.quest_ping_command, "quest_pings", ["Kanto"], "remove"),
+        ):
+            with self.subTest(state_key=state_key, arguments=arguments):
+                self.cog.bot_state[state_key] = {"456": existing}
+                ctx = await self.invoke_ping_command(command, arguments)
+                self.assertEqual(self.cog.bot_state[state_key]["456"], existing)
+                self.assertTrue(ctx.send.await_args.args[0].startswith("❌"))
+        self.cog.save_bot_state.assert_not_called()
+
+    async def test_remove_save_failure_restores_previous_selection(self):
+        for command, state_key, existing, arguments in (
+            (PokéTwoNamingBot.type_ping_command, "type_pings", ["fire"], "remove fire"),
+            (PokéTwoNamingBot.quest_ping_command, "quest_pings", ["Kanto"], "remove kanto"),
+        ):
+            with self.subTest(state_key=state_key):
+                self.cog.bot_state[state_key] = {"456": existing}
+                self.cog.save_bot_state.side_effect = OSError("disk full")
+                with self.assertLogs("bot", level="ERROR"):
+                    ctx = await self.invoke_ping_command(command, arguments)
+                self.assertEqual(self.cog.bot_state[state_key]["456"], existing)
+                self.assertIn("couldn't save", ctx.send.await_args.args[0])
+
     async def test_command_save_failure_restores_previous_selection(self):
         self.cog.bot_state["type_pings"]["456"] = ["grass"]
         self.cog.save_bot_state.side_effect = OSError("disk full")

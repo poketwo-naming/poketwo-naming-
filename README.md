@@ -41,8 +41,8 @@ channel renames; errors are logged.
 | Command | Usage | Description |
 |---------|-------|-------------|
 | `v!ping` | `v!ping` | Check bot status and latency |
-| `v!tp` / `v!typeping` | `v!tp` or `v!tp water fire fairy` | Open the type-ping menu or enable the listed types |
-| `v!qp` / `v!questping` | `v!qp` or `v!qp kanto johto` | Open the quest-ping menu or enable the listed regions |
+| `v!tp` / `v!typeping` | `v!tp`, `v!tp water fire`, or `v!tp remove water fire` | Open the type-ping menu, enable types, or remove types |
+| `v!qp` / `v!questping` | `v!qp`, `v!qp kanto johto`, or `v!qp remove kanto johto` | Open the quest-ping menu, enable regions, or remove regions |
 | `v!support` | `v!support` | Show the optional GoFundMe support link |
 | `v!tz <day\|night\|dawn\|dusk>` | `v!tz night` | Find one place in that local-time phase and get a Pokétwo timezone command |
 | `v!sr <pokemon>` | `v!sr Pikachu` | Show a Pokémon's spawn rate and artwork |

@@ -129,12 +129,12 @@ COMMAND_CATALOG = (
     (
         "General",
         "v!typeping",
-        "Chooses Pokémon types to receive pings for; add types with v!tp water fire.",
+        "Chooses Pokémon types for pings; add with v!tp water fire or remove with v!tp remove water fire.",
     ),
     (
         "General",
         "v!questping",
-        "Chooses quest-ping regions; add regions with v!qp kanto johto.",
+        "Chooses quest-ping regions; add with v!qp kanto johto or remove with v!qp remove kanto johto.",
     ),
     (
         "Breeding Boxes & Daycare",
@@ -4586,11 +4586,17 @@ class PokéTwoNamingBot(commands.Cog):
         """Check if the bot is responsive"""
         await ctx.send(f"Pong! {self.bot.latency * 1000:.2f}ms")
 
-    async def enable_ping_selections(
+    async def update_ping_selections(
         self, ctx, names, valid_names, current, state_key, label
     ) -> bool:
         if not names:
             return True
+        remove = names[0].casefold() == "remove"
+        if remove:
+            names = names[1:]
+            if not names:
+                await ctx.send(f"❌ Specify at least one {label} option to remove.")
+                return False
         lookup = {name.casefold(): name for name in valid_names}
         invalid = [name for name in names if name.casefold() not in lookup]
         if invalid:
@@ -4599,7 +4605,11 @@ class PokéTwoNamingBot(commands.Cog):
                 f"Valid options: {', '.join(valid_names)}."
             )
             return False
-        selected = current + [lookup[name.casefold()] for name in names]
+        requested = {lookup[name.casefold()] for name in names}
+        selected = (
+            [name for name in current if name not in requested]
+            if remove else current + list(requested)
+        )
         try:
             save_ping_selection(self, state_key, ctx.author.id, selected)
         except OSError:
@@ -4611,7 +4621,7 @@ class PokéTwoNamingBot(commands.Cog):
     @commands.command(name="typeping", aliases=["tp"])
     async def type_ping_command(self, ctx, *types: str):
         """Choose Pokémon types to receive pings for."""
-        if not await self.enable_ping_selections(
+        if not await self.update_ping_selections(
             ctx, types, TYPE_NAMES, self.type_ping_types(ctx.author.id),
             "type_pings", "type-ping",
         ):
@@ -4622,7 +4632,7 @@ class PokéTwoNamingBot(commands.Cog):
     @commands.command(name="questping", aliases=["qp"])
     async def quest_ping_command(self, ctx, *regions: str):
         """Choose regions to receive quest pings for."""
-        if not await self.enable_ping_selections(
+        if not await self.update_ping_selections(
             ctx, regions, REGIONS, self.quest_ping_regions(ctx.author.id),
             "quest_pings", "quest-ping",
         ):

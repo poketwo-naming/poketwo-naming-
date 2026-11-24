@@ -9,10 +9,10 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**🔔 Type and Quest Ping Shortcuts**\n\n"
-    "Use `v!tp water fire fairy` to enable type pings and `v!qp kanto johto` "
-    "to enable quest-ping regions. Existing selections stay enabled, and "
-    "using either command without arguments opens its settings menu."
+    "**🔔 Remove Type and Quest Pings**\n\n"
+    "Use `v!tp remove water fire` to remove type pings, or "
+    "`v!qp remove kanto johto` to remove quest-ping regions. "
+    "Your other selections stay enabled."
 )
 
 
