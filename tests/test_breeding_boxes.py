@@ -56,6 +56,56 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
         await self.command("box", "delete Daycare")
         self.assertEqual(boxes, {})
 
+    async def test_boxes_and_settings_are_shared_across_servers(self):
+        boxes = self.service.user_boxes(123, 456)
+        boxes["Global"] = {"items": []}
+        self.service.daycare_settings(123, 456)["pair_count"] = 4
+
+        self.assertIs(self.service.user_boxes(999, 456), boxes)
+        self.assertEqual(self.service.daycare_settings(999, 456)["pair_count"], 4)
+        self.assertNotIn("999", self.cog.bot_state["breeding_boxes"])
+
+    async def test_legacy_server_boxes_are_migrated_without_losing_conflicts(self):
+        cog = SimpleNamespace(
+            bot_state={
+                "breeding_boxes": {
+                    "123": {
+                        "456": {
+                            "Shared": {
+                                "items": [
+                                    {"name": "Pikachu", "pokemon_id": "1"}
+                                ]
+                            }
+                        }
+                    },
+                    "999": {
+                        "456": {
+                            "Shared": {
+                                "items": [
+                                    {"name": "Eevee", "pokemon_id": "2"}
+                                ]
+                            }
+                        }
+                    },
+                },
+                "daycare_settings": {
+                    "123:456": {"pair_count": 3},
+                    "999:456": {"pair_count": 2},
+                },
+            },
+            save_bot_state=Mock(),
+        )
+
+        service = BreedingBoxService(cog, 716390085896962058)
+        boxes = service.user_boxes(0, 456)
+
+        self.assertEqual(len(boxes), 2)
+        self.assertIn("Shared", boxes)
+        self.assertTrue(any(name.startswith("Shared (Server ") for name in boxes))
+        self.assertEqual(service.daycare_settings(0, 456)["pair_count"], 3)
+        self.assertEqual(cog.bot_state["breeding_boxes_schema"], 2)
+        cog.save_bot_state.assert_called_once()
+
     async def test_boxhelp_is_sent_as_an_embed(self):
         await self.command("boxhelp")
 
@@ -612,16 +662,20 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("First Box", interaction.followup.send.await_args.args[0])
 
-    async def test_slash_daycare_rejects_direct_messages(self):
+    async def test_slash_daycare_works_with_user_install_in_direct_messages(self):
+        self.service.user_boxes(123, 456)["DM Box"] = {"items": []}
         interaction = SimpleNamespace(
             guild=None,
+            user=self.ctx.author,
             response=SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
+            followup=SimpleNamespace(send=AsyncMock()),
         )
 
         await PokéTwoNamingBot.slash_daycare.callback(self.cog, interaction)
 
-        interaction.response.send_message.assert_awaited_once()
-        interaction.response.defer.assert_not_awaited()
+        interaction.response.defer.assert_awaited_once()
+        interaction.followup.send.assert_awaited()
+        self.assertIn("DM Box", interaction.followup.send.await_args.args[0])
 
     async def test_daycare_does_not_pair_duplicate_numbers_or_old_numberless_entries(self):
         boxes = self.service.user_boxes(123, 456)

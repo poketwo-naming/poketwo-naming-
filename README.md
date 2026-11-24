@@ -75,7 +75,7 @@ Every `v!` command also works with a capital `V!` prefix.
 | `v!box tag / untag / tags / tagged` | `v!box tag Daycare 1 egg-move` | Track and browse egg-move tags |
 | `v!box rename / delete / clear / reset` | `v!box rename Daycare Eggs` | Rename, delete, or wipe boxes |
 | `v!dc [box]` | `v!dc Daycare` | Show the selected number of compatible pairs from `v!dc menu`, with ready-to-paste commands for phone and PC |
-| `/dc [box] [count]` | `/dc box:Daycare count:2` | Choose a box and number of compatible pairs (defaults to the first box and one pair) |
+| `/dc [box] [count]` | `/dc box:Daycare count:2` | Use your account's boxes in any server or DM, including as a user-installed app, and choose the number of pairs (defaults to one) |
 | `v!dc menu` | `v!dc menu` | Change pair selection, output, and the number of pairs returned by `v!dc` |
 | `v!boxhelp` | `v!boxhelp` | Show the full list of box commands |
 
@@ -95,6 +95,10 @@ inline daycare command for phone copying and a fenced command block for PC
 copying. Large pair lists are split across multiple messages.
 The `/dc` box option suggests your boxes as you type; `count` must be at least
 1 and returns up to the number of compatible pairs available.
+Boxes and daycare preferences are saved per Discord account, so `/dc` can use
+them in every server. Existing per-server data is merged on upgrade; boxes with
+the same name but different contents remain available under server-labelled
+names.
 
 On startup, the bot posts the current `UPDATE_ANNOUNCEMENT` from
 `announcements.py` to channel `1574489953444827146` once per announcement text.

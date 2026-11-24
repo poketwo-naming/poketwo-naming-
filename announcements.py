@@ -9,11 +9,12 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**⚙️ Server Settings Naming Panel Fixed**\n\n"
-    "The Naming `Open` button in `v!settings` now opens correctly instead of "
-    "showing an interaction timeout. Naming settings, button updates, and Back "
-    "navigation now stay in the same supported Discord settings layout, and only "
-    "the command author can change them."
+    "**🌐 Breeding Boxes Now Work Everywhere**\n\n"
+    "Breeding boxes are now tied to your Discord account instead of a single "
+    "server. `/dc` can use your saved boxes in any server, including servers where "
+    "the app is installed only for you. Existing boxes and daycare settings are "
+    "automatically carried over, and conflicting box names from different servers "
+    "are kept under unique names."
 )
 
 

@@ -523,17 +523,64 @@ class BreedingBoxService:
         self.poketwo_bot_id = poketwo_bot_id
         self.species_cache: dict[int, dict] = {}
         self.append_sessions: dict[tuple[int, int, int, int], AppendSession] = {}
+        self._migrate_user_global_data()
+
+    def _migrate_user_global_data(self) -> None:
+        """Move legacy per-server boxes and settings into user-global storage."""
+        state = self.cog.bot_state
+        if state.get("breeding_boxes_schema") == 2:
+            return
+
+        global_boxes: dict[str, dict] = {}
+        legacy_boxes = state.get("breeding_boxes", {})
+        if isinstance(legacy_boxes, dict):
+            for guild_id, guild_boxes in legacy_boxes.items():
+                if not isinstance(guild_boxes, dict):
+                    continue
+                for user_id, boxes in guild_boxes.items():
+                    if not isinstance(boxes, dict):
+                        continue
+                    user_boxes = global_boxes.setdefault(str(user_id), {})
+                    for box_name, box in boxes.items():
+                        if box_name not in user_boxes:
+                            user_boxes[box_name] = box
+                            continue
+                        if user_boxes[box_name] == box:
+                            continue
+                        base_name = f"{box_name} (Server {guild_id})"
+                        migrated_name = base_name
+                        suffix = 2
+                        while migrated_name in user_boxes:
+                            migrated_name = f"{base_name} {suffix}"
+                            suffix += 1
+                        user_boxes[migrated_name] = box
+
+        global_settings: dict[str, dict] = {}
+        legacy_settings = state.get("daycare_settings", {})
+        if isinstance(legacy_settings, dict):
+            for key, settings in legacy_settings.items():
+                if not isinstance(settings, dict):
+                    continue
+                user_id = str(key).rsplit(":", 1)[-1]
+                global_settings.setdefault(user_id, settings)
+
+        state["breeding_boxes"] = global_boxes
+        state["daycare_settings"] = global_settings
+        state["breeding_boxes_schema"] = 2
+        self.cog.save_bot_state()
 
     def user_boxes(self, guild_id: int, user_id: int) -> dict:
+        del guild_id
         return self.cog.bot_state.setdefault("breeding_boxes", {}).setdefault(
-            str(guild_id), {}
-        ).setdefault(str(user_id), {})
+            str(user_id), {}
+        )
 
     def daycare_settings(self, guild_id: int, user_id: int) -> dict:
+        del guild_id
         settings = self.cog.bot_state.setdefault(
             "daycare_settings",
             {},
-        ).setdefault(f"{guild_id}:{user_id}", {})
+        ).setdefault(str(user_id), {})
         settings.setdefault("selection", "first")
         settings.setdefault("display", "commands")
         # New settings for enhanced daycare
@@ -585,6 +632,8 @@ class BreedingBoxService:
             embed=discord.Embed(
                 title="Breeding Boxes & Daycare",
                 description=(
+                    "Boxes and daycare preferences follow your Discord account across "
+                    "every server where you use the bot.\n\n"
                     "`v!box` — show your boxes and their capacity\n"
                     "`v!box create <name>` — make a box\n"
                     "Reply to a Pokétwo list with `v!box append [box] [--c]` "
@@ -790,9 +839,7 @@ class BreedingBoxService:
             async with session.lock:
                 if self.append_sessions.get(key) is not session:
                     continue
-                boxes = self.cog.bot_state.get("breeding_boxes", {}).get(
-                    str(key[0]), {}
-                ).get(str(key[3]), {})
+                boxes = self.user_boxes(key[0], key[3])
                 box_name = next(
                     (name for name, box in boxes.items() if box is session.box),
                     None,
@@ -1207,7 +1254,8 @@ class BreedingBoxService:
     async def show_daycare_pairs(
         self, ctx, box_selection: str, *, limit: int | None = None
     ):
-        boxes = self.user_boxes(ctx.guild.id, ctx.author.id)
+        guild_id = ctx.guild.id if ctx.guild is not None else 0
+        boxes = self.user_boxes(guild_id, ctx.author.id)
         if box_selection:
             box_name, box = self.resolve_box(boxes, box_selection)
         elif boxes:
@@ -1262,7 +1310,7 @@ class BreedingBoxService:
             )
             return
         species_data = dict(results)
-        settings = self.daycare_settings(ctx.guild.id, ctx.author.id)
+        settings = self.daycare_settings(guild_id, ctx.author.id)
         
         # Use pair_count from settings if limit not explicitly provided
         if limit is None:
@@ -1403,7 +1451,13 @@ class BreedingBoxService:
         for i, message_content in enumerate(messages):
             if i == len(messages) - 1:
                 # Last message gets the Put Back button
-                view = DaycarePairView(self, ctx.guild.id, ctx.author.id, box_name, used_pairs)
+                view = DaycarePairView(
+                    self,
+                    ctx.guild.id if ctx.guild is not None else 0,
+                    ctx.author.id,
+                    box_name,
+                    used_pairs,
+                )
                 await ctx.send(message_content, view=view)
             else:
                 await ctx.send(message_content)

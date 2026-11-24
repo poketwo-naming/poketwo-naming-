@@ -2534,9 +2534,8 @@ class PokéTwoNamingBot(commands.Cog):
         os.replace(temporary_file, BOT_STATE_FILE)
 
     def breeding_user_boxes(self, guild_id: int, user_id: int) -> dict:
-        """Return one member's breeding boxes in the current server."""
-        guild_boxes = self.bot_state["breeding_boxes"].setdefault(str(guild_id), {})
-        return guild_boxes.setdefault(str(user_id), {})
+        """Return one user's globally available breeding boxes."""
+        return self.breeding_box_service.user_boxes(guild_id, user_id)
 
     def resolve_breeding_box(
         self,
@@ -6016,10 +6015,9 @@ class PokéTwoNamingBot(commands.Cog):
     async def daycare_box_autocomplete(
         self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
-        if interaction.guild is None:
-            return []
+        guild_id = interaction.guild.id if interaction.guild is not None else 0
         boxes = self.breeding_box_service.user_boxes(
-            interaction.guild.id, interaction.user.id
+            guild_id, interaction.user.id
         )
         return [
             app_commands.Choice(name=name, value=str(index) if name.isdigit() else name)
@@ -6028,6 +6026,8 @@ class PokéTwoNamingBot(commands.Cog):
         ][:25]
 
     @app_commands.command(name="dc", description="Find compatible daycare pairs")
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.describe(
         box="Choose a breeding box",
         count="Number of different pairs to find (default: 1)",
@@ -6039,13 +6039,6 @@ class PokéTwoNamingBot(commands.Cog):
         box: str | None = None,
         count: app_commands.Range[int, 1] = 1,
     ):
-        if interaction.guild is None:
-            await interaction.response.send_message(
-                "Daycare commands can only be used inside a server.",
-                ephemeral=True,
-            )
-            return
-
         await interaction.response.defer()
         ctx = SlashDaycareContext(interaction)
         await self.breeding_box_service.show_daycare_pairs(
