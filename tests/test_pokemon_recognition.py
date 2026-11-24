@@ -100,6 +100,34 @@ class PokemonRecognitionTests(unittest.TestCase):
         self.assertEqual(name, "Finizen")
         self.assertLess(confidence, 50)
 
+    def test_silvally_color_corrects_confused_forms(self):
+        self.recognizer.classes = np.array(
+            ["Poison Silvally", "Psychic Silvally", "Third"]
+        )
+        for color, initial, expected in (
+            ((240, 40, 170), "Poison Silvally", "Psychic Silvally"),
+            ((130, 40, 200), "Psychic Silvally", "Poison Silvally"),
+        ):
+            with self.subTest(expected=expected):
+                self.recognizer.classes[:2] = [initial, expected]
+                image = Image.new("RGB", (224, 224))
+                for x in range(90, 110):
+                    for y in range(90, 110):
+                        image.putpixel((x, y), color)
+                name, confidence, _ = self.recognizer.recognize(image)
+                self.assertEqual(name, expected)
+                self.assertLessEqual(confidence, 50)
+
+    def test_silvally_ambiguous_color_keeps_model_prediction(self):
+        self.recognizer.classes = np.array(
+            ["Poison Silvally", "Psychic Silvally", "Third"]
+        )
+        self.assert_prediction("Poison Silvally", 0.1)
+
+    def test_silvally_color_does_not_override_other_species(self):
+        image = Image.new("RGB", (224, 224), (240, 40, 170))
+        self.assertEqual(self.recognizer.recognize(image)[0], "First")
+
 
 class SpawnImageRecognitionTests(unittest.TestCase):
     def test_deerling_seasonal_spawn_images(self):
@@ -187,6 +215,20 @@ class SpawnImageRecognitionTests(unittest.TestCase):
         with Image.open(path) as image:
             for variant in (image, image.resize((384, 240)), ImageOps.mirror(image)):
                 self.assertEqual(recognizer.recognize(variant)[0], "Rattata")
+
+    def test_psychic_and_poison_silvally_spawn_images(self):
+        source = Path("pokemon_images/training_data")
+        examples = (
+            (source / "Psychic Silvally" / "1526794714702151751.jpg", "Psychic Silvally"),
+            (source / "Poison Silvally" / "1507166422860562583.jpg", "Poison Silvally"),
+        )
+        if not all(path.exists() for path, _ in examples):
+            self.skipTest("Silvally training images are not available")
+        recognizer = PokemonImageRecognizer()
+        for path, expected in examples:
+            with self.subTest(path=path), Image.open(path) as image:
+                for variant in (image, image.resize((384, 240)), ImageOps.mirror(image)):
+                    self.assertEqual(recognizer.recognize(variant)[0], expected)
 
 
 if __name__ == "__main__":

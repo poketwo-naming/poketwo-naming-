@@ -14,6 +14,7 @@ MEAN = np.asarray([0.485, 0.456, 0.406], dtype=np.float32)[:, None, None]
 STD = np.asarray([0.229, 0.224, 0.225], dtype=np.float32)[:, None, None]
 REFINEMENT_MATCH_THRESHOLD = 0.96
 PALAFIN_MARK_PIXEL_THRESHOLD = 46
+SILVALLY_COLOR_PIXEL_THRESHOLD = 100
 FOCUSED_CROP_CLASSES = (
     "Finizen",
     "Palafin",
@@ -70,6 +71,22 @@ def _has_palafin_mark(image: Image.Image) -> bool:
     red, green, blue = pixels.transpose(2, 0, 1)
     mark_pixels = (red > green + 15) & (blue > green + 10) & (red > 80)
     return int(np.count_nonzero(mark_pixels)) >= PALAFIN_MARK_PIXEL_THRESHOLD
+
+
+def _silvally_color_form(image: Image.Image) -> str | None:
+    pixels = np.asarray(
+        ImageOps.fit(image, (IMAGE_SIZE, IMAGE_SIZE), method=Image.Resampling.BILINEAR),
+        dtype=np.int16,
+    )[30:194, 35:189]
+    red, green, blue = pixels.transpose(2, 0, 1)
+    colored = (red > 70) & (blue > 60) & (red > green + 25) & (blue > green + 20)
+    pink = int(np.count_nonzero(colored & (red > blue + 15)))
+    purple = int(np.count_nonzero(colored & (blue > red + 15)))
+    if pink >= SILVALLY_COLOR_PIXEL_THRESHOLD and pink > 3 * purple:
+        return "Psychic Silvally"
+    if purple >= SILVALLY_COLOR_PIXEL_THRESHOLD and purple > 3 * pink:
+        return "Poison Silvally"
+    return None
 
 
 def preprocess_focused(image: Image.Image) -> np.ndarray:
@@ -177,6 +194,12 @@ class PokemonImageRecognizer:
                 margin = float(scores[best] - scores[second_best])
         else:
             margin = float(scores[best] - scores[second_best])
+        color_override = False
+        if predicted_name in ("Psychic Silvally", "Poison Silvally"):
+            color_form = _silvally_color_form(image)
+            if color_form is not None and color_form != predicted_name:
+                predicted_name = color_form
+                color_override = True
         if predicted_name in ("Finizen", "Palafin"):
             mark_name = "Palafin" if _has_palafin_mark(image) else "Finizen"
             if mark_name != predicted_name:
@@ -184,4 +207,6 @@ class PokemonImageRecognizer:
                 margin = -margin
         logit = self.calibration_coefficient * margin + self.calibration_intercept
         confidence = float(100 / (1 + np.exp(-np.clip(logit, -30, 30))))
+        if color_override:
+            confidence = min(confidence, 50.0)
         return predicted_name, confidence, perf_counter() - started

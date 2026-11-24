@@ -312,6 +312,8 @@ python tools/build_pokemon_refinements.py
 
 For Finizen and Palafin, recognition also checks the small pink/red mark to
 distinguish their otherwise similar images.
+For Psychic and Poison Silvally predictions, recognition checks their pink and
+purple markings when the colors are clear; otherwise it keeps the model's guess.
 
 Commit `pokemon_image_refinements.npz` afterwards.
 

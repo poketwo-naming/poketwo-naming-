@@ -9,9 +9,9 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**🔔 FFA Request Reliability**\n\n"
-    "FFA controls now report when their original message or the announcement "
-    "channel is unavailable, rather than failing unexpectedly."
+    "**🔔 Silvally Recognition Fix**\n\n"
+    "Psychic and Poison Silvally are now distinguished using their pink and "
+    "purple markings when the image model confuses the two forms."
 )
 
 
