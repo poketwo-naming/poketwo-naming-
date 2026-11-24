@@ -9,10 +9,17 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**What's new**\n"
-    "`v!dc <box>` now returns just **1 pair** for quick lookups.\n"
-    "`/dc` has a **box** picker and a **count** option to select a breeding box "
-    "and choose how many different compatible pairs to show."
+    "**📋 Comprehensive Daycare Settings Menu**\n\n"
+    "Use `/dc` to access a powerful new settings menu with 25+ toggles and options:\n\n"
+    "**Output Format** — Choose mobile+pc (both), mobile only, or pc only copy-paste format\n"
+    "**Show Details** — Toggle to see/hide paired Pokémon, genders, and egg moves\n"
+    "**Show Remaining** — Display how many compatible pairs are left in the box\n"
+    "**Add Options** — Quickly add flags to commands: `-y`, `-xb`, `-y -xb`, or none\n"
+    "**Pairing Mode** — Best IV, High Compact, or IV Coverage\n"
+    "**IV Direction** — Pair highest or lowest IVs together\n"
+    "**Pair Count** — Show 1–4 pairs at a time (default depends on setting)\n"
+    "**Shinies** — Allow or block shiny Pokémon from pairing\n\n"
+    "`v!dc <box>` returns **1 pair** with a **Put Back** button to remove used pairs from the box"
 )
 
 
