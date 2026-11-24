@@ -83,13 +83,18 @@ def parse_catch(message) -> Catch | None:
         )))
     match = re.search(
         r"Congratulations\s+<@!?(\d+)>!\s*You caught an?\s+Level\s+(\d+)\s+"
-        r"(.+?)\s*(?:([♂♀])\s*)?\((\d+(?:\.\d+)?)%\)!",
+        r"(.+?)\s*(?:([♂♀])\s*)?\((?:IV:\s*)?(\d+(?:\.\d+)?)%\)!",
         text, re.IGNORECASE,
     )
     if not match:
         return None
     name = match.group(3).strip(" *")
     chain = re.search(r"\bchain\s*[:#]?\s*([\d,]+)", text, re.IGNORECASE)
+    if chain is None:
+        chain = re.search(
+            r"(?:shiny streak reset|shiny chain)[.!]?\s*\(\*\*([\d,]+)\*\*\)",
+            text, re.IGNORECASE,
+        )
     return Catch(
         match.group(1), name, int(match.group(2)), match.group(5),
         match.group(4) or "",

@@ -67,6 +67,15 @@ class StarboardTests(unittest.IsolatedAsyncioTestCase):
         for name in ("Pikachu", "Tauros", "Galarian Rapidash Event", "Marshadow Costume"):
             self.assertIsNone(main_category(name), name)
 
+    def test_poketwo_shiny_chain_format(self):
+        self.message.content = (
+            "Congratulations <@!999>! You caught a level 22 Charizard "
+            "(IV: 9.99%)!\n\n+1 Shiny chain! (**42**)"
+        )
+        catch = parse_catch(self.message)
+        self.assertEqual((catch.user_id, catch.pokemon, catch.iv_text, catch.chain),
+                         ("999", "Charizard", "9.99", "42"))
+
     async def test_main_board_only_listed_catches_with_metadata(self):
         await self.service.handle(self.message)
         self.channels[1].send.assert_not_awaited()
@@ -165,6 +174,20 @@ class StarboardTests(unittest.IsolatedAsyncioTestCase):
         self.message.content = "Congratulations <@999>! You caught a Level 3 Miraidon (50.54%)!"
         await self.cog.on_message(self.message)
         self.channels[1].send.assert_awaited_once()
+
+    async def test_poketwo_iv_label_routes_to_all_matching_boards(self):
+        self.message.content = (
+            "Congratulations <@999>! You caught a level 3 Miraidon (IV: 91.00%)!"
+            "\n\nShiny streak reset. (**1,349**)"
+            "\n\nThese colors seem unusual... ✨"
+        )
+        await self.service.handle(self.message)
+        for channel in self.channels.values():
+            channel.send.assert_awaited_once()
+        shiny = self.channels[2].send.await_args.kwargs["embed"]
+        self.assertIn("**Chain:** `1,349`", shiny.description)
+        self.assertIn("91.00%", shiny.description)
+        self.assertIn("High IV", self.channels[3].send.await_args.kwargs["embed"].title)
 
 
 if __name__ == "__main__":
