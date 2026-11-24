@@ -9,10 +9,11 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**🔔 Type and Quest Ping Slash Commands**\n\n"
-    "Use `/tp` and `/qp` with the `add` or `remove` option to manage your "
-    "type and quest-ping selections. You can list multiple names separated by "
-    "spaces. `v!tp water fire` and `v!qp kanto johto` still add selections."
+    "**🔔 Reserve FFA Requests**\n\n"
+    "Use `v!rafk` to see your reserves, release one with **FFA**, and request "
+    "an announcement. A restricted-command staff member must approve it before "
+    "the FFA role is pinged. Pokémon still reserved by someone else cannot be "
+    "announced as FFA."
 )
 
 

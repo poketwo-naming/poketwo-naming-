@@ -42,6 +42,9 @@ TIMEZONE_ROLE_ID = 1553235133119598652
 TRAINING_REVIEW_CHANNEL_ID = 1531476097970212915
 RESERVE_REPORT_CHANNEL_ID = 1532512015703085147
 RESERVE_TRADE_THREAD_ID = 1538294047095922748
+FFA_REVIEW_CHANNEL_ID = 1533109548951535779
+FFA_ANNOUNCEMENT_CHANNEL_ID = 1531481080618680556
+FFA_ROLE_ID = 1532824522120495296
 INCENSE_INACTIVITY_SECONDS = float(
     os.getenv("INCENSE_INACTIVITY_SECONDS", "90")
 )
@@ -254,6 +257,11 @@ COMMAND_CATALOG = (
         "Reservations",
         "v!reserve list [@user]",
         "Lists server reservations using the long-form command.",
+    ),
+    (
+        "Reservations",
+        "v!rafk",
+        "Release your own reserve and request a staff-approved FFA announcement.",
     ),
     (
         "Reservations",
@@ -1011,6 +1019,401 @@ class ReserveListView(discord.ui.View):
             embed=self.pages[self.page],
             view=self,
         )
+
+
+class FFANameModal(discord.ui.Modal, title="Release a reserve"):
+    pokemon_name = discord.ui.TextInput(
+        label="Pokémon name", placeholder="Enter one of your reserved Pokémon",
+        max_length=100,
+    )
+
+    def __init__(self, view):
+        super().__init__()
+        self.reserve_view = view
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await self.reserve_view.release(interaction, self.pokemon_name.value)
+
+
+class FFAReserveView(discord.ui.View):
+    """Release one of the command author's reserves and request an announcement."""
+
+    def __init__(
+        self, cog, guild_id: int, guild_name: str, user_id: int,
+        released: str | None = None,
+    ):
+        super().__init__(timeout=None if released else 300)
+        self.cog = cog
+        self.guild_id = guild_id
+        self.guild_name = guild_name
+        self.user_id = user_id
+        self.released = released
+        self.submitting = False
+        self.page = 0
+        self.announcement.disabled = released is None
+        self.ffa.disabled = released is not None or not self.own_reserves()
+        if len(self.own_reserves()) <= 20:
+            self.remove_item(self.previous)
+            self.remove_item(self.next)
+        self.update_pages()
+
+    def own_reserves(self) -> list[str]:
+        reserves = self.cog.bot_state["reserves"].get(str(self.guild_id), {})
+        return sorted(
+            (
+                name for name in reserves
+                if str(self.user_id) in self.cog.reserve_user_ids(self.guild_id, name)
+            ),
+            key=str.casefold,
+        )
+
+    def build_embed(self) -> discord.Embed:
+        names = self.own_reserves()
+        self.page = min(self.page, max(0, (len(names) - 1) // 20))
+        shown = names[self.page * 20 : (self.page + 1) * 20]
+        description = (
+            "\n".join(f"• {name}" for name in shown)
+            if shown else "You have no reserves."
+        )
+        if self.released:
+            description += (
+                f"\n\nReleased: **{self.released}**. "
+                "Use Announcement to request staff approval."
+            )
+        embed = discord.Embed(
+            title="Your Pokémon Reserves",
+            description=description,
+            color=discord.Color.purple(),
+        )
+        if names:
+            embed.set_footer(text=f"Page {self.page + 1} of {(len(names) + 19) // 20}")
+        return embed
+
+    def update_pages(self):
+        names = self.own_reserves()
+        self.page = min(self.page, max(0, (len(names) - 1) // 20))
+        self.previous.disabled = self.page == 0
+        self.next.disabled = (self.page + 1) * 20 >= len(names)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id == self.user_id:
+            return True
+        await interaction.response.send_message(
+            "Only the person who ran v!rafk can use these buttons.", ephemeral=True
+        )
+        return False
+
+    async def release(self, interaction: discord.Interaction, name: str):
+        if not await self.interaction_check(interaction):
+            return
+        if self.released is not None:
+            await interaction.response.send_message(
+                "Run v!rafk again to release another Pokémon.", ephemeral=True
+            )
+            return
+        names = self.own_reserves()
+        chosen = next(
+            (item for item in names if item.casefold() == name.strip().casefold()), None
+        )
+        if chosen is None:
+            await interaction.response.send_message(
+                "❌ That Pokémon is not in your current reserves. Use its listed name.",
+                ephemeral=True,
+            )
+            return
+        reserves = self.cog.bot_state["reserves"][str(self.guild_id)]
+        previous = reserves[chosen]
+        releases = self.cog.bot_state.setdefault("ffa_releases", {})
+        message_id = str(interaction.message.id)
+        self.cog.remove_reserve_owner(self.guild_id, chosen, self.user_id)
+        releases[message_id] = {
+            "guild_id": self.guild_id, "guild_name": self.guild_name,
+            "user_id": self.user_id, "pokemon": chosen,
+        }
+        try:
+            self.cog.save_bot_state()
+        except OSError:
+            reserves[chosen] = previous
+            releases.pop(message_id, None)
+            logging.getLogger(__name__).exception("Could not save FFA reserve release")
+            await interaction.response.send_message(
+                "❌ I couldn't remove your reserve. Check the bot logs.", ephemeral=True
+            )
+            return
+        self.released = chosen
+        self.timeout = None
+        self.ffa.disabled = True
+        self.announcement.disabled = False
+        self.update_pages()
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    @discord.ui.button(
+        label="FFA", style=discord.ButtonStyle.danger, custom_id="rafk_release"
+    )
+    async def ffa(self, interaction: discord.Interaction, button: discord.ui.Button):
+        del button
+        names = self.own_reserves()
+        if not names:
+            await interaction.response.send_message(
+                "❌ You have no reserves to release.", ephemeral=True
+            )
+        elif len(names) == 1:
+            await self.release(interaction, names[0])
+        else:
+            await interaction.response.send_modal(FFANameModal(self))
+
+    @discord.ui.button(
+        label="Announcement", style=discord.ButtonStyle.primary, custom_id="rafk_announcement"
+    )
+    async def announcement(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        if self.released is None:
+            await interaction.response.send_message(
+                "❌ Release a reserve with FFA first.", ephemeral=True
+            )
+            return
+        name = self.released
+        key = (self.guild_id, name)
+        requests = self.cog.bot_state.setdefault("ffa_requests", {})
+        releases = self.cog.bot_state.setdefault("ffa_releases", {})
+        if str(interaction.message.id) not in releases:
+            await interaction.response.send_message(
+                "❌ An announcement has already been requested for this release.",
+                ephemeral=True,
+            )
+            return
+        if self.cog.reserve_user_ids(self.guild_id, name):
+            await interaction.response.send_message(
+                "❌ This Pokémon is still reserved by someone. "
+                "It cannot be announced as FFA until all reserves are removed.",
+                ephemeral=True,
+            )
+            return
+        if self.submitting or key in self.cog.ffa_requests_in_flight or any(
+            request["guild_id"] == self.guild_id
+            and request["pokemon"] == name
+            and request["status"] in ("pending", "sending")
+            for request in requests.values()
+        ):
+            await interaction.response.send_message(
+                "❌ An announcement request for this Pokémon is already pending.",
+                ephemeral=True,
+            )
+            return
+        self.submitting = True
+        self.cog.ffa_requests_in_flight.add(key)
+        try:
+            await interaction.response.defer(ephemeral=True)
+            channel = self.cog.bot.get_channel(FFA_REVIEW_CHANNEL_ID)
+            if channel is None:
+                channel = await self.cog.bot.fetch_channel(FFA_REVIEW_CHANNEL_ID)
+            if self.cog.reserve_user_ids(self.guild_id, name):
+                await interaction.followup.send(
+                    "❌ This Pokémon is reserved again, so no request was sent.",
+                    ephemeral=True,
+                )
+                return
+            view = FFAReviewView(self.cog)
+            message = await channel.send(
+                f"FFA announcement request for **{discord.utils.escape_markdown(name)}**\n"
+                f"Requested by: `{self.user_id}`\n"
+                f"Source server: {discord.utils.escape_markdown(self.guild_name)} "
+                f"(`{self.guild_id}`)\n"
+                "A member with restricted-command permission must approve or deny.",
+                view=view,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+            requests[str(message.id)] = {
+                "guild_id": self.guild_id, "guild_name": self.guild_name,
+                "user_id": self.user_id, "pokemon": name, "status": "pending",
+            }
+            submitted_releases = {
+                message_id: release for message_id, release in releases.items()
+                if release["guild_id"] == self.guild_id and release["pokemon"] == name
+            }
+            for message_id in submitted_releases:
+                releases.pop(message_id)
+            try:
+                self.cog.save_bot_state()
+            except OSError:
+                requests.pop(str(message.id), None)
+                releases.update(submitted_releases)
+                try:
+                    await message.edit(view=None)
+                except discord.HTTPException:
+                    logging.getLogger(__name__).exception("Could not disable unsaved FFA review")
+                raise
+            button.disabled = True
+            try:
+                await interaction.message.edit(embed=self.build_embed(), view=self)
+            except discord.HTTPException:
+                logging.getLogger(__name__).exception("Could not update FFA request controls")
+            self.stop()
+            await interaction.followup.send(
+                "✅ Your FFA announcement was sent for approval. No role was pinged.",
+                ephemeral=True,
+            )
+        except (discord.DiscordException, aiohttp.ClientError, OSError, asyncio.TimeoutError):
+            logging.getLogger(__name__).exception("Could not submit FFA review request")
+            await interaction.followup.send(
+                "❌ The FFA request could not be completed. Check the bot logs; "
+                "your reserve remains removed.",
+                ephemeral=True,
+            )
+        finally:
+            self.submitting = False
+            self.cog.ffa_requests_in_flight.discard(key)
+
+    @discord.ui.button(
+        label="Previous", style=discord.ButtonStyle.secondary, custom_id="rafk_previous"
+    )
+    async def previous(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.page = max(0, self.page - 1)
+        self.update_pages()
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+    @discord.ui.button(
+        label="Next", style=discord.ButtonStyle.secondary, custom_id="rafk_next"
+    )
+    async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.page += 1
+        self.update_pages()
+        await interaction.response.edit_message(embed=self.build_embed(), view=self)
+
+
+class FFAReviewView(discord.ui.View):
+    """Persistent staff controls for an FFA announcement request."""
+
+    def __init__(self, cog):
+        super().__init__(timeout=None)
+        self.cog = cog
+        self.lock = asyncio.Lock()
+
+    async def decide(self, interaction: discord.Interaction, approve: bool):
+        if not self.cog.has_restricted_interaction_permission(interaction):
+            await interaction.response.send_message(
+                "❌ You need restricted-command permission to review this request.",
+                ephemeral=True,
+            )
+            return
+        await interaction.response.defer(ephemeral=True)
+        async with self.lock:
+            request = self.cog.bot_state.get("ffa_requests", {}).get(
+                str(interaction.message.id)
+            )
+            if request is None or request["status"] != "pending":
+                await interaction.followup.send(
+                    "❌ This request is already handled or its delivery needs checking.",
+                    ephemeral=True,
+                )
+                return
+            if approve and self.cog.reserve_user_ids(
+                request["guild_id"], request["pokemon"]
+            ):
+                await interaction.followup.send(
+                    "❌ This Pokémon is reserved again in the source server; "
+                    "it cannot be announced as FFA.",
+                    ephemeral=True,
+                )
+                return
+            if approve:
+                try:
+                    channel = self.cog.bot.get_channel(FFA_ANNOUNCEMENT_CHANNEL_ID)
+                    if channel is None:
+                        channel = await self.cog.bot.fetch_channel(
+                            FFA_ANNOUNCEMENT_CHANNEL_ID
+                        )
+                except (
+                    discord.DiscordException, aiohttp.ClientError, OSError, asyncio.TimeoutError
+                ):
+                    logging.getLogger(__name__).exception("Could not find FFA announcement channel")
+                    await interaction.followup.send(
+                        "❌ Could not access the announcement channel. Please retry.",
+                        ephemeral=True,
+                    )
+                    return
+                if self.cog.reserve_user_ids(request["guild_id"], request["pokemon"]):
+                    await interaction.followup.send(
+                        "❌ This Pokémon is reserved again in the source server.",
+                        ephemeral=True,
+                    )
+                    return
+            request["status"] = "sending" if approve else "denied"
+            try:
+                self.cog.save_bot_state()
+            except OSError:
+                request["status"] = "pending"
+                logging.getLogger(__name__).exception("Could not save FFA review decision")
+                await interaction.followup.send(
+                    "❌ Could not save the review decision. Please retry.", ephemeral=True
+                )
+                return
+            if approve:
+                try:
+                    await channel.send(
+                        f"<@&{FFA_ROLE_ID}> {discord.utils.escape_markdown(request['pokemon'])} "
+                        "is now FFA, you're now free to catch this Pokémon.\n"
+                        f"Server: {discord.utils.escape_markdown(request['guild_name'])} "
+                        f"(`{request['guild_id']}`)",
+                        allowed_mentions=discord.AllowedMentions(
+                            roles=[discord.Object(id=FFA_ROLE_ID)],
+                            users=False,
+                            everyone=False,
+                        ),
+                    )
+                except (
+                    discord.DiscordException, aiohttp.ClientError, OSError, asyncio.TimeoutError
+                ):
+                    logging.getLogger(__name__).exception("FFA announcement delivery failed")
+                    await interaction.followup.send(
+                        "❌ Delivery could not be confirmed. Check the announcement channel "
+                        "before sending anything manually; this request cannot be retried.",
+                        ephemeral=True,
+                    )
+                    return
+                request["status"] = "approved"
+                try:
+                    self.cog.save_bot_state()
+                except OSError:
+                    request["status"] = "sending"
+                    logging.getLogger(__name__).exception("Could not save sent FFA announcement")
+                    await interaction.followup.send(
+                        "⚠️ The announcement was sent, but its status could not be saved. "
+                        "Do not send it again; check the bot logs.",
+                        ephemeral=True,
+                    )
+                    return
+            for child in self.children:
+                if isinstance(child, discord.ui.Button):
+                    child.disabled = True
+            result = "Approved and announced" if approve else "Denied"
+            try:
+                await interaction.message.edit(
+                    content=f"{interaction.message.content}\n\n{result} by `{interaction.user.id}`.",
+                    view=self,
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
+            except discord.HTTPException:
+                logging.getLogger(__name__).exception("Could not update FFA review message")
+                await interaction.followup.send(
+                    f"⚠️ {result}, but the review message could not be updated.",
+                    ephemeral=True,
+                )
+                return
+            await interaction.followup.send(f"✅ {result}.", ephemeral=True)
+
+    @discord.ui.button(
+        label="Approve", style=discord.ButtonStyle.success, custom_id="ffa_review_approve"
+    )
+    async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.decide(interaction, True)
+
+    @discord.ui.button(
+        label="Deny", style=discord.ButtonStyle.danger, custom_id="ffa_review_deny"
+    )
+    async def deny(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.decide(interaction, False)
 
 
 class ClearReservesView(discord.ui.View):
@@ -1998,6 +2401,7 @@ class PokéTwoNamingBot(commands.Cog):
         self.pokemon_species = self.load_pokemon_species()
         self.reviewed_spawn_count = self.load_collected_training_count()
         self.bot_state = self.load_bot_state()
+        self.ffa_requests_in_flight: set[tuple[int, str]] = set()
         self.starboard_service = StarboardService(self)
         self.readyup_views = {}
         self.breeding_box_service = BreedingBoxService(self, POKETWO_BOT_ID)
@@ -2437,6 +2841,17 @@ class PokéTwoNamingBot(commands.Cog):
 
     async def cog_load(self):
         """Create shared HTTP resources for spawn image downloads."""
+        for message_id, request in self.bot_state.get("ffa_requests", {}).items():
+            if request["status"] in ("pending", "sending"):
+                self.bot.add_view(FFAReviewView(self), message_id=int(message_id))
+        for message_id, release in self.bot_state.get("ffa_releases", {}).items():
+            self.bot.add_view(
+                FFAReserveView(
+                    self, release["guild_id"], release["guild_name"],
+                    release["user_id"], release["pokemon"],
+                ),
+                message_id=int(message_id),
+            )
         connector = aiohttp.TCPConnector(
             limit=20,
             ttl_dns_cache=300,
@@ -2475,6 +2890,8 @@ class PokéTwoNamingBot(commands.Cog):
             "paused_channels": {},
             "incense_auto_pause": {},
             "reserves": {},
+            "ffa_requests": {},
+            "ffa_releases": {},
             "active_incenses": {},
             "shiny_hunts": {},
             "collections": {},
@@ -2514,6 +2931,8 @@ class PokéTwoNamingBot(commands.Cog):
         state.setdefault("paused_channels", {})
         state.setdefault("incense_auto_pause", {})
         state.setdefault("reserves", {})
+        state.setdefault("ffa_requests", {})
+        state.setdefault("ffa_releases", {})
         state.setdefault("active_incenses", {})
         state.setdefault("shiny_hunts", {})
         state.setdefault("collections", {})
@@ -5483,6 +5902,15 @@ class PokéTwoNamingBot(commands.Cog):
             member_label = "member" if member_count == 1 else "members"
             embed.set_footer(text=f"{member_count} reserving {member_label}")
         await ctx.send(embed=embed)
+
+    @commands.command(name="rafk")
+    async def reserve_afk_command(self, ctx):
+        """Release one of your reserves and request an FFA announcement."""
+        if ctx.guild is None:
+            await ctx.send("Reservations can only be managed inside a server.")
+            return
+        view = FFAReserveView(self, ctx.guild.id, ctx.guild.name, ctx.author.id)
+        await ctx.send(embed=view.build_embed(), view=view)
 
     async def show_reserve_list(self, ctx, member_input: str = ""):
         """Fresh server reserve list implementation."""
