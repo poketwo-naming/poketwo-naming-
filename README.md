@@ -109,6 +109,10 @@ inline daycare command for phone copying and a fenced command block for PC
 copying. Large pair lists are split across multiple messages.
 The `/dc` box option suggests your boxes as you type; `count` must be at least
 1 and returns up to the number of compatible pairs available.
+On startup, global application commands are synced automatically. If Discord
+rejects the bulk sync because the app has an Activity Entry Point, the bot
+updates its registered commands individually and leaves other existing remote
+commands in place.
 Boxes and daycare preferences are saved per Discord account, so `/dc` can use
 them in every server. Existing per-server data is merged on upgrade; boxes with
 the same name but different contents remain available under server-labelled

@@ -50,6 +50,32 @@ bot = commands.Bot(
 )
 
 
+async def sync_global_commands() -> int:
+    """Sync commands without removing an existing Activity entry point."""
+    try:
+        return len(await bot.tree.sync())
+    except discord.HTTPException as error:
+        if error.code != 50240:
+            raise
+
+    application_id = bot.application_id
+    if application_id is None:
+        raise discord.app_commands.MissingApplicationID
+    registered = bot.tree.get_commands()
+    translator = bot.tree.translator
+    for command in registered:
+        if translator is None:
+            payload = command.to_dict(bot.tree)
+        else:
+            payload = await command.get_translated_payload(bot.tree, translator)
+        await bot.http.upsert_global_command(application_id, payload=payload)
+    print(
+        "ℹ️ Synced commands individually to preserve the app's Entry Point; "
+        "existing remote commands were not removed."
+    )
+    return len(registered)
+
+
 @bot.event
 async def on_ready():
     """Called when the bot is ready"""
@@ -58,8 +84,8 @@ async def on_ready():
     asyncio.create_task(run_update_announcement(bot))
 
     try:
-        synced_commands = await asyncio.wait_for(bot.tree.sync(), timeout=120.0)
-        print(f"✅ Synced {len(synced_commands)} slash command(s)")
+        count = await asyncio.wait_for(sync_global_commands(), timeout=120.0)
+        print(f"✅ Synced {count} application command(s)")
     except asyncio.TimeoutError:
         print("⚠️  Slash command sync timed out (120s)")
     except (discord.DiscordException, discord.app_commands.AppCommandError) as error:

@@ -9,10 +9,9 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**⭐ Catch Starboards**\n\n"
-    "Use `v!settings` → Starboard to configure separate channels for rare and "
-    "regional catches, shiny catches, and Gigantamax or low/high IV catches. "
-    "Shiny posts also advance the number at the end of the shiny channel name."
+    "**🔄 Slash Command Sync Fix**\n\n"
+    "Startup now registers slash commands even when the app has a Discord "
+    "Activity Entry Point, without removing that Entry Point."
 )
 
 
