@@ -295,10 +295,16 @@ class DaycareSettingsView(discord.ui.View):
         
         # Output format line
         output_format = settings["output_format"]
+        output_display = {
+            "both": "Both",
+            "mobile": "Mobile",
+            "pc": "PC",
+            "none": "None",
+        }
         details_status = "On" if settings["show_details"] else "Off"
         remaining_status = "On" if settings["show_remaining"] else "Off"
         
-        field_name = f"Output {output_format.replace('+', '·')} · Details: {details_status} | Remaining: {remaining_status}"
+        field_name = f"Output {output_display.get(output_format, output_format)} · Details: {details_status} | Remaining: {remaining_status}"
         
         add_options_display = {
             "none": "None",
@@ -358,9 +364,13 @@ class DaycareSettingsView(discord.ui.View):
 
     # ROW 0: Output format selector
     @discord.ui.button(label="Output: Mobile", style=discord.ButtonStyle.secondary, row=0)
-    async def output_mobile(self, interaction, button):
+    async def output_format_cycle(self, interaction, button):
         del button
-        await self.update_setting(interaction, "output_format", "mobile")
+        # Cycle through output formats
+        formats = ["both", "mobile", "pc", "none"]
+        current = self.settings()["output_format"]
+        next_format = formats[(formats.index(current) + 1) % len(formats)]
+        await self.update_setting(interaction, "output_format", next_format)
 
     @discord.ui.button(label="Details: On", style=discord.ButtonStyle.success, row=0)
     async def details_on(self, interaction, button):
@@ -469,7 +479,7 @@ class BreedingBoxService:
         settings.setdefault("selection", "first")
         settings.setdefault("display", "commands")
         # New settings for enhanced daycare
-        settings.setdefault("output_format", "mobile+pc")  # mobile+pc, mobile, pc
+        settings.setdefault("output_format", "both")  # both, mobile, pc, none
         settings.setdefault("show_details", True)
         settings.setdefault("show_remaining", True)
         settings.setdefault("add_options", "none")  # none, -y, -xb, -y -xb
@@ -1261,13 +1271,15 @@ class BreedingBoxService:
             )
             
             # Determine output format
-            output_format = settings.get("output_format", "mobile+pc")
-            if output_format == "mobile+pc":
+            output_format = settings.get("output_format", "both")
+            if output_format == "both":
                 pair_lines = [f"`{daycare_command}`", "", f"```\n{daycare_command}\n```"]
             elif output_format == "mobile":
                 pair_lines = [f"`{daycare_command}`"]
-            else:  # pc
+            elif output_format == "pc":
                 pair_lines = [f"```\n{daycare_command}\n```"]
+            else:  # none
+                pair_lines = []
             
             # Add details if enabled
             if settings.get("show_details", True):
