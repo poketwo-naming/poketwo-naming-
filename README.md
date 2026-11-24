@@ -36,8 +36,8 @@ announced while anyone in the source server still reserves that Pokémon.
 Requests from every server currently go to channel `1533109548951535779` and
 are reviewed by members with restricted-command permission in that channel's
 server (`v!permission`, administrators, or the server owner). Approved
-announcements go to channel `1531481080618680556`, identify the source server,
-and ping role `1532824522120495296`. Released-reserve controls and pending
+announcements go to channel `1531481080618680556` and ping role
+`1532824522120495296` without showing the source server. Released-reserve controls and pending
 reviews survive bot restarts.
 If announcement delivery cannot be confirmed, staff must check the channel
 before posting manually rather than retrying the same request.

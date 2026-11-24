@@ -212,8 +212,11 @@ class ReserveFFATests(unittest.IsolatedAsyncioTestCase):
         reviewer = self.reviewer()
         await review.approve.callback(reviewer)
         announcement = self.announce_channel.send.await_args
-        self.assertIn(f"<@&{FFA_ROLE_ID}> Pikachu is now FFA", announcement.args[0])
-        self.assertIn("Source Server", announcement.args[0])
+        self.assertEqual(
+            announcement.args[0],
+            f"<@&{FFA_ROLE_ID}> Pikachu is now FFA, "
+            "you're now free to catch this Pokémon.",
+        )
         mentions = announcement.kwargs["allowed_mentions"]
         self.assertEqual([role.id for role in mentions.roles], [FFA_ROLE_ID])
         self.assertFalse(mentions.users)

@@ -1382,9 +1382,7 @@ class FFAReviewView(discord.ui.View):
                 try:
                     await channel.send(
                         f"<@&{FFA_ROLE_ID}> {discord.utils.escape_markdown(request['pokemon'])} "
-                        "is now FFA, you're now free to catch this Pokémon.\n"
-                        f"Server: {discord.utils.escape_markdown(request['guild_name'])} "
-                        f"(`{request['guild_id']}`)",
+                        "is now FFA, you're now free to catch this Pokémon.",
                         allowed_mentions=discord.AllowedMentions(
                             roles=[discord.Object(id=FFA_ROLE_ID)],
                             users=False,

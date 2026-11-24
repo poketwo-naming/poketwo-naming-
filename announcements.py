@@ -9,9 +9,8 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**🔔 Silvally Recognition Fix**\n\n"
-    "Psychic and Poison Silvally are now distinguished using their pink and "
-    "purple markings when the image model confuses the two forms."
+    "**🔔 FFA Announcement Update**\n\n"
+    "FFA announcements no longer display the source server name or ID."
 )
 
 
