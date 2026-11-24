@@ -59,12 +59,14 @@ class StarboardTests(unittest.IsolatedAsyncioTestCase):
 
     def test_category_whitelist_and_all_forms(self):
         for name in ("Miraidon", "10% Zygarde", "Bug Arceus", "Zenith Marshadow",
+                     "Partner Eevee", "PARTNER PIKACHU",
                      "High-speed Flight Configuration Genesect"):
             self.assertEqual(main_category(name), "rare", name)
         for name in ("Galarian Articuno", "Hisuian Arcanine", "Aqua Breed Tauros",
                      "Galarian Zen Darmanitan"):
             self.assertEqual(main_category(name), "regional", name)
-        for name in ("Pikachu", "Tauros", "Galarian Rapidash Event", "Marshadow Costume"):
+        for name in ("Pikachu", "Eevee", "Partner Eevee Event", "Tauros",
+                     "Galarian Rapidash Event", "Marshadow Costume"):
             self.assertIsNone(main_category(name), name)
 
     def test_poketwo_shiny_chain_format(self):
@@ -140,6 +142,23 @@ class StarboardTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("1 out of", embed.description)
         self.assertTrue(embed.thumbnail.url)
         self.assertEqual(embed.timestamp, self.message.created_at)
+
+    async def test_partner_catches_post_to_main_board(self):
+        for index, name in enumerate(("Partner Eevee", "Partner Pikachu")):
+            with self.subTest(name=name):
+                self.message.id = 500 + index
+                self.message.content = (
+                    f"Congratulations <@999>! You caught a Level 10 {name}:female: (50.00%)!"
+                )
+                await self.service.handle(self.message)
+                self.assertEqual(self.channels[1].send.await_count, index + 1)
+                embed = self.channels[1].send.await_args.kwargs["embed"]
+                self.assertEqual(embed.title, "⭐ Rare Catch Detected!")
+                self.assertIn(f"{name} ♀", embed.description)
+                self.assertIn("1 out of 69,043", embed.description)
+                self.assertTrue(embed.thumbnail.url)
+        self.channels[2].send.assert_not_awaited()
+        self.channels[3].send.assert_not_awaited()
 
     async def test_iv_boundaries_and_gmax_overlap(self):
         for index, (iv, expected) in enumerate((

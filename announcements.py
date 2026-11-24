@@ -9,10 +9,8 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**⭐ Starboard Gender Emoji Fix**\n\n"
-    "Starboards now recognize catches with Pokétwo's gender emojis. "
-    "This fixes missing main-board catches and shiny thumbnails, and "
-    "recognizes unformatted shiny streak counts."
+    "**⭐ Partner Pokémon on the Main Starboard**\n\n"
+    "Partner Eevee and Partner Pikachu catches now appear on the main starboard."
 )
 
 

@@ -22,7 +22,8 @@ RARE_NAMES = {
         "Blacephalon, Zeraora, Meltan, Kubfu, Zarude, Dada Zarude, Regieleki, "
         "Regidrago, Glastrier, Spectrier, Calyrex, Enamorus, Wo-Chien, Chien-Pao, "
         "Ting-Lu, Chi-yu, Okidogi, Munkidori, Fezandipiti, Terapagos, Pecharunt, "
-        "Zacian, Zamazenta, Eternatus, Melmetal, Zenith Marshadow"
+        "Zacian, Zamazenta, Eternatus, Melmetal, Zenith Marshadow, "
+        "Partner Eevee, Partner Pikachu"
     ).split(", ")
 }
 ALL_FORM_NAMES = {
@@ -176,7 +177,7 @@ class StarboardSettingsView(discord.ui.LayoutView):
             "Choose a channel for each board; clear its selection to disable it."
         ))
         for key, label, description in (
-            ("main", "Main Starboard", "Rare and regional catches."),
+            ("main", "Main Starboard", "Rare, regional, and partner Eevee/Pikachu catches."),
             ("shiny", "Shiny Starboard", "Shiny catches and channel counter."),
             ("vivillon", "Vivillon Starboard", "Gigantamax, below 10% and above 90% IV catches."),
         ):
