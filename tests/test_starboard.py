@@ -76,6 +76,57 @@ class StarboardTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((catch.user_id, catch.pokemon, catch.iv_text, catch.chain),
                          ("999", "Charizard", "9.99", "42"))
 
+    def test_gender_emoji_and_nidoran_names(self):
+        for suffix, name, gender in (
+            (":male:", "Galarian Ponyta", "♂"),
+            ("<:unknown:123456>", "Rayquaza", ""),
+            ("<:female:123456>", "Ralts", "♀"),
+            (" ♂", "Charizard", "♂"),
+            ("", "Nidoran♂", ""),
+            (":female:", "Nidoran♀️", "♀"),
+        ):
+            with self.subTest(name=name, suffix=suffix):
+                self.message.content = (
+                    f"Congratulations <@999>! You caught a Level 21 {name}"
+                    f"{suffix} (32.26%)!"
+                )
+                catch = parse_catch(self.message)
+                self.assertEqual((catch.pokemon, catch.gender), (name, gender))
+
+    async def test_reported_gender_emoji_catches_post_with_artwork(self):
+        for index, (name, suffix) in enumerate((
+            ("Galarian Ponyta", ":male:"),
+            ("Rayquaza", ":unknown:"),
+        )):
+            self.message.id = 400 + index
+            self.message.content = (
+                f"Congratulations <@999>! You caught a Level 10 {name}"
+                f"{suffix} (44.62%)!"
+            )
+            await self.service.handle(self.message)
+        self.assertEqual(self.channels[1].send.await_count, 2)
+
+        self.message.id = 402
+        self.message.content = (
+            "Congratulations <@999>! You caught a Level 21 Ralts:female: (32.26%)!"
+            "\n\nShiny streak reset. (2090)"
+            "\n\nThese colors seem unusual... ✨"
+        )
+        await self.service.handle(self.message)
+        embed = self.channels[2].send.await_args.kwargs["embed"]
+        self.assertIn("Ralts ♀", embed.description)
+        self.assertIn("**Chain:** `2090`", embed.description)
+        self.assertTrue(embed.thumbnail.url.endswith("/shiny/280.png"))
+
+    async def test_shiny_female_nidoran_uses_female_artwork(self):
+        self.message.content = (
+            "Congratulations <@999>! You caught a Level 21 Nidoran♀️:female: "
+            "(32.26%)!\nThese colors seem unusual... ✨"
+        )
+        await self.service.handle(self.message)
+        embed = self.channels[2].send.await_args.kwargs["embed"]
+        self.assertTrue(embed.thumbnail.url.endswith("/shiny/29.png"))
+
     async def test_main_board_only_listed_catches_with_metadata(self):
         await self.service.handle(self.message)
         self.channels[1].send.assert_not_awaited()

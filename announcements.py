@@ -9,10 +9,10 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**⭐ Starboard Catch Detection Fix**\n\n"
-    "Starboards now recognize Pokétwo's catch messages with labeled IVs, "
-    "so matching catches can post to your configured boards. Shiny streak "
-    "counts are also recognized in Pokétwo's catch messages."
+    "**⭐ Starboard Gender Emoji Fix**\n\n"
+    "Starboards now recognize catches with Pokétwo's gender emojis. "
+    "This fixes missing main-board catches and shiny thumbnails, and "
+    "recognizes unformatted shiny streak counts."
 )
 
 

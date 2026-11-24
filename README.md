@@ -28,8 +28,9 @@ Use `v!settings` → **Starboard** to select separate channels for the main
 10%, or IV above 90%) boards. Clear a channel selection to disable that board.
 Changing these channels requires Manage Server. Catches can appear on multiple
 boards, and Gigantamax and extreme-IV matches each receive their own post.
-Posts link to the original catch. Pokétwo's labeled IVs and shiny streak counts
-are recognized; chain values are shown when present in the catch message.
+Posts link to the original catch. Pokétwo's gender emoji, labeled IVs and shiny
+streak counts are recognized; chain values are shown when present in the catch
+message.
 Missing spawn rates (including Gigantamax rates not in the
 dataset) are labelled unknown. The shiny board
 increments the trailing number in its channel name after every shiny post,

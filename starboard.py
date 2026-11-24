@@ -83,21 +83,33 @@ def parse_catch(message) -> Catch | None:
         )))
     match = re.search(
         r"Congratulations\s+<@!?(\d+)>!\s*You caught an?\s+Level\s+(\d+)\s+"
-        r"(.+?)\s*(?:([♂♀])\s*)?\((?:IV:\s*)?(\d+(?:\.\d+)?)%\)!",
+        r"(.+?)\s*\((?:IV:\s*)?(\d+(?:\.\d+)?)%\)!",
         text, re.IGNORECASE,
     )
     if not match:
         return None
     name = match.group(3).strip(" *")
+    gender_match = re.search(
+        r"(?:\s+([♂♀])\ufe0f?|\s*(?:<a?:(male|female|unknown):\d+>"
+        r"|:(male|female|unknown):))$",
+        name, re.IGNORECASE,
+    )
+    gender = ""
+    if gender_match:
+        gender_name = gender_match.group(2) or gender_match.group(3)
+        gender = gender_match.group(1) or {
+            "male": "♂", "female": "♀", "unknown": "",
+        }[gender_name.casefold()]
+        name = name[:gender_match.start()].strip(" *")
     chain = re.search(r"\bchain\s*[:#]?\s*([\d,]+)", text, re.IGNORECASE)
     if chain is None:
         chain = re.search(
-            r"(?:shiny streak reset|shiny chain)[.!]?\s*\(\*\*([\d,]+)\*\*\)",
+            r"(?:shiny streak reset|shiny chain)[.!]?\s*\((?:\*\*)?"
+            r"([\d,]+)(?:\*\*)?\)",
             text, re.IGNORECASE,
         )
     return Catch(
-        match.group(1), name, int(match.group(2)), match.group(5),
-        match.group(4) or "",
+        match.group(1), name, int(match.group(2)), match.group(4), gender,
         bool(re.search(r"these colors seem unusual", text, re.IGNORECASE)),
         bool(re.search(r"\bgigantamax\b", text, re.IGNORECASE)),
         chain.group(1) if chain else None,
