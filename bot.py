@@ -1173,14 +1173,39 @@ class ExchangeReservesView(discord.ui.View):
         )
 
 
-class NamingSettingsView(discord.ui.View):
+class NamingSettingsView(discord.ui.LayoutView):
     """Naming configuration settings."""
+
+    class SettingButton(discord.ui.Button):
+        def __init__(
+            self,
+            owner: "NamingSettingsView",
+            setting: str,
+            label: str,
+            enabled: bool,
+            style: discord.ButtonStyle | None = None,
+        ):
+            self.owner = owner
+            self.setting = setting
+            super().__init__(
+                label=label,
+                style=style
+                or (
+                    discord.ButtonStyle.green
+                    if enabled
+                    else discord.ButtonStyle.red
+                ),
+            )
+
+        async def callback(self, interaction: discord.Interaction) -> None:
+            await self.owner.toggle_setting(interaction, self.setting)
 
     def __init__(self, cog: "PokéTwoNamingBot", user_id: int, guild_id: int):
         super().__init__(timeout=300)
         self.cog = cog
         self.user_id = user_id
         self.guild_id = guild_id
+        self.rebuild()
 
     def get_naming_settings(self) -> dict:
         """Get naming settings for this guild."""
@@ -1189,150 +1214,137 @@ class NamingSettingsView(discord.ui.View):
             "naming", {}
         )
 
-    def build_embed(self) -> discord.Embed:
-        """Build the naming settings embed."""
+    def rebuild(self) -> None:
+        """Rebuild the V2 layout from the latest settings."""
+        self.clear_items()
         settings = self.get_naming_settings()
-
         naming_enabled = settings.get("enabled", True)
         naming_mode = settings.get("mode", "assisted")  # 'assisted' or 'embed'
         only_pings = settings.get("only_pings", False)
         best_name = settings.get("best_name", True)
 
-        embed = discord.Embed(
-            title="Server Settings · Naming",
-            description="Configure this section. Then use Back to choose another.",
-            color=discord.Color.blurple(),
+        container = discord.ui.Container()
+        container.add_item(
+            discord.ui.TextDisplay(
+                "## Server Settings · Naming\n"
+                "Configure this section. Changes save immediately."
+            )
         )
+        container.add_item(discord.ui.Separator())
 
-        # Naming toggle
-        naming_status = "Enabled" if naming_enabled else "Disabled"
-        naming_emoji = "✅" if naming_enabled else "❌"
-        embed.add_field(
-            name="Naming",
-            value=f"{naming_emoji} {naming_status}\nAllow Hatsenna to send Pokémon predictions.",
-            inline=False,
+        container.add_item(
+            discord.ui.Section(
+                "**Naming**\n"
+                f"{'Enabled' if naming_enabled else 'Disabled'} · "
+                "Allow the bot to send Pokémon predictions.",
+                accessory=self.SettingButton(
+                    self,
+                    "enabled",
+                    "On" if naming_enabled else "Off",
+                    naming_enabled,
+                ),
+            )
         )
-
-        # Naming Mode
-        mode_display = "Assisted" if naming_mode == "assisted" else "Embed Mode"
-        embed.add_field(
-            name="Naming Mode",
-            value=f"{mode_display}\n"
-            + (
-                "Assisted mode adds copy-ready catch commands beneath predictions."
-                if naming_mode == "assisted"
-                else "When disabled, show the catch command in a copyable code block instead."
-            ),
-            inline=False,
+        container.add_item(
+            discord.ui.Section(
+                "**Naming Mode**\n"
+                + (
+                    "Assisted adds copy-ready catch commands beneath predictions."
+                    if naming_mode == "assisted"
+                    else "Embed Mode puts the catch command in a copyable code block."
+                ),
+                accessory=self.SettingButton(
+                    self,
+                    "mode",
+                    "Assisted" if naming_mode == "assisted" else "Embed Mode",
+                    True,
+                    discord.ButtonStyle.primary,
+                ),
+            )
         )
-
-        # Only Pings
-        only_pings_status = "Enabled" if only_pings else "Disabled"
-        only_pings_emoji = "✅" if only_pings else "❌"
-        embed.add_field(
-            name="Only Pings",
-            value=f"{only_pings_emoji} {only_pings_status}\n"
-            "Suppress ordinary naming output unless a configured ping applies.",
-            inline=False,
+        container.add_item(
+            discord.ui.Section(
+                "**Only Pings**\n"
+                f"{'Enabled' if only_pings else 'Disabled'} · "
+                "Suppress naming output unless a configured ping applies.",
+                accessory=self.SettingButton(
+                    self,
+                    "only_pings",
+                    "On" if only_pings else "Off",
+                    only_pings,
+                ),
+            )
         )
-
-        # Best Name
-        best_name_status = "Enabled" if best_name else "Disabled"
-        best_name_emoji = "✅" if best_name else "❌"
-        embed.add_field(
-            name="Best Name",
-            value=f"{best_name_emoji} {best_name_status}\n"
-            "Use the fastest normalized catch alias when one is available.",
-            inline=False,
+        container.add_item(
+            discord.ui.Section(
+                "**Best Name**\n"
+                f"{'Enabled' if best_name else 'Disabled'} · "
+                "Use the fastest normalized catch alias when one is available.",
+                accessory=self.SettingButton(
+                    self,
+                    "best_name",
+                    "On" if best_name else "Off",
+                    best_name,
+                ),
+            )
         )
+        back_button = discord.ui.Button(
+            label="Back",
+            style=discord.ButtonStyle.secondary,
+        )
+        back_button.callback = self.go_back
+        back_row = discord.ui.ActionRow()
+        back_row.add_item(back_button)
+        container.add_item(back_row)
+        self.add_item(container)
 
-        return embed
-
-    @discord.ui.button(label="Naming", style=discord.ButtonStyle.red)
-    async def toggle_naming(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
+    async def toggle_setting(
+        self, interaction: discord.Interaction, setting: str
+    ) -> None:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(
+                "Only the person who ran v!settings can change these settings.",
+                ephemeral=True,
+            )
+            return
         settings = self.get_naming_settings()
-        settings["enabled"] = not settings.get("enabled", True)
-        self.cog.save_bot_state()
-
-        # Update button color
-        if settings["enabled"]:
-            button.style = discord.ButtonStyle.green
-            button.label = "Naming"
+        if setting == "mode":
+            settings["mode"] = (
+                "embed" if settings.get("mode", "assisted") == "assisted"
+                else "assisted"
+            )
+        elif setting in {"enabled", "best_name"}:
+            settings[setting] = not settings.get(setting, True)
+        elif setting == "only_pings":
+            settings[setting] = not settings.get(setting, False)
         else:
-            button.style = discord.ButtonStyle.red
-            button.label = "Naming"
-
-        await interaction.response.edit_message(
-            embed=self.build_embed(), view=self
-        )
-
-    @discord.ui.button(label="Assisted", style=discord.ButtonStyle.primary)
-    async def toggle_naming_mode(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        settings = self.get_naming_settings()
-        current_mode = settings.get("mode", "assisted")
-        settings["mode"] = "embed" if current_mode == "assisted" else "assisted"
+            await interaction.response.send_message(
+                "This setting is not available.",
+                ephemeral=True,
+            )
+            return
         self.cog.save_bot_state()
+        self.rebuild()
+        await interaction.response.edit_message(view=self)
 
-        # Update button label
-        button.label = "Assisted" if settings["mode"] == "assisted" else "Embed Mode"
-
+    async def go_back(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(
+                "Only the person who ran v!settings can use this menu.",
+                ephemeral=True,
+            )
+            return
         await interaction.response.edit_message(
-            embed=self.build_embed(), view=self
-        )
-
-    @discord.ui.button(label="Off", style=discord.ButtonStyle.red)
-    async def toggle_only_pings(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        settings = self.get_naming_settings()
-        settings["only_pings"] = not settings.get("only_pings", False)
-        self.cog.save_bot_state()
-
-        # Update button color
-        if settings["only_pings"]:
-            button.style = discord.ButtonStyle.green
-            button.label = "On"
-        else:
-            button.style = discord.ButtonStyle.red
-            button.label = "Off"
-
-        await interaction.response.edit_message(
-            embed=self.build_embed(), view=self
-        )
-
-    @discord.ui.button(label="On", style=discord.ButtonStyle.green)
-    async def toggle_best_name(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        settings = self.get_naming_settings()
-        settings["best_name"] = not settings.get("best_name", True)
-        self.cog.save_bot_state()
-
-        # Update button color
-        if settings["best_name"]:
-            button.style = discord.ButtonStyle.green
-            button.label = "On"
-        else:
-            button.style = discord.ButtonStyle.red
-            button.label = "Off"
-
-        await interaction.response.edit_message(
-            embed=self.build_embed(), view=self
-        )
-
-    @discord.ui.button(label="Back", style=discord.ButtonStyle.secondary, row=4)
-    async def go_back(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(
-            view=ServerSettingsView(interaction.user.id)
+            view=ServerSettingsView(
+                interaction.user.id,
+                cog=self.cog,
+                guild_id=self.guild_id,
+            )
         )
 
 
 class ServerSettingsView(discord.ui.LayoutView):
-    """Settings menu; the Open buttons are placeholders for now."""
+    """Server settings section menu."""
 
     SECTIONS = (
         ("Naming", "Naming `On` · Mode `Assisted`"),
@@ -1360,9 +1372,22 @@ class ServerSettingsView(discord.ui.LayoutView):
         )
         container.add_item(discord.ui.Separator())
         for name, description in self.SECTIONS:
+            if name == "Naming" and cog is not None and guild_id is not None:
+                naming = (
+                    cog.bot_state.get("guild_settings", {})
+                    .get(str(guild_id), {})
+                    .get("naming", {})
+                )
+                enabled = "On" if naming.get("enabled", True) else "Off"
+                mode = (
+                    "Assisted"
+                    if naming.get("mode", "assisted") == "assisted"
+                    else "Embed Mode"
+                )
+                description = f"Naming `{enabled}` · Mode `{mode}`"
             button = discord.ui.Button(label="Open", style=discord.ButtonStyle.primary)
             if name == "Naming" and cog is not None and guild_id is not None:
-                button.callback = lambda interaction, section_name=name: self.open_naming_settings(interaction, section_name)
+                button.callback = self.open_naming_settings
             else:
                 button.callback = self.placeholder
             container.add_item(
@@ -1379,16 +1404,22 @@ class ServerSettingsView(discord.ui.LayoutView):
         )
         self.add_item(container)
 
-    async def open_naming_settings(self, interaction: discord.Interaction, section_name: str):
+    async def open_naming_settings(self, interaction: discord.Interaction):
         """Open the naming settings view."""
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(
+                "Only the person who ran v!settings can open these settings.",
+                ephemeral=True,
+            )
+            return
         if self.cog is None or self.guild_id is None:
-            await interaction.response.defer()
+            await interaction.response.send_message(
+                "These settings can only be opened in a server.",
+                ephemeral=True,
+            )
             return
         view = NamingSettingsView(self.cog, interaction.user.id, self.guild_id)
-        await interaction.response.edit_message(
-            embed=view.build_embed(),
-            view=view
-        )
+        await interaction.response.edit_message(view=view)
 
     async def placeholder(self, interaction: discord.Interaction):
         await interaction.response.defer()

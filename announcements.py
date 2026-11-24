@@ -9,10 +9,11 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**🥚 Daycare Pair Count Selection**\n\n"
-    "The pair-count menu in `v!dc menu` now shows the selected count, and "
-    "`v!dc <box>` uses that setting to return the selected number of pairs. "
-    "Choose 1–4 pairs in the menu; `/dc` still accepts its own count."
+    "**⚙️ Server Settings Naming Panel Fixed**\n\n"
+    "The Naming `Open` button in `v!settings` now opens correctly instead of "
+    "showing an interaction timeout. Naming settings, button updates, and Back "
+    "navigation now stay in the same supported Discord settings layout, and only "
+    "the command author can change them."
 )
 
 
