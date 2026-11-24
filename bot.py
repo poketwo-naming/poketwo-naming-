@@ -172,8 +172,8 @@ COMMAND_CATALOG = (
     ),
     (
         "Breeding Boxes & Daycare",
-        "v!dc settings",
-        "Changes how pairs are picked and shown.",
+        "v!dc menu",
+        "Opens the daycare settings menu to customize pair selection and output.",
     ),
     (
         "Breeding Boxes & Daycare",
@@ -2770,7 +2770,7 @@ class PokéTwoNamingBot(commands.Cog):
                 "`v!box tags` / `v!box tagged <tag>`\n"
                 "`v!box rename <box> <new name>` / `v!box delete <box>`\n"
                 "`v!box clear <box>` / `v!box reset`\n"
-                "`v!dc [box]` / `v!dc settings` / `v!boxhelp`"
+                "`v!dc [box]` / `v!dc menu` / `v!boxhelp`"
             )
             return
 

@@ -578,9 +578,9 @@ class BreedingBoxService:
                     "`v!box clear <box>` — empty one box\n"
                     "`v!box reset` — confirm before removing all your boxes\n"
                     "`v!dc [box]` — get one compatible pair using Pokémon numbers\n"
-                    "`/dc [box] [count]` — choose a box and number of pairs\n"
-                    "`v!dc settings` — choose first, random, or tagged-first pairs "
-                    "and display\n"
+                    "`/dc box=[box] count=[count]` — slash command to get pairs\n"
+                    "`v!dc menu` — open daycare settings menu to customize pairing "
+                    "and output\n"
                     "`v!boxhelp` — show this command list"
                 ),
                 color=discord.Color.green(),
@@ -1168,14 +1168,17 @@ class BreedingBoxService:
         except ValueError as error:
             await ctx.send(f"❌ Invalid command syntax: {error}")
             return
-        if args and args[0].casefold() == "settings":
+        
+        # Check if opening settings menu
+        if args and args[0].casefold() == "menu":
             if len(args) != 1:
-                await ctx.send("Use `v!dc settings` to open daycare settings.")
+                await ctx.send("Use `v!dc menu` to open daycare settings.")
                 return
             view = DaycareSettingsView(self, ctx.guild.id, ctx.author.id)
             await ctx.send(embed=view.embed(), view=view)
             return
-
+        
+        # Otherwise, v!dc <box> returns 1 pair with Put Back button
         await self.show_daycare_pairs(ctx, " ".join(args), limit=1)
 
     async def show_daycare_pairs(

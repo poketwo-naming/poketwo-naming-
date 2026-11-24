@@ -62,7 +62,7 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
         embed = self.ctx.send.await_args.kwargs["embed"]
         self.assertIsInstance(embed, discord.Embed)
         self.assertEqual(embed.title, "Breeding Boxes & Daycare")
-        self.assertIn("`v!dc settings`", embed.description)
+        self.assertIn("`v!dc menu`", embed.description)
 
     async def test_append_adds_each_page_and_clear_flag_replaces_contents(self):
         boxes = self.service.user_boxes(123, 456)
@@ -339,7 +339,7 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
         await self.command("box", "tagged spark")
         self.assertIn("Pikachu", self.ctx.send.await_args.args[0])
 
-        await self.command("dc", "settings")
+        await self.command("dc", "menu")
         view = self.ctx.send.await_args.kwargs["view"]
         interaction = SimpleNamespace(
             user=SimpleNamespace(id=456),
