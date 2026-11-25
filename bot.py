@@ -1268,9 +1268,14 @@ class FFAReserveView(discord.ui.View):
         self.cog.ffa_requests_in_flight.update(keys)
         try:
             await interaction.response.defer(ephemeral=True)
-            channel = self.cog.bot.get_channel(FFA_REVIEW_CHANNEL_ID)
+            guild_settings = self.cog.bot_state.get("guild_settings", {}).get(
+                str(self.guild_id), {}
+            ).get("roles_channels", {})
+            ffa_review_role_id = guild_settings.get("ffa_review_role", FFA_REVIEW_ROLE_ID)
+            ffa_review_channel_id = guild_settings.get("ffa_review_channel", FFA_REVIEW_CHANNEL_ID)
+            channel = self.cog.bot.get_channel(ffa_review_channel_id)
             if channel is None:
-                channel = await self.cog.bot.fetch_channel(FFA_REVIEW_CHANNEL_ID)
+                channel = await self.cog.bot.fetch_channel(ffa_review_channel_id)
             if any(self.cog.reserve_user_ids(self.guild_id, item) for item in available):
                 await interaction.followup.send(
                     "❌ This Pokémon is reserved again, so no request was sent.",
@@ -1291,14 +1296,14 @@ class FFAReserveView(discord.ui.View):
                     BytesIO(summary.encode("utf-8")), filename="ffa-details.txt"
                 )
             message = await channel.send(
-                f"<@&{FFA_REVIEW_ROLE_ID}> FFA announcement request for **{escaped_summary}**\n"
+                f"<@&{ffa_review_role_id}> FFA announcement request for **{escaped_summary}**\n"
                 f"Requested by: `{self.user_id}`\n"
                 f"Source server: {discord.utils.escape_markdown(self.guild_name)} "
                 f"(`{self.guild_id}`)\n"
                 "A member with restricted-command permission must approve or deny.",
                 view=view,
                 allowed_mentions=discord.AllowedMentions(
-                    roles=[discord.Object(id=FFA_REVIEW_ROLE_ID)],
+                    roles=[discord.Object(id=ffa_review_role_id)],
                     users=False,
                     everyone=False,
                 ),
@@ -1429,11 +1434,17 @@ class FFAReviewView(discord.ui.View):
                 return
             channel = None
             if approve:
+                guild_settings = self.cog.bot_state.get("guild_settings", {}).get(
+                    str(request["guild_id"]), {}
+                ).get("roles_channels", {})
+                ffa_announcement_channel_id = guild_settings.get(
+                    "ffa_announcement_channel", FFA_ANNOUNCEMENT_CHANNEL_ID
+                )
                 try:
-                    channel = self.cog.bot.get_channel(FFA_ANNOUNCEMENT_CHANNEL_ID)
+                    channel = self.cog.bot.get_channel(ffa_announcement_channel_id)
                     if channel is None:
                         channel = await self.cog.bot.fetch_channel(
-                            FFA_ANNOUNCEMENT_CHANNEL_ID
+                            ffa_announcement_channel_id
                         )
                 except (
                     discord.DiscordException, aiohttp.ClientError, OSError, asyncio.TimeoutError
@@ -1460,10 +1471,23 @@ class FFAReviewView(discord.ui.View):
                     )
                     return
             request["status"] = "sending" if approve else "denied"
+            if not approve:
+                reserves = self.cog.bot_state["reserves"].setdefault(
+                    str(request["guild_id"]), {}
+                )
+                for pokemon_name in names:
+                    if pokemon_name not in reserves:
+                        reserves[pokemon_name] = []
+                    if str(request["user_id"]) not in reserves[pokemon_name]:
+                        reserves[pokemon_name].append(str(request["user_id"]))
             try:
                 self.cog.save_bot_state()
             except OSError:
                 request["status"] = "pending"
+                if not approve:
+                    for pokemon_name in names:
+                        if str(request["user_id"]) in reserves.get(pokemon_name, []):
+                            reserves[pokemon_name].remove(str(request["user_id"]))
                 logging.getLogger(__name__).exception("Could not save FFA review decision")
                 await interaction.followup.send(
                     "❌ Could not save the review decision. Please retry.", ephemeral=True
@@ -1471,6 +1495,10 @@ class FFAReviewView(discord.ui.View):
                 return
             if approve and channel is not None:
                 try:
+                    guild_settings = self.cog.bot_state.get("guild_settings", {}).get(
+                        str(request["guild_id"]), {}
+                    ).get("roles_channels", {})
+                    ffa_role_id = guild_settings.get("ffa_role", FFA_ROLE_ID)
                     category = request.get("category")
                     if category:
                         summary = f"{category} FFA"
@@ -1490,9 +1518,9 @@ class FFAReviewView(discord.ui.View):
                             BytesIO(summary.encode("utf-8")), filename="ffa-details.txt"
                         )
                     await channel.send(
-                        f"<@&{FFA_ROLE_ID}> {escaped_summary}",
+                        f"<@&{ffa_role_id}> {escaped_summary}",
                         allowed_mentions=discord.AllowedMentions(
-                            roles=[discord.Object(id=FFA_ROLE_ID)],
+                            roles=[discord.Object(id=ffa_role_id)],
                             users=False,
                             everyone=False,
                         ),

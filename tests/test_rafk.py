@@ -351,12 +351,12 @@ class ReserveFFATests(unittest.IsolatedAsyncioTestCase):
         await review.approve.callback(self.reviewer())
         self.announce_channel.send.assert_awaited_once()
 
-    async def test_denial_does_not_restore_reserve_or_announce(self):
+    async def test_denial_restores_reserve_and_does_not_announce(self):
         await self.request_pikachu()
         view = self.review_channel.send.await_args.kwargs["view"]
         await view.deny.callback(self.reviewer())
         self.assertEqual(self.cog.bot_state["ffa_requests"]["100"]["status"], "denied")
-        self.assertEqual(self.cog.reserve_user_ids(123, "Pikachu"), [])
+        self.assertEqual(self.cog.reserve_user_ids(123, "Pikachu"), ["456"])
         self.announce_channel.send.assert_not_awaited()
 
     async def test_approval_rechecks_reservations(self):
