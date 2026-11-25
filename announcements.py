@@ -9,10 +9,9 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**🔔 Reserve FFA Update**\n\n"
-    "`v!rafk` now lets you release multiple Pokémon, a server category, or all "
-    "of your reserves. Category announcements list exceptions, and FFA "
-    "announcements still require staff approval."
+    "**🔔 FFA Approval Update**\n\n"
+    "`v!rafk` announcement requests now ping <@&1574935908153557103> "
+    "in the review channel so staff know an approval is needed."
 )
 
 

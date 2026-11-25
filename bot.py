@@ -43,6 +43,7 @@ TRAINING_REVIEW_CHANNEL_ID = 1531476097970212915
 RESERVE_REPORT_CHANNEL_ID = 1532512015703085147
 RESERVE_TRADE_THREAD_ID = 1538294047095922748
 FFA_REVIEW_CHANNEL_ID = 1572693324815667270
+FFA_REVIEW_ROLE_ID = 1574935908153557103
 FFA_ANNOUNCEMENT_CHANNEL_ID = 1531481080618680556
 FFA_ROLE_ID = 1532824522120495296
 INCENSE_INACTIVITY_SECONDS = float(
@@ -1289,13 +1290,17 @@ class FFAReserveView(discord.ui.View):
                     BytesIO(summary.encode("utf-8")), filename="ffa-details.txt"
                 )
             message = await channel.send(
-                f"FFA announcement request for **{escaped_summary}**\n"
+                f"<@&{FFA_REVIEW_ROLE_ID}> FFA announcement request for **{escaped_summary}**\n"
                 f"Requested by: `{self.user_id}`\n"
                 f"Source server: {discord.utils.escape_markdown(self.guild_name)} "
                 f"(`{self.guild_id}`)\n"
                 "A member with restricted-command permission must approve or deny.",
                 view=view,
-                allowed_mentions=discord.AllowedMentions.none(),
+                allowed_mentions=discord.AllowedMentions(
+                    roles=[discord.Object(id=FFA_REVIEW_ROLE_ID)],
+                    users=False,
+                    everyone=False,
+                ),
                 **review_details,
             )
             requests[str(message.id)] = {
@@ -1342,7 +1347,7 @@ class FFAReserveView(discord.ui.View):
                 logging.getLogger(__name__).exception("Could not update FFA request controls")
             self.stop()
             await interaction.followup.send(
-                "✅ Your FFA announcement was sent for approval. No role was pinged."
+                "✅ Your FFA announcement was sent for approval."
                 + (
                     " Pokémon still reserved by someone else were excluded: "
                     + ", ".join(discord.utils.escape_markdown(item) for item in unavailable)

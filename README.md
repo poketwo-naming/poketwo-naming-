@@ -40,7 +40,8 @@ announcements also list category Pokémon you did not release as exceptions.
 Staff approval rechecks the reservations before announcing. Long announcements
 are sent as an attached text file.
 Requests from every server currently go to channel `1572693324815667270` and
-are reviewed by members with restricted-command permission in that channel's
+ping role `1574935908153557103` for approval. They are reviewed by members
+with restricted-command permission in that channel's
 server (`v!permission`, administrators, or the server owner). Approved
 announcements go to channel `1531481080618680556` and ping role
 `1532824522120495296` without showing the source server. Released-reserve controls and pending

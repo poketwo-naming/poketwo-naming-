@@ -312,15 +312,19 @@ class ReserveFFATests(unittest.IsolatedAsyncioTestCase):
         self.review_channel.send.assert_awaited_once()
         self.announce_channel.send.assert_awaited_once()
 
-    async def test_request_has_no_mentions_and_reviewer_must_have_permission(self):
+    async def test_request_pings_review_role_and_reviewer_must_have_permission(self):
         view, interaction = await self.request_pikachu()
         self.assertTrue(view.announcement.disabled)
         self.assertIn("approval", interaction.followup.send.await_args.args[0])
         self.cog.bot.get_channel.assert_called_with(1572693324815667270)
         review_args = self.review_channel.send.await_args
         self.assertIn("Source Server", review_args.args[0])
-        self.assertFalse(review_args.kwargs["allowed_mentions"].roles)
-        self.assertFalse(review_args.kwargs["allowed_mentions"].users)
+        self.assertIn("<@&1574935908153557103>", review_args.args[0])
+        review_mentions = review_args.kwargs["allowed_mentions"]
+        self.assertEqual([role.id for role in review_mentions.roles], [1574935908153557103])
+        self.assertFalse(review_mentions.users)
+        self.assertFalse(review_mentions.everyone)
+        self.assertNotIn("No role was pinged", interaction.followup.send.await_args.args[0])
         self.announce_channel.send.assert_not_awaited()
 
         review = review_args.kwargs["view"]
@@ -332,6 +336,7 @@ class ReserveFFATests(unittest.IsolatedAsyncioTestCase):
 
         reviewer = self.reviewer()
         await review.approve.callback(reviewer)
+        self.assertFalse(reviewer.message.edit.await_args.kwargs["allowed_mentions"].roles)
         announcement = self.announce_channel.send.await_args
         self.assertEqual(
             announcement.args[0],
