@@ -2855,7 +2855,7 @@ class PokéTwoNamingBot(commands.Cog):
     ) -> list[str]:
         """Return members hunting a spawned Pokémon."""
         guild_hunts = self.bot_state["shiny_hunts"].get(str(guild_id), {})
-        return [
+        hunters = [
             user_id
             for user_id, hunt in guild_hunts.items()
             if (
@@ -2868,6 +2868,7 @@ class PokéTwoNamingBot(commands.Cog):
             )
             and self.pings_enabled(user_id, "shiny_hunt")
         ]
+        return self.current_guild_member_ids(guild_id, hunters)
 
     def collection_owners_for_spawn(
         self,
@@ -2875,7 +2876,7 @@ class PokéTwoNamingBot(commands.Cog):
         pokemon_name: str,
     ) -> list[str]:
         """Return members collecting a spawned Pokémon who receive pings."""
-        return [
+        owners = [
             user_id
             for user_id, pokemon_names in self.bot_state.get(
                 "collections",
@@ -2883,6 +2884,28 @@ class PokéTwoNamingBot(commands.Cog):
             ).get(str(guild_id), {}).items()
             if pokemon_name in pokemon_names
             and self.pings_enabled(user_id, "collection")
+        ]
+        return self.current_guild_member_ids(guild_id, owners)
+
+    def current_guild_member_ids(
+        self,
+        guild_id: int,
+        user_ids: list[str],
+    ) -> list[str]:
+        """Drop stored user IDs that are no longer members of this server."""
+        bot = getattr(self, "bot", None)
+        if bot is None:
+            return user_ids
+        guild = bot.get_guild(int(guild_id))
+        if guild is None:
+            return user_ids
+        get_member = getattr(guild, "get_member", None)
+        if not callable(get_member):
+            return user_ids
+        return [
+            user_id
+            for user_id in user_ids
+            if get_member(int(user_id)) is not None
         ]
 
     def pings_enabled(self, user_id, kind: str) -> bool:
@@ -2926,13 +2949,16 @@ class PokéTwoNamingBot(commands.Cog):
                 if str(user_id).isdigit() and isinstance(selected, list)
             }
             selections = {**legacy, **selections}
-        return [
+        owners = [
             user_id
             for user_id, selected in selections.items()
             if isinstance(selected, list)
             and any(pokemon_type in selected for pokemon_type in pokemon_types)
             and self.pings_enabled(user_id, "typeping")
         ]
+        if guild_id is None:
+            return owners
+        return self.current_guild_member_ids(guild_id, owners)
 
     def quest_ping_regions(
         self,
@@ -2970,13 +2996,16 @@ class PokéTwoNamingBot(commands.Cog):
                 if str(user_id).isdigit() and isinstance(selected, list)
             }
             selections = {**legacy, **selections}
-        return [
+        owners = [
             user_id
             for user_id, selected in selections.items()
             if isinstance(selected, list)
             and any(region in selected for region in pokemon_regions)
             and self.pings_enabled(user_id, "questping")
         ]
+        if guild_id is None:
+            return owners
+        return self.current_guild_member_ids(guild_id, owners)
 
     def _get_pokemon_regions(self, pokemon_name: str) -> list[str]:
         """Return which regions a Pokémon belongs to."""
@@ -4182,6 +4211,9 @@ class PokéTwoNamingBot(commands.Cog):
             if state_key in {"type_pings", "quest_pings"} and isinstance(legacy, list):
                 for guild in self.bot.guilds:
                     if guild.id == guild_id:
+                        continue
+                    get_member = getattr(guild, "get_member", None)
+                    if not callable(get_member) or get_member(user_id) is None:
                         continue
                     settings.setdefault(str(guild.id), {}).setdefault(
                         user_key,

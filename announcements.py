@@ -10,10 +10,9 @@ PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
     "**Vivillon update**\n"
-    "• Gigantamax starboard catches now use the server's custom Gmax emoji.\n"
-    "• Leaving or being banned from a server now clears that server's shiny hunt, "
-    "collection, type-ping, and quest-ping settings for that user. Settings in "
-    "other servers are preserved."
+    "• Fixed server pings so users who have left are removed instead of appearing "
+    "as `@unknown-user`. Existing ping settings are preserved only in servers where "
+    "the user is still a member."
 )
 
 

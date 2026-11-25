@@ -424,8 +424,14 @@ class TypePingTests(unittest.IsolatedAsyncioTestCase):
         self.cog.save_bot_state.assert_called_once_with()
 
     async def test_member_cleanup_migrates_legacy_pings_to_other_servers(self):
+        guild_123 = SimpleNamespace(id=123, get_member=Mock(return_value=None))
+        guild_789 = SimpleNamespace(
+            id=789,
+            get_member=Mock(return_value=SimpleNamespace(id=456)),
+        )
+        guild_999 = SimpleNamespace(id=999, get_member=Mock(return_value=None))
         self.cog.bot = SimpleNamespace(
-            guilds=[SimpleNamespace(id=123), SimpleNamespace(id=789)]
+            guilds=[guild_123, guild_789, guild_999]
         )
         self.cog.bot_state["type_pings"] = {"456": ["fire"]}
         self.cog.bot_state["quest_pings"] = {"456": ["Kanto"]}
@@ -442,6 +448,58 @@ class TypePingTests(unittest.IsolatedAsyncioTestCase):
             self.cog.bot_state["quest_pings"]["789"]["456"],
             ["Kanto"],
         )
+        self.assertNotIn("999", self.cog.bot_state["type_pings"])
+        self.assertNotIn("999", self.cog.bot_state["quest_pings"])
+
+    async def test_spawn_omits_pings_for_users_who_left_the_server(self):
+        guild = SimpleNamespace(
+            id=123,
+            get_member=Mock(
+                side_effect=lambda user_id: (
+                    SimpleNamespace(id=user_id) if user_id == 456 else None
+                )
+            ),
+        )
+        self.cog.bot = SimpleNamespace(
+            get_guild=Mock(return_value=guild),
+            guilds=[guild],
+        )
+        self.cog.bot_state.update(
+            {
+                "shiny_hunts": {
+                    "123": {
+                        "456": {"pokemon": "Bulbasaur"},
+                        "789": {"pokemon": "Bulbasaur"},
+                    }
+                },
+                "collections": {
+                    "123": {
+                        "456": ["Bulbasaur"],
+                        "789": ["Bulbasaur"],
+                    }
+                },
+                "type_pings": {
+                    "123": {
+                        "456": ["grass"],
+                        "789": ["grass"],
+                    }
+                },
+                "quest_pings": {
+                    "123": {
+                        "456": ["Kanto"],
+                        "789": ["Kanto"],
+                    }
+                },
+            }
+        )
+
+        content, _ = self.cog.format_spawn_prediction("Bulbasaur", 99.0, 123)
+
+        self.assertIn("Shiny hunt pings: <@456>", content)
+        self.assertIn("Collection pings: <@456>", content)
+        self.assertIn("Type pings: <@456>", content)
+        self.assertIn("Quest pings: <@456>", content)
+        self.assertNotIn("<@789>", content)
 
     async def test_reserve_override_hides_type_pings(self):
         self.cog.bot_state["type_pings"] = {
