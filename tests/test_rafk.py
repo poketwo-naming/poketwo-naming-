@@ -25,6 +25,7 @@ class ReserveFFATests(unittest.IsolatedAsyncioTestCase):
             "reserves": {"123": {"Pikachu": ["456"], "Eevee": ["456", "789"]}},
             "restricted_roles": {"999": ["42"]},
             "ffa_requests": {},
+            "categories": {},
         }
         self.cog.ffa_requests_in_flight = set()
         self.cog.save_bot_state = Mock()
@@ -95,6 +96,125 @@ class ReserveFFATests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.cog.reserve_user_ids(123, "Pikachu"), ["456"])
         self.assertFalse(view.announcement.disabled)
         self.assertTrue(view.ffa.disabled)
+
+    async def test_multiple_names_release_only_owned_reserves_and_announce_available(self):
+        view = await self.open_view()
+        await view.release(self.interaction(), "Pikachu, eevee")
+        self.assertEqual(self.cog.reserve_user_ids(123, "Pikachu"), [])
+        self.assertEqual(self.cog.reserve_user_ids(123, "Eevee"), ["789"])
+        self.assertTrue(view.all_ffa.disabled)
+        interaction = self.interaction()
+        await view.announcement.callback(interaction)
+        self.assertIn("Eevee", interaction.followup.send.await_args.args[0])
+        review = self.review_channel.send.await_args.kwargs["view"]
+        await review.approve.callback(self.reviewer())
+        self.assertIn("Pikachu is now FFA", self.announce_channel.send.await_args.args[0])
+        self.assertNotIn("Eevee", self.announce_channel.send.await_args.args[0])
+
+    async def test_invalid_batch_does_not_remove_any_reserves(self):
+        view = await self.open_view()
+        interaction = self.interaction()
+        await view.release(interaction, "Pikachu, invalid")
+        self.assertEqual(self.cog.reserve_user_ids(123, "Pikachu"), ["456"])
+        self.cog.save_bot_state.assert_not_called()
+        self.assertIn("invalid", interaction.response.send_message.await_args.args[0])
+
+    async def test_category_exceptions_survive_restart_and_approval(self):
+        self.cog.bot_state["categories"]["123"] = {
+            "Gmax": ["Pikachu", "Eevee", "Charizard"]
+        }
+        view = await self.open_view()
+        await view.release(self.interaction(), "gmax")
+        self.assertEqual(self.cog.reserve_user_ids(123, "Eevee"), ["789"])
+        self.cog.bot.add_view = Mock()
+        with patch("bot.aiohttp.TCPConnector"), patch("bot.aiohttp.ClientSession"):
+            await self.cog.cog_load()
+        restored = self.cog.bot.add_view.call_args.args[0]
+        await restored.announcement.callback(self.interaction())
+        review = self.review_channel.send.await_args.kwargs["view"]
+        self.assertIn("Gmax FFA except Charizard, Eevee", self.review_channel.send.await_args.args[0])
+        await review.approve.callback(self.reviewer())
+        self.assertEqual(
+            self.announce_channel.send.await_args.args[0],
+            f"<@&{FFA_ROLE_ID}> Gmax FFA except Charizard, Eevee",
+        )
+
+    async def test_category_can_be_entered_with_one_reserve(self):
+        self.cog.bot_state["reserves"]["123"].pop("Eevee")
+        self.cog.bot_state["categories"]["123"] = {"Gmax": ["Pikachu", "Eevee"]}
+        view = await self.open_view()
+        interaction = self.interaction()
+        await view.ffa.callback(interaction)
+        self.assertIsInstance(interaction.response.send_modal.await_args.args[0], FFANameModal)
+        await view.release(self.interaction(), "Gmax")
+        self.assertEqual(self.cog.bot_state["ffa_releases"]["100"]["exceptions"], ["Eevee"])
+
+    async def test_all_ffa_releases_every_own_reserve_and_rolls_back_on_save_failure(self):
+        view = await self.open_view()
+        self.cog.save_bot_state.side_effect = OSError("disk full")
+        with self.assertLogs("bot", level="ERROR"):
+            await view.all_ffa.callback(self.interaction())
+        self.assertEqual(self.cog.reserve_user_ids(123, "Pikachu"), ["456"])
+        self.assertEqual(self.cog.reserve_user_ids(123, "Eevee"), ["456", "789"])
+        self.cog.save_bot_state.side_effect = None
+        await view.all_ffa.callback(self.interaction())
+        self.assertEqual(self.cog.reserve_user_ids(123, "Pikachu"), [])
+        self.assertEqual(self.cog.reserve_user_ids(123, "Eevee"), ["789"])
+        self.assertFalse(view.announcement.disabled)
+
+    async def test_batch_approval_rechecks_each_reservation(self):
+        self.cog.bot_state["reserves"]["123"]["Eevee"] = ["456"]
+        view = await self.open_view()
+        await view.release(self.interaction(), "Pikachu, Eevee")
+        await view.announcement.callback(self.interaction())
+        self.cog.add_reserve_owner(123, "Eevee", 789)
+        review = self.review_channel.send.await_args.kwargs["view"]
+        reviewer = self.reviewer()
+        await review.approve.callback(reviewer)
+        self.announce_channel.send.assert_not_awaited()
+        self.assertIn("reserved again", reviewer.followup.send.await_args.args[0])
+
+    async def test_batch_request_consumes_overlapping_stale_releases(self):
+        first = await self.open_view()
+        await first.release(self.interaction(), "Eevee")
+        self.cog.add_reserve_owner(123, "Eevee", 456)
+        self.cog.remove_reserve_owner(123, "Eevee", 789)
+        second = await self.open_view()
+        interaction = self.interaction()
+        interaction.message.id = 101
+        await second.release(interaction, "Pikachu, Eevee")
+        await second.announcement.callback(interaction)
+        self.assertNotIn("100", self.cog.bot_state["ffa_releases"])
+        await self.review_channel.send.await_args.kwargs["view"].approve.callback(self.reviewer())
+        stale = self.interaction()
+        await first.announcement.callback(stale)
+        self.assertIn("already been requested", stale.response.send_message.await_args.args[0])
+        self.review_channel.send.assert_awaited_once()
+
+    async def test_batch_request_preserves_unannounced_part_of_other_release(self):
+        first = await self.open_view()
+        await first.release(self.interaction(), "Pikachu, Eevee")
+        self.cog.add_reserve_owner(123, "Pikachu", 456)
+        second = await self.open_view()
+        interaction = self.interaction()
+        interaction.message.id = 101
+        await second.release(interaction, "Pikachu")
+        await second.announcement.callback(interaction)
+        self.assertEqual(self.cog.bot_state["ffa_releases"]["100"]["pokemon_names"], ["Eevee"])
+        self.assertEqual(self.cog.bot_state["ffa_releases"]["100"]["pokemon"], "Eevee")
+
+    async def test_long_all_ffa_uses_attachment_for_review_and_announcement(self):
+        self.cog.bot_state["reserves"]["123"] = {
+            f"Pokémon {index:04}": ["456"] for index in range(200)
+        }
+        view = await self.open_view()
+        await view.all_ffa.callback(self.interaction())
+        await view.announcement.callback(self.interaction())
+        self.assertIn("file", self.review_channel.send.await_args.kwargs)
+        review = self.review_channel.send.await_args.kwargs["view"]
+        await review.approve.callback(self.reviewer())
+        self.assertIn("file", self.announce_channel.send.await_args.kwargs)
+        self.assertEqual(self.cog.bot_state["reserves"]["123"], {})
 
     async def test_long_reserve_lists_can_be_paginated(self):
         self.cog.bot_state["reserves"]["123"] = {

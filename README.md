@@ -30,12 +30,15 @@ counterparts. Their `add` and `remove` options accept space-separated names;
 you can use both together as long as a name isn't in both options. With no
 options, the slash commands open a private settings menu.
 
-`v!rafk` shows your current server's reserves. **FFA** releases one of your
-reserves immediately; if you have several, enter the Pokémon's listed name.
-Long lists have Previous and Next buttons.
-Run the command again to release another. **Announcement** requests staff
-approval; denying it does not restore your reserve. A request cannot be
-announced while anyone in the source server still reserves that Pokémon.
+`v!rafk` shows your current server's reserves. **FFA** releases your chosen
+reserves immediately: enter listed Pokémon names separated by commas, or enter
+a server category name. **All FFA** releases all of your reserves in that
+server. Long lists have Previous and Next buttons. **Announcement** requests
+staff approval; denying it does not restore your reserves. Pokémon still
+reserved by someone else are excluded from the announcement. Category
+announcements also list category Pokémon you did not release as exceptions.
+Staff approval rechecks the reservations before announcing. Long announcements
+are sent as an attached text file.
 Requests from every server currently go to channel `1572693324815667270` and
 are reviewed by members with restricted-command permission in that channel's
 server (`v!permission`, administrators, or the server owner). Approved
@@ -88,7 +91,7 @@ channel renames; errors are logged.
 | `v!r search <pokemon>` | `v!r search Pikachu` | Show who has a Pokémon reserved in an embed |
 | `v!r list [@user]` | `v!r list @user` | List all server reserves or one member's reserves |
 | `v!reserve list [@user]` | `v!reserve list @user` | Long-form reserve list command |
-| `v!rafk` | `v!rafk` | Release one of your reserves and request a staff-approved FFA announcement |
+| `v!rafk` | `v!rafk` | Release your reserves or a category and request a staff-approved FFA announcement |
 | `v!r clear` | `v!r clear` | Confirm and clear all server reserves (restricted) |
 | `v!grab` | Reply with `v!grab` | Preview a reserve list, add its unique users to ready-up, or manage reserves |
 | `v!readyup` | `v!readyup` | Show a ready check for users added from `v!grab` (restricted) |

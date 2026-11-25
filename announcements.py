@@ -9,9 +9,10 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**🔔 Spawn Image Download Update**\n\n"
-    "Embedded Pokétwo spawn images can now use Discord's cached media URL "
-    "and retry temporary download failures."
+    "**🔔 Reserve FFA Update**\n\n"
+    "`v!rafk` now lets you release multiple Pokémon, a server category, or all "
+    "of your reserves. Category announcements list exceptions, and FFA "
+    "announcements still require staff approval."
 )
 
 
