@@ -129,6 +129,29 @@ def main_category(name: str) -> str | None:
     return None
 
 
+def parse_missingno_catch(message) -> Catch | None:
+    """Parse a Missingno catch from a Pokétwo confirmation message."""
+    text = message.content or ""
+    for embed in message.embeds:
+        text += "\n" + "\n".join(filter(None, (
+            embed.title, embed.description,
+            embed.footer.text if embed.footer else None,
+        )))
+    match = re.search(
+        r"Congratulations\s+<@!?(\d+)>!\s*You caught an?\s+Level\s+(\d+)\s+"
+        r"(MissingNo\.?)\s*\((?:IV:\s*)?(\d+(?:\.\d+)?)%\)!",
+        text, re.IGNORECASE,
+    )
+    if not match:
+        return None
+    return Catch(
+        match.group(1), "MissingNo. ?", int(match.group(2)), match.group(4), "",
+        bool(re.search(r"these colors seem unusual", text, re.IGNORECASE)),
+        False,
+        None,
+    )
+
+
 class StarboardSettingsView(discord.ui.LayoutView):
     class ChannelSelect(discord.ui.ChannelSelect):
         def __init__(self, owner, key, label):
@@ -222,6 +245,7 @@ class StarboardService:
             "gmax": ("✖️ Gigantamax Catch Detected ✖️", 0xF5DCE5),
             "low": ("📉 Low IV Catch Detected 📉", 0xF5DCE5),
             "high": ("📈 High IV Catch Detected 📈", 0xF5DCE5),
+            "missingno": ("🔴 MissingNo. Catch Detected 🔴", 0xFF0000),
         }
         name = catch.pokemon
         if kind == "gmax" and not name.casefold().startswith("gigantamax "):
@@ -235,7 +259,13 @@ class StarboardService:
             else:
                 chance = spawn["Chance"]
         gender = f" {catch.gender}" if catch.gender else ""
-        if kind in {"rare", "regional"}:
+        if kind == "missingno":
+            description = (
+                f"**Caught By:** <@{catch.user_id}>\n**Pokémon:** {name}\n"
+                f"**Level:** {catch.level}\n**IV:** ???\n"
+                f"**Spawnrate:** {chance}"
+            )
+        elif kind in {"rare", "regional"}:
             description = (
                 f"`Trainer  :` <@{catch.user_id}>\n`Pokemon  :` {name}{gender}\n"
                 f"`Level    :` {catch.level}\n`IVs      :` {catch.iv_text}%\n"
@@ -283,23 +313,30 @@ class StarboardService:
         if message.guild is None:
             return
         catch = parse_catch(message)
+        missingno = None
         if catch is None:
+            missingno = parse_missingno_catch(message)
+        if catch is None and missingno is None:
             return
         settings = (self.cog.bot_state.get("guild_settings", {})
                     .get(str(message.guild.id), {}).get("starboard", {}))
-        category = main_category(catch.pokemon)
         kinds = []
-        if category and settings.get("main"):
-            kinds.append((settings["main"], category))
-        if catch.shiny and settings.get("shiny"):
-            kinds.append((settings["shiny"], "shiny"))
-        if settings.get("vivillon"):
-            if catch.gigantamax:
-                kinds.append((settings["vivillon"], "gmax"))
-            if float(catch.iv_text) < 10:
-                kinds.append((settings["vivillon"], "low"))
-            if float(catch.iv_text) > 90:
-                kinds.append((settings["vivillon"], "high"))
+        if missingno:
+            if settings.get("vivillon"):
+                kinds.append((settings["vivillon"], "missingno"))
+        else:
+            category = main_category(catch.pokemon)
+            if category and settings.get("main"):
+                kinds.append((settings["main"], category))
+            if catch.shiny and settings.get("shiny"):
+                kinds.append((settings["shiny"], "shiny"))
+            if settings.get("vivillon"):
+                if catch.gigantamax:
+                    kinds.append((settings["vivillon"], "gmax"))
+                if float(catch.iv_text) < 10:
+                    kinds.append((settings["vivillon"], "low"))
+                if float(catch.iv_text) > 90:
+                    kinds.append((settings["vivillon"], "high"))
         if not kinds:
             return
         lock = self.locks.setdefault(message.guild.id, asyncio.Lock())
@@ -318,7 +355,8 @@ class StarboardService:
                 view = discord.ui.View()
                 view.add_item(discord.ui.Button(label="Catch", url=message.jump_url))
                 try:
-                    await channel.send(embed=self.embed(catch, kind, message), view=view,
+                    posting_catch = missingno if missingno else catch
+                    await channel.send(embed=self.embed(posting_catch, kind, message), view=view,
                                        allowed_mentions=discord.AllowedMentions.none())
                 except discord.HTTPException:
                     logging.getLogger(__name__).exception("Could not post to starboard %s", channel_id)
