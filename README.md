@@ -57,8 +57,9 @@ boards, and Gigantamax and extreme-IV matches each receive their own post.
 Posts link to the original catch. Pokétwo's gender emoji, labeled IVs and shiny
 streak counts are recognized; chain values are shown when present in the catch
 message.
-Missing spawn rates (including Gigantamax rates not in the
-dataset) are labelled unknown. The shiny board
+Vivillon starboard posts show the Gigantamax spawn rate when a rate is known,
+including on overlapping low- and high-IV posts. Other missing spawn rates
+are labelled unknown. The shiny board
 increments the trailing number in its channel name after every shiny post,
 respecting a higher manually set number. The bot needs View Channel, Send
 Messages, Embed Links and, for the counter, Manage Channels. Discord rate limits

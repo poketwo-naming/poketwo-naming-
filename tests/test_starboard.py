@@ -183,8 +183,48 @@ class StarboardTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("Gigantamax Charizard", gmax.description)
         self.assertIn("/10196.png", gmax.thumbnail.url)
-        self.assertIn("Unknown", gmax.description)
+        self.assertIn("**Spawnrate:** 1 out of 359,600", gmax.description)
         self.assertIn("High IV", self.channels[3].send.await_args.kwargs["embed"].title)
+        self.assertIn(
+            "**Spawnrate:** 1 out of 359,600",
+            self.channels[3].send.await_args.kwargs["embed"].description,
+        )
+
+    async def test_vivillon_gmax_spawn_rates(self):
+        rates = {
+            "Duraludon": "359,600", "Rillaboom": "359,600", "Kingler": "359,600",
+            "Sandaconda": "359,600", "Pikachu": "89,900", "Meowth": "89,900",
+            "Snorlax": "359,600", "Appletun": "359,600", "Charizard": "359,600",
+            "Coalossal": "359,600", "Garbodor": "359,600", "Alcremie": "2,465,800",
+            "Centiskorch": "359,600", "Eevee": "89,900", "Venusaur": "359,600",
+            "Corviknight": "359,600", "Blastoise": "359,600", "Orbeetle": "359,600",
+            "Butterfree": "359,600", "Hatterene": "359,600", "Machamp": "359,600",
+            "Flapple": "359,600",
+        }
+        for index, (name, rate) in enumerate(rates.items()):
+            with self.subTest(name=name):
+                self.message.id = 600 + index
+                self.message.content = (
+                    f"Congratulations <@999>! You caught a Level 22 {name} (52.15%)!\n"
+                    "Woah! It seems that this pokémon has the Gigantamax Factor..."
+                )
+                await self.service.handle(self.message)
+                embed = self.channels[3].send.await_args.kwargs["embed"]
+                self.assertIn(f"**Spawnrate:** 1 out of {rate}", embed.description)
+
+    async def test_gmax_low_iv_and_unknown_rate(self):
+        for index, (name, rate) in enumerate((
+            ("Gigantamax Pikachu", "1 out of 89,900"),
+            ("Gengar", "Unknown"),
+        )):
+            self.message.id = 700 + index
+            self.message.content = (
+                f"Congratulations <@999>! You caught a Level 22 {name} (9.99%)!\n"
+                "Woah! It seems that this pokémon has the Gigantamax Factor..."
+            )
+            await self.service.handle(self.message)
+            for call in self.channels[3].send.await_args_list[-2:]:
+                self.assertIn(f"**Spawnrate:** {rate}", call.kwargs["embed"].description)
 
     async def test_shiny_counter_and_deduplication_across_edits_and_restarts(self):
         self.message.content += "\nThese colors seem unusual... ✨\nChain: 1349"

@@ -61,6 +61,30 @@ GMAX_IDS = dict(zip(
      "duraludon", "urshifu", "rapid strike urshifu", "low key toxtricity"),
     range(10195, 10229),
 ))
+GMAX_SPAWN_RATES = {
+    "duraludon": 359_600,
+    "rillaboom": 359_600,
+    "kingler": 359_600,
+    "sandaconda": 359_600,
+    "pikachu": 89_900,
+    "meowth": 89_900,
+    "snorlax": 359_600,
+    "appletun": 359_600,
+    "charizard": 359_600,
+    "coalossal": 359_600,
+    "garbodor": 359_600,
+    "alcremie": 2_465_800,
+    "centiskorch": 359_600,
+    "eevee": 89_900,
+    "venusaur": 359_600,
+    "corviknight": 359_600,
+    "blastoise": 359_600,
+    "orbeetle": 359_600,
+    "butterfree": 359_600,
+    "hatterene": 359_600,
+    "machamp": 359_600,
+    "flapple": 359_600,
+}
 
 
 @dataclass(frozen=True)
@@ -254,14 +278,20 @@ class StarboardService:
         name = catch.pokemon
         if kind == "gmax" and not name.casefold().startswith("gigantamax "):
             name = f"Gigantamax {name}"
-        spawn = self.cog.pokemon_spawn_chances.get(name.casefold())
         chance = "Unknown"
-        if spawn:
-            numerator, separator, denominator = spawn["Chance"].partition("/")
-            if separator and numerator == "1" and denominator.isdigit():
-                chance = f"1 out of {int(denominator):,}"
-            else:
-                chance = spawn["Chance"]
+        if catch.gigantamax and kind in {"gmax", "low", "high"}:
+            species = re.sub(r"^gigantamax\s+", "", catch.pokemon, flags=re.IGNORECASE)
+            denominator = GMAX_SPAWN_RATES.get(species.casefold())
+            if denominator is not None:
+                chance = f"1 out of {denominator:,}"
+        else:
+            spawn = self.cog.pokemon_spawn_chances.get(name.casefold())
+            if spawn:
+                numerator, separator, denominator = spawn["Chance"].partition("/")
+                if separator and numerator == "1" and denominator.isdigit():
+                    chance = f"1 out of {int(denominator):,}"
+                else:
+                    chance = spawn["Chance"]
         gender = f" {catch.gender}" if catch.gender else ""
         if kind == "missingno":
             description = (
