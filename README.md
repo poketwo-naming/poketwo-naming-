@@ -83,6 +83,7 @@ channel renames; errors are logged.
 | `v!resume` | `v!resume` | Resume Pokétwo in the current channel (restricted) |
 | `v!r all` | `v!r all` | Resume Pokétwo in every tracked paused channel in this server (restricted) |
 | `v!pause` / `v!p` | `v!p` | Pause Pokétwo in the current channel (restricted) |
+| `v!pause all` / `v!p all` | `v!p all` | Pause channels with a confirmed incense purchase in the past 10 hours (restricted) |
 | `v!poff` | `v!poff` | Disable automatic pausing after confirmed incense purchases in this server (restricted) |
 | `v!pon` | `v!pon` | Re-enable automatic pausing after confirmed incense purchases in this server (restricted) |
 | `v!r add <pokemon,...> <@user>` | `v!r add Pikachu, Eevee @user` | Reserve multiple Pokémon for a member (restricted) |
@@ -249,6 +250,11 @@ Pokétwo from sending messages; it does not send an incense pause command. Use
 `v!poff` to disable this behavior in the server, or `v!pon` to re-enable it.
 `v!p` manually pauses the current channel; `v!resume` resumes it, and restricted
 staff can use `v!r all` to resume every tracked paused channel in the server.
+`v!p all` (or `v!pause all`) pauses channels in the current server with a
+confirmed incense purchase at most 10 hours ago, skipping older purchases.
+Purchases are tracked even when automatic pausing is disabled and survive bot
+restarts, but purchases before this update or while the bot was offline are not
+tracked.
 
 MissingNo detection immediately denies Pokétwo's Send Messages permission in
 the current channel, asks staff not to catch it, and pings role

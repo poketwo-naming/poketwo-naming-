@@ -50,6 +50,7 @@ FFA_ROLE_ID = 1532824522120495296
 INCENSE_INACTIVITY_SECONDS = float(
     os.getenv("INCENSE_INACTIVITY_SECONDS", "90")
 )
+INCENSE_PURCHASE_PAUSE_WINDOW_SECONDS = 10 * 60 * 60
 TRAINING_ROOT = "pokemon_images/training_data"
 TRAINING_COLLECTION_FILE = "pokemon_images/new_training_images.json"
 SPAWN_DOWNLOAD_SIZE = 232
@@ -229,6 +230,11 @@ COMMAND_CATALOG = (
         "Channel Controls",
         "v!pause (alias: v!p)",
         "Pauses Pokétwo in the current channel. Restricted.",
+    ),
+    (
+        "Channel Controls",
+        "v!p all",
+        "Pauses channels with a confirmed incense purchase in the last 10 hours. Restricted.",
     ),
     (
         "Channel Controls",
@@ -3175,6 +3181,7 @@ class PokéTwoNamingBot(commands.Cog):
             "restricted_roles": {},
             "paused_channels": {},
             "incense_auto_pause": {},
+            "incense_purchases": {},
             "reserves": {},
             "ffa_requests": {},
             "ffa_releases": {},
@@ -3217,6 +3224,7 @@ class PokéTwoNamingBot(commands.Cog):
         state.setdefault("restricted_roles", {})
         state.setdefault("paused_channels", {})
         state.setdefault("incense_auto_pause", {})
+        state.setdefault("incense_purchases", {})
         state.setdefault("reserves", {})
         state.setdefault("ffa_requests", {})
         state.setdefault("ffa_releases", {})
@@ -4306,11 +4314,17 @@ class PokéTwoNamingBot(commands.Cog):
 
     async def maybe_pause_after_incense_purchase(self, message):
         """Pause Pokétwo after a confirmed incense purchase unless disabled."""
-        if (
-            message.guild is None
-            or not self.incense_auto_pause_enabled(message.guild.id)
-            or not self.is_incense_purchase_confirmation(message)
-        ):
+        if message.guild is None or not self.is_incense_purchase_confirmation(message):
+            return
+        purchases = self.bot_state["incense_purchases"].setdefault(
+            str(message.guild.id), {}
+        )
+        channel_key = str(message.channel.id)
+        purchased_at = message.created_at.timestamp()
+        if purchased_at > purchases.get(channel_key, 0):
+            purchases[channel_key] = purchased_at
+            self.save_bot_state()
+        if not self.incense_auto_pause_enabled(message.guild.id):
             return
         try:
             paused = await self.pause_poketwo_channel(
@@ -5908,13 +5922,19 @@ class PokéTwoNamingBot(commands.Cog):
         await ctx.send("✅ Channel resumed. Pokétwo can send messages again.")
 
     @commands.command(name="pause", aliases=["p"])
-    async def pause_poketwo_channel_command(self, ctx):
-        """Pause Pokétwo in the current channel for restricted staff."""
+    async def pause_poketwo_channel_command(self, ctx, *, target: str = ""):
+        """Pause the current channel or recently purchased incense channels."""
         if ctx.guild is None:
             await ctx.send("This command can only be used inside a server.")
             return
         if not self.has_restricted_permission(ctx):
             await ctx.send("❌ You do not have permission to pause this channel.")
+            return
+        if target.strip().casefold() == "all":
+            await self.pause_recent_incense_channels(ctx)
+            return
+        if target.strip():
+            await ctx.send("Usage: `v!p` or `v!p all`")
             return
         if not await self.pause_poketwo_channel(
             ctx.channel,
@@ -5926,6 +5946,46 @@ class PokéTwoNamingBot(commands.Cog):
             )
             return
         await ctx.send("✅ Channel paused. Pokétwo can no longer send messages here.")
+
+    async def pause_recent_incense_channels(self, ctx):
+        """Pause channels with confirmed purchases in the last 10 hours."""
+        now = time()
+        purchases = self.bot_state["incense_purchases"].get(str(ctx.guild.id), {})
+        recent_channel_ids = [
+            channel_id
+            for channel_id, purchased_at in purchases.items()
+            if 0 <= now - purchased_at <= INCENSE_PURCHASE_PAUSE_WINDOW_SECONDS
+        ]
+        if not recent_channel_ids:
+            await ctx.send("There are no tracked incense purchases in the last 10 hours.")
+            return
+
+        paused = 0
+        failed = 0
+        for channel_id in recent_channel_ids:
+            channel = ctx.guild.get_channel(int(channel_id))
+            if channel is None:
+                failed += 1
+                continue
+            try:
+                success = await self.pause_poketwo_channel(
+                    channel, reason="Staff paused recently purchased incense channels"
+                )
+            except discord.HTTPException as error:
+                print(f"Could not pause Pokétwo in channel {channel_id}: {error}")
+                success = False
+            if success:
+                paused += 1
+            else:
+                failed += 1
+        if failed:
+            await ctx.send(
+                f"✅ Paused Pokétwo in {paused} channel(s). ❌ Could not pause "
+                f"{failed}; check that the channels still exist, I have "
+                "**Manage Channels** permission, and Pokétwo is still in the server."
+            )
+        else:
+            await ctx.send(f"✅ Paused Pokétwo in {paused} channel(s).")
 
     @commands.command(name="poff")
     async def disable_incense_auto_pause(self, ctx):

@@ -10,9 +10,9 @@ PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
     "**Vivillon update**\n"
-    "• Fixed server pings so users who have left are removed instead of appearing "
-    "as `@unknown-user`. Existing ping settings are preserved only in servers where "
-    "the user is still a member."
+    "• Restricted staff can now use `v!p all` to pause Pokétwo in this server's "
+    "channels with a confirmed incense purchase in the last 10 hours. Older "
+    "purchases are skipped without affecting eligible channels."
 )
 
 
