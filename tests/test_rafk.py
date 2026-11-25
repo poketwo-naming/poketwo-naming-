@@ -196,6 +196,7 @@ class ReserveFFATests(unittest.IsolatedAsyncioTestCase):
         view, interaction = await self.request_pikachu()
         self.assertTrue(view.announcement.disabled)
         self.assertIn("approval", interaction.followup.send.await_args.args[0])
+        self.cog.bot.get_channel.assert_called_with(1572693324815667270)
         review_args = self.review_channel.send.await_args
         self.assertIn("Source Server", review_args.args[0])
         self.assertFalse(review_args.kwargs["allowed_mentions"].roles)

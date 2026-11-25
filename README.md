@@ -33,7 +33,7 @@ Long lists have Previous and Next buttons.
 Run the command again to release another. **Announcement** requests staff
 approval; denying it does not restore your reserve. A request cannot be
 announced while anyone in the source server still reserves that Pokémon.
-Requests from every server currently go to channel `1533109548951535779` and
+Requests from every server currently go to channel `1572693324815667270` and
 are reviewed by members with restricted-command permission in that channel's
 server (`v!permission`, administrators, or the server owner). Approved
 announcements go to channel `1531481080618680556` and ping role
