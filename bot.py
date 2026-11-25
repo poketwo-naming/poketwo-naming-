@@ -1471,6 +1471,7 @@ class FFAReviewView(discord.ui.View):
                     )
                     return
             request["status"] = "sending" if approve else "denied"
+            reserves = None
             if not approve:
                 reserves = self.cog.bot_state["reserves"].setdefault(
                     str(request["guild_id"]), {}
@@ -1484,7 +1485,7 @@ class FFAReviewView(discord.ui.View):
                 self.cog.save_bot_state()
             except OSError:
                 request["status"] = "pending"
-                if not approve:
+                if reserves is not None:
                     for pokemon_name in names:
                         if str(request["user_id"]) in reserves.get(pokemon_name, []):
                             reserves[pokemon_name].remove(str(request["user_id"]))
