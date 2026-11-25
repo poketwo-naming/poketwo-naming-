@@ -29,6 +29,7 @@ from PIL import Image, UnidentifiedImageError
 from breeding_boxes import BreedingBoxService
 from pokemon_recognition import PokemonImageRecognizer
 from starboard import StarboardService, StarboardSettingsView
+from roles_channels import RolesChannelsSettingsView
 from tools.build_pokemon_types import (
     CUSTOM_SPRITE_IDENTIFIERS,
     normalize as normalize_pokemon_alias,
@@ -1926,6 +1927,8 @@ class ServerSettingsView(discord.ui.LayoutView):
             button = discord.ui.Button(label="Open", style=discord.ButtonStyle.primary)
             if name == "Naming" and cog is not None and guild_id is not None:
                 button.callback = self.open_naming_settings
+            elif name == "Roles & Channels" and cog is not None and guild_id is not None:
+                button.callback = self.open_roles_channels_settings
             elif name == "Starboard" and cog is not None and guild_id is not None:
                 button.callback = self.open_starboard_settings
             else:
@@ -1975,6 +1978,22 @@ class ServerSettingsView(discord.ui.LayoutView):
             return
         await interaction.response.edit_message(
             view=StarboardSettingsView(self.cog, self.user_id, self.guild_id)
+        )
+
+    async def open_roles_channels_settings(self, interaction: discord.Interaction):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message(
+                "Only the person who ran v!settings can open these settings.",
+                ephemeral=True,
+            )
+            return
+        if self.cog is None or self.guild_id is None:
+            await interaction.response.send_message(
+                "These settings can only be opened in a server.", ephemeral=True
+            )
+            return
+        await interaction.response.edit_message(
+            view=RolesChannelsSettingsView(self.cog, self.user_id, self.guild_id)
         )
 
     async def placeholder(self, interaction: discord.Interaction):
