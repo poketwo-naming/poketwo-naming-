@@ -929,6 +929,33 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
             },
         )
 
+    async def test_add_reserves_to_multiple_users_in_one_command(self):
+        self.cog.class_names = {"pikachu": "Pikachu", "eevee": "Eevee"}
+        self.cog.pokemon_aliases = {}
+        self.cog.bot_state["reserves"]["123"] = {}
+        
+        member1 = SimpleNamespace(id=456, mention="<@456>")
+        member2 = SimpleNamespace(id=789, mention="<@789>")
+        
+        self.ctx = SimpleNamespace(
+            guild=SimpleNamespace(
+                id=123,
+                get_member=lambda user_id: member1 if user_id == 456 else (member2 if user_id == 789 else None),
+                fetch_member=AsyncMock(side_effect=lambda user_id: member1 if user_id == 456 else (member2 if user_id == 789 else None)),
+            ),
+            author=SimpleNamespace(id=101),
+            send=AsyncMock(),
+        )
+
+        await self.cog.add_reserve(self.ctx, entry="Pikachu <@456> <@789>")
+
+        self.assertEqual(self.cog.bot_state["reserves"]["123"], {"Pikachu": ["456", "789"]})
+        self.ctx.send.assert_awaited_once()
+        sent_message = self.ctx.send.await_args[0][0]
+        self.assertIn("Pikachu", sent_message)
+        self.assertIn("<@456>", sent_message)
+        self.assertIn("<@789>", sent_message)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -243,8 +243,8 @@ COMMAND_CATALOG = (
     ),
     (
         "Reservations",
-        "v!r add [all] <pokemon,...> <@user>",
-        "Reserves comma-separated Pokémon/forms for a member. Restricted.",
+        "v!r add [all] <pokemon,...> <@user> [<@user2> ...]",
+        "Reserves comma-separated Pokémon/forms for one or more members. Restricted.",
     ),
     (
         "Reservations",
@@ -6061,7 +6061,7 @@ class PokéTwoNamingBot(commands.Cog):
         elif not action_entry:
             await ctx.send(
                 "Use `v!r list [@user]` / `v!reserve list [@user]`, "
-                "`v!r add <pokemon,...> <@user>`, "
+                "`v!r add <pokemon,...> <@user> [<@user2> ...]`, "
                 "`v!r remove <pokemon,...|category> [@user]`, "
                 "`v!r search <pokemon>`, `v!r clear`, or `v!r all`."
             )
@@ -6159,7 +6159,7 @@ class PokéTwoNamingBot(commands.Cog):
         await ctx.send(embed=view.build_embed(), view=view)
 
     async def add_reserve(self, ctx, *, entry: str):
-        """Reserve a Pokémon for a member. Restricted command."""
+        """Reserve a Pokémon for one or more members. Restricted command."""
         if ctx.guild is None:
             await ctx.send("Reservations can only be managed inside a server.")
             return
@@ -6167,21 +6167,38 @@ class PokéTwoNamingBot(commands.Cog):
             await ctx.send("❌ You do not have permission to add reserves.")
             return
 
-        match = re.search(r"(?:<@!?)?(\d+)>?\s*$", entry)
-        if match is None:
-            await ctx.send("Usage: `v!r add <pokémon name> <@user>`")
+        # Extract all user mentions from the end of the entry
+        user_matches = list(re.finditer(r"<@!?(\d+)>", entry))
+        if not user_matches:
+            await ctx.send("Usage: `v!r add <pokémon name> <@user> [<@user2> ...]`")
             return
-        pokemon_input = entry[: match.start()].strip()
-        user_id = int(match.group(1))
-        member = ctx.guild.get_member(user_id)
-        if member is None:
-            try:
-                member = await ctx.guild.fetch_member(user_id)
-            except (discord.NotFound, discord.Forbidden):
-                member = None
-        if member is None:
-            await ctx.send("❌ That user is not in this server.")
+        
+        # Get all user IDs from matches
+        user_ids = [int(match.group(1)) for match in user_matches]
+        
+        # Remove all user mentions from input to get pokemon part
+        pokemon_input = entry
+        for match in reversed(user_matches):
+            pokemon_input = pokemon_input[:match.start()] + pokemon_input[match.end():]
+        pokemon_input = pokemon_input.strip()
+        
+        if not pokemon_input:
+            await ctx.send("Usage: `v!r add <pokémon name> <@user> [<@user2> ...]`")
             return
+        
+        # Fetch all members and validate they exist in the server
+        members = []
+        for user_id in user_ids:
+            member = ctx.guild.get_member(user_id)
+            if member is None:
+                try:
+                    member = await ctx.guild.fetch_member(user_id)
+                except (discord.NotFound, discord.Forbidden):
+                    member = None
+            if member is None:
+                await ctx.send(f"❌ User <@{user_id}> is not in this server.")
+                return
+            members.append(member)
         
         pokemon_names = []
         unknown = []
@@ -6203,15 +6220,20 @@ class PokéTwoNamingBot(commands.Cog):
             )
             return
 
+        # Add reserves for all members and all pokemon
         for pokemon_name in pokemon_names:
-            self.add_reserve_owner(ctx.guild.id, str(pokemon_name), member.id)
+            for member in members:
+                self.add_reserve_owner(ctx.guild.id, str(pokemon_name), member.id)
         self.save_bot_state()
+        
+        # Build response message
+        member_mentions = ", ".join(m.mention for m in members)
         if len(pokemon_names) == 1:
             await ctx.send(
-                f"✅ **{pokemon_names[0]}** added to {member.mention}'s reserves."
+                f"✅ **{pokemon_names[0]}** added to {member_mentions}'s reserves."
             )
         else:
-            suffix = f" added to {member.mention}'s reserves."
+            suffix = f" added to {member_mentions}'s reserves."
             requested_names = [
                 term.strip()
                 for term in pokemon_input.split(",")
