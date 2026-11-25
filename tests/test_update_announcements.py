@@ -5,13 +5,11 @@ from unittest.mock import AsyncMock, Mock
 import discord
 
 from announcements import (
-    ACCUMULATED_UPDATES_KEY,
     ANNOUNCEMENT_CHANNEL_ID,
     ANNOUNCEMENT_ROLE_ID,
     ANNOUNCEMENT_STATE_KEY,
     PENDING_MESSAGE_STATE_KEY,
     UPDATE_ANNOUNCEMENT,
-    add_update_to_announcement,
     post_update_announcement,
 )
 
@@ -40,7 +38,6 @@ class UpdateAnnouncementTests(unittest.IsolatedAsyncioTestCase):
             fetch_channel=AsyncMock(),
         )
         cog = SimpleNamespace(bot_state={}, save_bot_state=Mock())
-        add_update_to_announcement(cog.bot_state, UPDATE_ANNOUNCEMENT)
 
         self.assertTrue(await post_update_announcement(bot, cog))
         bot.get_channel.assert_called_once_with(ANNOUNCEMENT_CHANNEL_ID)
@@ -63,27 +60,6 @@ class UpdateAnnouncementTests(unittest.IsolatedAsyncioTestCase):
         channel.send.assert_awaited_once()
         cog.save_bot_state.assert_not_called()
 
-    async def test_accumulates_multiple_updates(self):
-        channel = self.make_channel()
-        bot = SimpleNamespace(
-            get_channel=Mock(return_value=channel),
-            fetch_channel=AsyncMock(),
-        )
-        cog = SimpleNamespace(bot_state={}, save_bot_state=Mock())
-        
-        update1 = "**🔔 Update 1**\nFirst change"
-        update2 = "**🔔 Update 2**\nSecond change"
-        add_update_to_announcement(cog.bot_state, update1)
-        add_update_to_announcement(cog.bot_state, update2)
-
-        self.assertTrue(await post_update_announcement(bot, cog))
-        sent = channel.send.await_args
-        expected_text = f"{update1}\n\n{update2}"
-        self.assertEqual(
-            sent.args[0],
-            f"<@&{ANNOUNCEMENT_ROLE_ID}> {expected_text}",
-        )
-
     async def test_fetches_channel_if_not_cached(self):
         channel = self.make_channel()
         bot = SimpleNamespace(
@@ -91,7 +67,6 @@ class UpdateAnnouncementTests(unittest.IsolatedAsyncioTestCase):
             fetch_channel=AsyncMock(return_value=channel),
         )
         cog = SimpleNamespace(bot_state={}, save_bot_state=Mock())
-        add_update_to_announcement(cog.bot_state, UPDATE_ANNOUNCEMENT)
 
         self.assertTrue(await post_update_announcement(bot, cog))
         bot.fetch_channel.assert_awaited_once_with(ANNOUNCEMENT_CHANNEL_ID)
@@ -109,7 +84,7 @@ class UpdateAnnouncementTests(unittest.IsolatedAsyncioTestCase):
             fetch_channel=AsyncMock(),
         )
         cog = SimpleNamespace(
-            bot_state={PENDING_MESSAGE_STATE_KEY: 123, ACCUMULATED_UPDATES_KEY: [UPDATE_ANNOUNCEMENT]},
+            bot_state={PENDING_MESSAGE_STATE_KEY: 123},
             save_bot_state=Mock(),
         )
 
@@ -135,7 +110,7 @@ class UpdateAnnouncementTests(unittest.IsolatedAsyncioTestCase):
             fetch_channel=AsyncMock(),
         )
         cog = SimpleNamespace(
-            bot_state={PENDING_MESSAGE_STATE_KEY: 100, ACCUMULATED_UPDATES_KEY: [UPDATE_ANNOUNCEMENT]},
+            bot_state={PENDING_MESSAGE_STATE_KEY: 100},
             save_bot_state=Mock(),
         )
 
@@ -155,7 +130,7 @@ class UpdateAnnouncementTests(unittest.IsolatedAsyncioTestCase):
             get_channel=Mock(return_value=channel),
             fetch_channel=AsyncMock(),
         )
-        cog = SimpleNamespace(bot_state={ACCUMULATED_UPDATES_KEY: [UPDATE_ANNOUNCEMENT]}, save_bot_state=Mock())
+        cog = SimpleNamespace(bot_state={}, save_bot_state=Mock())
 
         with self.assertRaises(discord.Forbidden):
             await post_update_announcement(bot, cog)

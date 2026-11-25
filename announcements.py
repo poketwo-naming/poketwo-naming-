@@ -7,8 +7,7 @@ ANNOUNCEMENT_CHANNEL_ID = 1574489953444827146
 ANNOUNCEMENT_ROLE_ID = 1574502724370825286
 ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
-ACCUMULATED_UPDATES_KEY = "accumulated_updates"
-# Accumulate all updates made since last host restart instead of replacing with latest.
+# Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
     "**🔔 FFA Approval Update**\n\n"
     "`v!rafk` announcement requests now ping <@&1574935908153557103> "
@@ -16,32 +15,20 @@ UPDATE_ANNOUNCEMENT = (
 )
 
 
-def add_update_to_announcement(bot_state: dict, update_text: str) -> None:
-    """Add an update to the accumulated list of changes since last restart."""
-    updates = bot_state.setdefault(ACCUMULATED_UPDATES_KEY, [])
-    if update_text not in updates:
-        updates.append(update_text)
-
-
 async def post_update_announcement(bot, cog) -> bool:
-    """Send and automatically publish accumulated updates once."""
+    """Send and automatically publish the latest update once."""
     bot_state = cog.bot_state
 
     bot_state.pop("last_update_announcement", None)
     bot_state.pop("pending_update_publication", None)
 
-    updates = bot_state.get(ACCUMULATED_UPDATES_KEY, [])
-    if not updates:
-        return False
-
-    announcement_text = "\n\n".join(updates)
     if (
-        bot_state.get(ANNOUNCEMENT_STATE_KEY) == announcement_text
+        bot_state.get(ANNOUNCEMENT_STATE_KEY) == UPDATE_ANNOUNCEMENT
         and bot_state.get(PENDING_MESSAGE_STATE_KEY) is None
     ):
         return False
 
-    content = f"<@&{ANNOUNCEMENT_ROLE_ID}> {announcement_text}"
+    content = f"<@&{ANNOUNCEMENT_ROLE_ID}> {UPDATE_ANNOUNCEMENT}"
     channel = bot.get_channel(ANNOUNCEMENT_CHANNEL_ID)
     if channel is None:
         channel = await bot.fetch_channel(ANNOUNCEMENT_CHANNEL_ID)
@@ -61,9 +48,9 @@ async def post_update_announcement(bot, cog) -> bool:
                 await message.publish()
             bot_state.pop(PENDING_MESSAGE_STATE_KEY)
             if message.content == content:
-                bot_state[ANNOUNCEMENT_STATE_KEY] = announcement_text
+                bot_state[ANNOUNCEMENT_STATE_KEY] = UPDATE_ANNOUNCEMENT
             cog.save_bot_state()
-            if bot_state.get(ANNOUNCEMENT_STATE_KEY) == announcement_text:
+            if bot_state.get(ANNOUNCEMENT_STATE_KEY) == UPDATE_ANNOUNCEMENT:
                 return message.content == content
 
     message = await channel.send(
@@ -82,7 +69,7 @@ async def post_update_announcement(bot, cog) -> bool:
         await message.publish()
 
     bot_state.pop(PENDING_MESSAGE_STATE_KEY)
-    bot_state[ANNOUNCEMENT_STATE_KEY] = announcement_text
+    bot_state[ANNOUNCEMENT_STATE_KEY] = UPDATE_ANNOUNCEMENT
     cog.save_bot_state()
     return True
 
