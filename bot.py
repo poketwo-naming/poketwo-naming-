@@ -4340,13 +4340,23 @@ class PokéTwoNamingBot(commands.Cog):
         if self.http_session is None:
             raise RuntimeError("Pokétwo image HTTP session is not initialized")
 
-        try:
-            async with self.http_session.get(image_url) as response:
-                response.raise_for_status()
-                return await response.read(), perf_counter() - started
-        except (aiohttp.ClientError, TimeoutError) as error:
-            print(f"Could not download Pokétwo spawn image: {error}")
-            return None, perf_counter() - started
+        image_urls = {image_url}
+        for embed in getattr(message, "embeds", []):
+            for image in (embed.image, embed.thumbnail):
+                if image and image.url == image_url:
+                    proxy_url = getattr(image, "proxy_url", None)
+                    if proxy_url:
+                        image_urls.add(proxy_url)
+                    break
+            else:
+                continue
+            break
+        downloads = {
+            asyncio.create_task(self._read_spawn_image_with_retry(url))
+            for url in image_urls
+        }
+        image_data = await self.first_spawn_download(downloads)
+        return image_data, perf_counter() - started
 
     @staticmethod
     def optimized_spawn_image_url(attachment) -> str | None:
@@ -4368,12 +4378,24 @@ class PokéTwoNamingBot(commands.Cog):
         )
 
     async def _read_spawn_image_url(self, image_url: str) -> bytes:
-        """Download one optimized spawn image URL."""
+        """Download one spawn image URL."""
         if self.http_session is None:
             raise RuntimeError("Pokétwo image HTTP session is not initialized")
         async with self.http_session.get(image_url) as response:
             response.raise_for_status()
             return await response.read()
+
+    async def _read_spawn_image_with_retry(self, image_url: str) -> bytes:
+        """Retry one transient failure when fetching an embedded image."""
+        try:
+            return await self._read_spawn_image_url(image_url)
+        except aiohttp.ClientResponseError as error:
+            if not 500 <= error.status < 600:
+                raise
+        except (aiohttp.ClientConnectionError, TimeoutError):
+            pass
+        await asyncio.sleep(0.25)
+        return await self._read_spawn_image_url(image_url)
 
     @staticmethod
     async def first_spawn_download(

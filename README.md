@@ -11,6 +11,9 @@ A Discord bot designed to help Pokétwo players manage and name their Pokémon c
 - **Catch Starboards** - Post rare/regional and partner Eevee/Pikachu, shiny, and Gigantamax or extreme-IV catches
 - **Bot Status** - Check if the bot is online
 
+For embedded spawn images, the bot tries both the original and Discord's
+cached media URL and retries a temporary network or server failure once.
+
 When Vivillon joins a server, it posts a naming introduction and the optional
 support embed in the system channel or another accessible text channel. The
 introduction points to `v!help` for command explanations. To

@@ -9,8 +9,9 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**🔔 FFA Approval Update**\n\n"
-    "New FFA approval requests now go to <#1572693324815667270>."
+    "**🔔 Spawn Image Download Update**\n\n"
+    "Embedded Pokétwo spawn images can now use Discord's cached media URL "
+    "and retry temporary download failures."
 )
 
 

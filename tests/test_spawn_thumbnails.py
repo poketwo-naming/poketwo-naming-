@@ -6,6 +6,7 @@ from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
+import aiohttp
 import discord
 from PIL import Image
 
@@ -218,6 +219,120 @@ class SpawnThumbnailTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("height=232", optimized_url)
         self.assertIn("format=webp", optimized_url)
         self.assertIn("ex=123", optimized_url)
+
+    async def test_embed_spawn_uses_proxy_when_original_returns_bad_request(self):
+        original = "https://cdn.discordapp.com/spawn.jpg?ex=123&"
+        proxy = "https://media.discordapp.net/spawn.jpg?ex=123"
+        self.message.attachments = []
+        self.message.embeds = [
+            SimpleNamespace(
+                image=SimpleNamespace(url=original, proxy_url=proxy),
+                thumbnail=SimpleNamespace(url=None),
+            )
+        ]
+        error = aiohttp.ClientResponseError(
+            request_info=Mock(), history=(), status=400
+        )
+        self.cog.http_session = SimpleNamespace(
+            get=Mock(
+                side_effect=lambda url: self.spawn_http_response(
+                    error=error if url == original else None
+                )
+            )
+        )
+        image_data, _ = await PokéTwoNamingBot._get_spawn_image(
+            self.cog, self.message
+        )
+
+        self.assertEqual(image_data, self.image_data)
+        self.cog.http_session.get.assert_any_call(proxy)
+        self.cog.http_session.get.assert_any_call(original)
+
+    async def test_embed_spawn_retries_a_transient_timeout(self):
+        self.message.attachments = []
+        self.message.embeds = [
+            SimpleNamespace(
+                image=SimpleNamespace(url="https://cdn.example/spawn.jpg"),
+                thumbnail=SimpleNamespace(url=None),
+            )
+        ]
+        self.cog.http_session = SimpleNamespace(
+            get=Mock(
+                side_effect=[
+                    self.spawn_http_response(read_error=TimeoutError()),
+                    self.spawn_http_response(),
+                ]
+            )
+        )
+
+        with patch("bot.asyncio.sleep", new_callable=AsyncMock):
+            image_data, _ = await PokéTwoNamingBot._get_spawn_image(
+                self.cog, self.message
+            )
+
+        self.assertEqual(image_data, self.image_data)
+        self.assertEqual(self.cog.http_session.get.call_count, 2)
+
+    async def test_embed_bad_request_is_not_retried(self):
+        self.message.attachments = []
+        self.message.embeds = [
+            SimpleNamespace(
+                image=SimpleNamespace(url="https://cdn.example/spawn.jpg"),
+                thumbnail=SimpleNamespace(url=None),
+            )
+        ]
+        error = aiohttp.ClientResponseError(
+            request_info=Mock(), history=(), status=400
+        )
+        self.cog.http_session = SimpleNamespace(
+            get=Mock(return_value=self.spawn_http_response(error=error))
+        )
+
+        with patch("builtins.print") as log:
+            image_data, _ = await PokéTwoNamingBot._get_spawn_image(
+                self.cog, self.message
+            )
+
+        self.assertIsNone(image_data)
+        self.assertEqual(self.cog.http_session.get.call_count, 1)
+        log.assert_called()
+
+    async def test_embed_thumbnail_retries_server_error(self):
+        self.message.attachments = []
+        self.message.embeds = [
+            SimpleNamespace(
+                image=SimpleNamespace(url=None),
+                thumbnail=SimpleNamespace(url="https://cdn.example/spawn.jpg"),
+            )
+        ]
+        error = aiohttp.ClientResponseError(
+            request_info=Mock(), history=(), status=503
+        )
+        self.cog.http_session = SimpleNamespace(
+            get=Mock(
+                side_effect=[
+                    self.spawn_http_response(error=error),
+                    self.spawn_http_response(),
+                ]
+            )
+        )
+
+        with patch("bot.asyncio.sleep", new_callable=AsyncMock):
+            image_data, _ = await PokéTwoNamingBot._get_spawn_image(
+                self.cog, self.message
+            )
+
+        self.assertEqual(image_data, self.image_data)
+        self.assertEqual(self.cog.http_session.get.call_count, 2)
+
+    def spawn_http_response(self, error=None, read_error=None):
+        response = SimpleNamespace(
+            raise_for_status=Mock(side_effect=error),
+            read=AsyncMock(return_value=self.image_data, side_effect=read_error),
+        )
+        context = AsyncMock()
+        context.__aenter__.return_value = response
+        return context
 
     def message_for_attachment(self, attachment):
         return SimpleNamespace(
