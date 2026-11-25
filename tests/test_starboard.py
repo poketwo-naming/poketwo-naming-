@@ -176,6 +176,11 @@ class StarboardTests(unittest.IsolatedAsyncioTestCase):
         )
         await self.service.handle(self.message)
         gmax = self.channels[3].send.await_args_list[-2].kwargs["embed"]
+        self.assertEqual(
+            gmax.title,
+            "<:gmax:1572468874614677606> Gigantamax Catch Detected "
+            "<:gmax:1572468874614677606>",
+        )
         self.assertIn("Gigantamax Charizard", gmax.description)
         self.assertIn("/10196.png", gmax.thumbnail.url)
         self.assertIn("Unknown", gmax.description)

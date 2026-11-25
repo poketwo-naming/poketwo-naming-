@@ -712,8 +712,16 @@ class AfkView(discord.ui.View):
                 pass
 
 
-def save_ping_selection(cog, state_key: str, user_id: int, selected: list[str]) -> None:
+def save_ping_selection(
+    cog,
+    state_key: str,
+    user_id: int,
+    selected: list[str],
+    guild_id: int | None = None,
+) -> None:
     settings = cog.bot_state.setdefault(state_key, {})
+    if guild_id is not None:
+        settings = settings.setdefault(str(guild_id), {})
     user_key = str(user_id)
     previous = settings.get(user_key)
     settings[user_key] = sorted(set(selected))
@@ -733,7 +741,7 @@ class TypePingView(discord.ui.View):
     class TypeSelect(discord.ui.Select):
         def __init__(self, owner: "TypePingView"):
             self.owner = owner
-            selected = owner.cog.type_ping_types(owner.user_id)
+            selected = owner.cog.type_ping_types(owner.user_id, owner.guild_id)
             super().__init__(
                 placeholder="Select type(s) to receive pings...",
                 min_values=0,
@@ -767,14 +775,15 @@ class TypePingView(discord.ui.View):
             types = TYPE_NAMES if self.enabled else ()
             await self.owner.update_types(interaction, types)
 
-    def __init__(self, cog, user_id: int):
+    def __init__(self, cog, user_id: int, guild_id: int | None = None):
         super().__init__(timeout=300)
         self.cog = cog
         self.user_id = user_id
+        self.guild_id = guild_id
         self.refresh_components()
 
     def build_embed(self) -> discord.Embed:
-        selected = set(self.cog.type_ping_types(self.user_id))
+        selected = set(self.cog.type_ping_types(self.user_id, self.guild_id))
         lines = [
             f"{TYPE_EMOJIS[pokemon_type]} {pokemon_type.title()} "
             f"{'✅' if pokemon_type in selected else '❌'}"
@@ -806,7 +815,13 @@ class TypePingView(discord.ui.View):
 
         selected = sorted(set(selected_types) & set(TYPE_NAMES))
         try:
-            save_ping_selection(self.cog, "type_pings", self.user_id, selected)
+            save_ping_selection(
+                self.cog,
+                "type_pings",
+                self.user_id,
+                selected,
+                self.guild_id,
+            )
         except OSError:
             logging.getLogger(__name__).exception("Could not save type-ping settings")
             await interaction.response.send_message(
@@ -828,7 +843,7 @@ class QuestPingView(discord.ui.View):
     class RegionSelect(discord.ui.Select):
         def __init__(self, owner: "QuestPingView"):
             self.owner = owner
-            selected = owner.cog.quest_ping_regions(owner.user_id)
+            selected = owner.cog.quest_ping_regions(owner.user_id, owner.guild_id)
             super().__init__(
                 placeholder="Select regions to receive quest pings...",
                 min_values=0,
@@ -861,14 +876,15 @@ class QuestPingView(discord.ui.View):
             regions = tuple(REGIONS.keys()) if self.enabled else ()
             await self.owner.update_regions(interaction, regions)
 
-    def __init__(self, cog, user_id: int):
+    def __init__(self, cog, user_id: int, guild_id: int | None = None):
         super().__init__(timeout=300)
         self.cog = cog
         self.user_id = user_id
+        self.guild_id = guild_id
         self.refresh_components()
 
     def build_embed(self) -> discord.Embed:
-        selected = set(self.cog.quest_ping_regions(self.user_id))
+        selected = set(self.cog.quest_ping_regions(self.user_id, self.guild_id))
         lines = [
             f"{region} {'✅' if region in selected else '❌'}"
             for region in REGIONS
@@ -899,7 +915,13 @@ class QuestPingView(discord.ui.View):
 
         selected = sorted(set(selected_regions) & set(REGIONS.keys()))
         try:
-            save_ping_selection(self.cog, "quest_pings", self.user_id, selected)
+            save_ping_selection(
+                self.cog,
+                "quest_pings",
+                self.user_id,
+                selected,
+                self.guild_id,
+            )
         except OSError:
             logging.getLogger(__name__).exception("Could not save quest-ping settings")
             await interaction.response.send_message(
@@ -2790,13 +2812,13 @@ class PokéTwoNamingBot(commands.Cog):
                         f"<@{user_id}>" for user_id in collection_owners
                     )
                     content.append(f"Collection pings: {mentions}")
-                type_pingers = self.type_ping_owners(pokemon_name)
+                type_pingers = self.type_ping_owners(pokemon_name, guild_id)
                 if type_pingers:
                     mentions = ", ".join(
                         f"<@{user_id}>" for user_id in type_pingers
                     )
                     content.append(f"Type pings: {mentions}")
-                quest_pingers = self.quest_ping_owners(pokemon_name)
+                quest_pingers = self.quest_ping_owners(pokemon_name, guild_id)
                 if quest_pingers:
                     mentions = ", ".join(
                         f"<@{user_id}>" for user_id in quest_pingers
@@ -2868,37 +2890,89 @@ class PokéTwoNamingBot(commands.Cog):
         muted = self.bot_state.get("afk", {}).get(str(user_id), {})
         return not muted.get(kind, False)
 
-    def type_ping_types(self, user_id: int) -> list[str]:
+    def type_ping_types(
+        self,
+        user_id: int,
+        guild_id: int | None = None,
+    ) -> list[str]:
         """Return the valid Pokémon types selected by one user."""
-        selected = self.bot_state.get("type_pings", {}).get(str(user_id), [])
+        settings = self.bot_state.get("type_pings", {})
+        if guild_id is None:
+            selected = settings.get(str(user_id), [])
+        else:
+            selected = settings.get(str(guild_id), {}).get(
+                str(user_id),
+                settings.get(str(user_id), []),
+            )
         if not isinstance(selected, list):
             return []
         return [pokemon_type for pokemon_type in TYPE_NAMES if pokemon_type in selected]
 
-    def type_ping_owners(self, pokemon_name: str) -> list[str]:
+    def type_ping_owners(
+        self,
+        pokemon_name: str,
+        guild_id: int | None = None,
+    ) -> list[str]:
         """Return users who selected at least one type of this Pokémon."""
         pokemon_types = set(self.pokemon_types[pokemon_name])
+        settings = self.bot_state.get("type_pings", {})
+        if guild_id is None:
+            selections = settings
+        else:
+            selections = settings.get(str(guild_id), {})
+            legacy = {
+                user_id: selected
+                for user_id, selected in settings.items()
+                if str(user_id).isdigit() and isinstance(selected, list)
+            }
+            selections = {**legacy, **selections}
         return [
             user_id
-            for user_id, selected in self.bot_state.get("type_pings", {}).items()
+            for user_id, selected in selections.items()
             if isinstance(selected, list)
             and any(pokemon_type in selected for pokemon_type in pokemon_types)
             and self.pings_enabled(user_id, "typeping")
         ]
 
-    def quest_ping_regions(self, user_id: int) -> list[str]:
+    def quest_ping_regions(
+        self,
+        user_id: int,
+        guild_id: int | None = None,
+    ) -> list[str]:
         """Return the regions selected by one user for quest pings."""
-        selected = self.bot_state.get("quest_pings", {}).get(str(user_id), [])
+        settings = self.bot_state.get("quest_pings", {})
+        if guild_id is None:
+            selected = settings.get(str(user_id), [])
+        else:
+            selected = settings.get(str(guild_id), {}).get(
+                str(user_id),
+                settings.get(str(user_id), []),
+            )
         if not isinstance(selected, list):
             return []
         return [region for region in REGIONS if region in selected]
 
-    def quest_ping_owners(self, pokemon_name: str) -> list[str]:
+    def quest_ping_owners(
+        self,
+        pokemon_name: str,
+        guild_id: int | None = None,
+    ) -> list[str]:
         """Return users who selected regions for quest pings of this Pokémon."""
         pokemon_regions = self._get_pokemon_regions(pokemon_name)
+        settings = self.bot_state.get("quest_pings", {})
+        if guild_id is None:
+            selections = settings
+        else:
+            selections = settings.get(str(guild_id), {})
+            legacy = {
+                user_id: selected
+                for user_id, selected in settings.items()
+                if str(user_id).isdigit() and isinstance(selected, list)
+            }
+            selections = {**legacy, **selections}
         return [
             user_id
-            for user_id, selected in self.bot_state.get("quest_pings", {}).items()
+            for user_id, selected in selections.items()
             if isinstance(selected, list)
             and any(region in selected for region in pokemon_regions)
             and self.pings_enabled(user_id, "questping")
@@ -3079,6 +3153,7 @@ class PokéTwoNamingBot(commands.Cog):
             "shiny_hunts": {},
             "collections": {},
             "type_pings": {},
+            "quest_pings": {},
             "categories": {},
             "afk": {},
             "breeding_boxes": {},
@@ -3120,6 +3195,7 @@ class PokéTwoNamingBot(commands.Cog):
         state.setdefault("shiny_hunts", {})
         state.setdefault("collections", {})
         state.setdefault("type_pings", {})
+        state.setdefault("quest_pings", {})
         state.setdefault("categories", {})
         state.setdefault("afk", {})
         state.setdefault("breeding_boxes", {})
@@ -4089,6 +4165,43 @@ class PokéTwoNamingBot(commands.Cog):
             f"Could not send welcome message in guild {guild.id}: "
             "no usable text channel."
         )
+
+    def clear_member_server_data(self, guild_id: int, user_id: int) -> bool:
+        """Clear one member's server-specific hunt, collection, and ping data."""
+        guild_key = str(guild_id)
+        user_key = str(user_id)
+        changed = False
+        for state_key in ("shiny_hunts", "collections", "type_pings", "quest_pings"):
+            settings = self.bot_state.setdefault(state_key, {})
+            guild_settings = settings.get(guild_key)
+            if isinstance(guild_settings, dict) and user_key in guild_settings:
+                guild_settings.pop(user_key)
+                changed = True
+
+            legacy = settings.get(user_key)
+            if state_key in {"type_pings", "quest_pings"} and isinstance(legacy, list):
+                for guild in self.bot.guilds:
+                    if guild.id == guild_id:
+                        continue
+                    settings.setdefault(str(guild.id), {}).setdefault(
+                        user_key,
+                        list(legacy),
+                    )
+                settings.pop(user_key)
+                changed = True
+        if changed:
+            self.save_bot_state()
+        return changed
+
+    @commands.Cog.listener()
+    async def on_member_remove(self, member):
+        """Clear server-specific member data after a leave or ban."""
+        self.clear_member_server_data(member.guild.id, member.id)
+
+    @commands.Cog.listener()
+    async def on_member_ban(self, guild, user):
+        """Clear server-specific member data when a ban is reported."""
+        self.clear_member_server_data(guild.id, user.id)
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -5211,7 +5324,15 @@ class PokéTwoNamingBot(commands.Cog):
         await ctx.send(f"Pong! {self.bot.latency * 1000:.2f}ms")
 
     def update_ping_selections(
-        self, user_id, add_names, remove_names, valid_names, current, state_key, label
+        self,
+        user_id,
+        guild_id,
+        add_names,
+        remove_names,
+        valid_names,
+        current,
+        state_key,
+        label,
     ) -> str | None:
         if not add_names and not remove_names:
             return None
@@ -5231,7 +5352,7 @@ class PokéTwoNamingBot(commands.Cog):
             return "❌ You cannot add and remove the same option at once."
         selected = [name for name in current if name not in removed] + list(added)
         try:
-            save_ping_selection(self, state_key, user_id, selected)
+            save_ping_selection(self, state_key, user_id, selected, guild_id)
         except OSError:
             logging.getLogger(__name__).exception("Could not save %s settings", label)
             return f"❌ I couldn't save your {label} settings. Check the bot logs."
@@ -5240,25 +5361,40 @@ class PokéTwoNamingBot(commands.Cog):
     async def prefix_ping_command(
         self, ctx, names, valid_names, current, state_key, label, view_type
     ):
+        guild = getattr(ctx, "guild", None)
+        if hasattr(ctx, "guild") and guild is None:
+            await ctx.send(f"❌ {label.title()} settings can only be managed in a server.")
+            return
         remove = bool(names) and names[0].casefold() == "remove"
         if remove and len(names) == 1:
             await ctx.send(f"❌ Specify at least one {label} option to remove.")
             return
         error = self.update_ping_selections(
-            ctx.author.id, () if remove else names, names[1:] if remove else (),
+            ctx.author.id, guild.id if guild is not None else None,
+            () if remove else names, names[1:] if remove else (),
             valid_names, current, state_key, label,
         )
         if error:
             await ctx.send(error)
             return
-        view = view_type(self, ctx.author.id)
+        view = view_type(
+            self,
+            ctx.author.id,
+            guild.id if guild is not None else None,
+        )
         await ctx.send(embed=view.build_embed(), view=view)
 
     @commands.command(name="typeping", aliases=["tp"])
     async def type_ping_command(self, ctx, *types: str):
         """Choose Pokémon types to receive pings for."""
         await self.prefix_ping_command(
-            ctx, types, TYPE_NAMES, self.type_ping_types(ctx.author.id),
+            ctx,
+            types,
+            TYPE_NAMES,
+            self.type_ping_types(
+                ctx.author.id,
+                getattr(getattr(ctx, "guild", None), "id", None),
+            ),
             "type_pings", "type-ping", TypePingView,
         )
 
@@ -5266,13 +5402,26 @@ class PokéTwoNamingBot(commands.Cog):
     async def quest_ping_command(self, ctx, *regions: str):
         """Choose regions to receive quest pings for."""
         await self.prefix_ping_command(
-            ctx, regions, REGIONS, self.quest_ping_regions(ctx.author.id),
+            ctx,
+            regions,
+            REGIONS,
+            self.quest_ping_regions(
+                ctx.author.id,
+                getattr(getattr(ctx, "guild", None), "id", None),
+            ),
             "quest_pings", "quest-ping", QuestPingView,
         )
 
     async def slash_ping_command(
         self, interaction, add, remove, valid_names, current, state_key, label, view_type
     ):
+        guild_id = getattr(interaction, "guild_id", None)
+        if hasattr(interaction, "guild_id") and guild_id is None:
+            await interaction.response.send_message(
+                f"❌ {label.title()} settings can only be managed in a server.",
+                ephemeral=True,
+            )
+            return
         for action, value in (("add", add), ("remove", remove)):
             if value is not None and not value.strip():
                 await interaction.response.send_message(
@@ -5281,14 +5430,15 @@ class PokéTwoNamingBot(commands.Cog):
                 )
                 return
         error = self.update_ping_selections(
-            interaction.user.id, add.split() if add is not None else (),
+            interaction.user.id, guild_id,
+            add.split() if add is not None else (),
             remove.split() if remove is not None else (),
             valid_names, current, state_key, label,
         )
         if error:
             await interaction.response.send_message(error, ephemeral=True)
             return
-        view = view_type(self, interaction.user.id)
+        view = view_type(self, interaction.user.id, guild_id)
         await interaction.response.send_message(
             embed=view.build_embed(), view=view, ephemeral=True,
         )
@@ -5308,7 +5458,10 @@ class PokéTwoNamingBot(commands.Cog):
     ):
         await self.slash_ping_command(
             interaction, add, remove, TYPE_NAMES,
-            self.type_ping_types(interaction.user.id),
+            self.type_ping_types(
+                interaction.user.id,
+                getattr(interaction, "guild_id", None),
+            ),
             "type_pings", "type-ping", TypePingView,
         )
 
@@ -5327,7 +5480,10 @@ class PokéTwoNamingBot(commands.Cog):
     ):
         await self.slash_ping_command(
             interaction, add, remove, REGIONS,
-            self.quest_ping_regions(interaction.user.id),
+            self.quest_ping_regions(
+                interaction.user.id,
+                getattr(interaction, "guild_id", None),
+            ),
             "quest_pings", "quest-ping", QuestPingView,
         )
 

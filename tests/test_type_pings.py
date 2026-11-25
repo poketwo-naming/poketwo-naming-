@@ -366,6 +366,83 @@ class TypePingTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("<@789>", content)
         self.assertEqual(self.cog.type_ping_owners("Bulbasaur"), ["456"])
 
+    async def test_leaving_or_ban_clears_only_that_servers_member_data(self):
+        self.cog.bot = SimpleNamespace(
+            guilds=[SimpleNamespace(id=123), SimpleNamespace(id=789)]
+        )
+        self.cog.bot_state.update(
+            {
+                "shiny_hunts": {
+                    "123": {"456": {"pokemon": "Charmander"}},
+                    "789": {"456": {"pokemon": "Bulbasaur"}},
+                },
+                "collections": {
+                    "123": {"456": ["Charmander"]},
+                    "789": {"456": ["Bulbasaur"]},
+                },
+                "type_pings": {
+                    "123": {"456": ["fire"]},
+                    "789": {"456": ["grass"]},
+                },
+                "quest_pings": {
+                    "123": {"456": ["Kanto"]},
+                    "789": {"456": ["Johto"]},
+                },
+            }
+        )
+
+        member = SimpleNamespace(
+            id=456,
+            guild=SimpleNamespace(id=123),
+        )
+        await PokéTwoNamingBot.on_member_remove(self.cog, member)
+
+        for state_key in (
+            "shiny_hunts",
+            "collections",
+            "type_pings",
+            "quest_pings",
+        ):
+            self.assertNotIn("456", self.cog.bot_state[state_key]["123"])
+            self.assertIn("456", self.cog.bot_state[state_key]["789"])
+        self.cog.save_bot_state.assert_called_once_with()
+
+        self.cog.save_bot_state.reset_mock()
+        await PokéTwoNamingBot.on_member_ban(
+            self.cog,
+            SimpleNamespace(id=789),
+            SimpleNamespace(id=456),
+        )
+
+        for state_key in (
+            "shiny_hunts",
+            "collections",
+            "type_pings",
+            "quest_pings",
+        ):
+            self.assertNotIn("456", self.cog.bot_state[state_key]["789"])
+        self.cog.save_bot_state.assert_called_once_with()
+
+    async def test_member_cleanup_migrates_legacy_pings_to_other_servers(self):
+        self.cog.bot = SimpleNamespace(
+            guilds=[SimpleNamespace(id=123), SimpleNamespace(id=789)]
+        )
+        self.cog.bot_state["type_pings"] = {"456": ["fire"]}
+        self.cog.bot_state["quest_pings"] = {"456": ["Kanto"]}
+
+        self.cog.clear_member_server_data(123, 456)
+
+        self.assertNotIn("456", self.cog.bot_state["type_pings"])
+        self.assertNotIn("456", self.cog.bot_state["quest_pings"])
+        self.assertEqual(
+            self.cog.bot_state["type_pings"]["789"]["456"],
+            ["fire"],
+        )
+        self.assertEqual(
+            self.cog.bot_state["quest_pings"]["789"]["456"],
+            ["Kanto"],
+        )
+
     async def test_reserve_override_hides_type_pings(self):
         self.cog.bot_state["type_pings"] = {
             "456": ["grass"],

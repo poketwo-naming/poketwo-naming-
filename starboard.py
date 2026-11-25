@@ -242,7 +242,11 @@ class StarboardService:
             "rare": ("⭐ Rare Catch Detected!", 0xFFD700),
             "regional": ("🌍 Regional Catch Detected!", 0x3498DB),
             "shiny": ("✨ Shiny Catch Detected ✨", 0xF5DCE5),
-            "gmax": ("✖️ Gigantamax Catch Detected ✖️", 0xF5DCE5),
+            "gmax": (
+                "<:gmax:1572468874614677606> Gigantamax Catch Detected "
+                "<:gmax:1572468874614677606>",
+                0xF5DCE5,
+            ),
             "low": ("📉 Low IV Catch Detected 📉", 0xF5DCE5),
             "high": ("📈 High IV Catch Detected 📈", 0xF5DCE5),
             "missingno": ("🔴 MissingNo. Catch Detected 🔴", 0xFF0000),

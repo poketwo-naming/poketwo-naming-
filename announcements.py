@@ -8,7 +8,13 @@ ANNOUNCEMENT_ROLE_ID = 1574502724370825286
 ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
-UPDATE_ANNOUNCEMENT = ""
+UPDATE_ANNOUNCEMENT = (
+    "**Vivillon update**\n"
+    "• Gigantamax starboard catches now use the server's custom Gmax emoji.\n"
+    "• Leaving or being banned from a server now clears that server's shiny hunt, "
+    "collection, type-ping, and quest-ping settings for that user. Settings in "
+    "other servers are preserved."
+)
 
 
 async def post_update_announcement(bot, cog) -> bool:
