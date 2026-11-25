@@ -1887,7 +1887,7 @@ class ServerSettingsView(discord.ui.LayoutView):
     SECTIONS = (
         ("Naming", "Naming `On` · Mode `Assisted`"),
         (
-            "Roles & Pings",
+            "Roles & Channels",
             "Configure ping roles and rare, regional, hunt, collection, "
             "reserve, and quest output.",
         ),
