@@ -84,6 +84,7 @@ GMAX_SPAWN_RATES = {
     "hatterene": 359_600,
     "machamp": 359_600,
     "flapple": 359_600,
+    "drednaw": 359_600,
 }
 
 

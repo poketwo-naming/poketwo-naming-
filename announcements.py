@@ -11,7 +11,7 @@ PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 UPDATE_ANNOUNCEMENT = (
     "**Vivillon update**\n"
     "• Vivillon starboard embeds now show the supplied spawn rates for "
-    "22 Gigantamax Pokémon, including overlapping high- and low-IV posts."
+    "23 Gigantamax Pokémon, including overlapping high- and low-IV posts."
 )
 
 
