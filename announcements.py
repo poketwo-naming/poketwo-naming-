@@ -8,11 +8,7 @@ ANNOUNCEMENT_ROLE_ID = 1574502724370825286
 ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
-UPDATE_ANNOUNCEMENT = (
-    "**🔔 FFA Approval Update**\n\n"
-    "`v!rafk` announcement requests now ping <@&1574935908153557103> "
-    "in the review channel so staff know an approval is needed."
-)
+UPDATE_ANNOUNCEMENT = ""
 
 
 async def post_update_announcement(bot, cog) -> bool:
