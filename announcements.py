@@ -9,10 +9,9 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**Pokédex target update**\n"
-    "• `v!dexhelp` now supports 5 or 10 active targets, alongside 1, 2, and all.\n"
-    "• Reserved Pokémon are temporarily skipped and return automatically when "
-    "their reserve is removed. Reservations remain form-specific."
+    "**Pokédex settings maintenance**\n"
+    "• Fixed a type-checking error in the live dex settings update code. "
+    "Dex tracking behavior is unchanged."
 )
 
 

@@ -1,5 +1,6 @@
 """Import Pokédex entries and manage their spawn-ping queue."""
 import asyncio
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from itertools import islice
 import logging
@@ -310,7 +311,7 @@ class DexSettingsView(discord.ui.View):
         self.guild_id = guild_id
         self.user_id = user_id
         self.message: discord.Message | None = None
-        self.last_embed: dict | None = None
+        self.last_embed: Mapping[str, object] | None = None
         self.refresh()
 
     def embed(self) -> discord.Embed:
