@@ -9,10 +9,11 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**Pokédex queue persistence**\n"
-    "• Imported Pokémon stay in your dex queue through restarts and "
-    "leaving or rejoining the server, until caught or cleared in `v!dexhelp`.\n"
-    "• The 30-minute limit only applies to importing new pages with the arrows."
+    "**Pokédex catch goals**\n"
+    "• In `v!dexhelp`, choose 1, 10, 100, 1,000, or 10,000 catches per Pokémon.\n"
+    "• `v!dex append` now reads caught counts too, skipping Pokémon already "
+    "at your goal and tracking the others until they reach it.\n"
+    "• Pause, clear, and 1/2/all target controls still work as before."
 )
 
 

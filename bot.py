@@ -354,12 +354,12 @@ COMMAND_CATALOG = (
     (
         "Collections",
         "v!dex append",
-        "Replies to a Pokétwo Pokédex to track missing entries and visited pages.",
+        "Imports Pokédex entries below your catch goal, including visited pages.",
     ),
     (
         "Collections",
         "v!dexhelp",
-        "Manages dex pings, target count, and the missing-Pokémon queue.",
+        "Manages dex pings, catch goals, target count, and the queue.",
     ),
     (
         "Administration",
@@ -6747,7 +6747,7 @@ class PokéTwoNamingBot(commands.Cog):
 
     @dex.command(name="append")
     async def append_dex(self, ctx):
-        """Track missing Pokémon from a Pokétwo Pokédex."""
+        """Track Pokémon below the selected Pokédex catch goal."""
         await self.dex_tracking_service.append(ctx)
 
     @commands.command(name="dexhelp")

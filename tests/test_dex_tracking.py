@@ -273,3 +273,175 @@ class DexTrackingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             queue[-2:], [{"id": 384, "name": "Rayquaza"}, {"id": 385, "name": "Jirachi"}]
         )
+
+    def counted_page(self, entries):
+        embed = discord.Embed(title="Your pokédex")
+        for name, species_id, count in entries:
+            embed.add_field(
+                name=f"<:_:123456789> {name} #{species_id}",
+                value=f"<:_:725819513358254101> {count:,} caught!\n"
+                "<:_:725819513119047822> Not hatched yet!",
+            )
+        return SimpleNamespace(
+            id=555, guild=self.ctx.guild, channel=self.ctx.channel,
+            author=SimpleNamespace(id=716390085896962058),
+            content="", embeds=[embed], components=[],
+        )
+
+    async def test_catch_goals_import_counts_and_skip_at_threshold(self):
+        entries = [
+            ("Latios", 381, 9), ("Solgaleo", 791, 10),
+            ("Poipole", 803, 99), ("Kubfu", 891, 1_000),
+        ]
+        page = self.counted_page(entries)
+        for goal in (10, 100, 1_000, 10_000):
+            with self.subTest(goal=goal):
+                settings = self.service.settings(123, 456)
+                settings["goal"] = goal
+                settings["queue"] = []
+                self.ctx.channel.fetch_message.return_value = page
+                await self.service.append(self.ctx)
+                self.assertEqual(
+                    [entry["id"] for entry in settings["queue"]],
+                    [species_id for _, species_id, count in entries if count < goal],
+                )
+                self.assertEqual(
+                    [entry["caught"] for entry in settings["queue"]],
+                    [count for _, _, count in entries if count < goal],
+                )
+
+    async def test_screenshot_page_goal_ten_imports_only_under_ten_in_order(self):
+        counts = [
+            ("Bulbasaur", 1, 537), ("Ivysaur", 2, 14), ("Venusaur", 3, 121),
+            ("Charmander", 4, 29), ("Charmeleon", 5, 11), ("Charizard", 6, 31),
+            ("Squirtle", 7, 14), ("Wartortle", 8, 21), ("Blastoise", 9, 151),
+            ("Caterpie", 10, 67), ("Metapod", 11, 15), ("Butterfree", 12, 407),
+            ("Weedle", 13, 66), ("Kakuna", 14, 13), ("Beedrill", 15, 4),
+            ("Pidgey", 16, 80), ("Pidgeotto", 17, 20), ("Pidgeot", 18, 4),
+            ("Rattata", 19, 68), ("Raticate", 20, 19), ("Spearow", 21, 23),
+        ]
+        settings = self.service.settings(123, 456)
+        settings["goal"] = 10
+        self.ctx.channel.fetch_message.return_value = self.counted_page(counts)
+        await self.service.append(self.ctx)
+        self.assertEqual(
+            settings["queue"],
+            [{"id": 15, "name": "Beedrill", "caught": 4},
+             {"id": 18, "name": "Pidgeot", "caught": 4}],
+        )
+
+    async def test_catches_count_until_goal_and_pause_does_not_stop_progress(self):
+        settings = self.service.settings(123, 456)
+        settings["goal"] = 10
+        self.ctx.channel.fetch_message.return_value = self.counted_page(
+            [("Latios", 381, 8), ("Solgaleo", 791, 9)]
+        )
+        await self.service.append(self.ctx)
+        catch = SimpleNamespace(
+            guild=self.ctx.guild,
+            content="Congratulations <@456>! You caught a Level 22 Latios (52.15%)!",
+            embeds=[],
+        )
+        remove_caught_dex_entry(self.cog, catch)
+        self.assertEqual(settings["queue"][0]["caught"], 9)
+        self.assertEqual(dex_ping_owners(self.cog, 123, "Latios"), ["456"])
+        settings["paused"] = True
+        remove_caught_dex_entry(self.cog, catch)
+        self.assertEqual(settings["queue"], [{"id": 791, "name": "Solgaleo", "caught": 9}])
+        self.assertEqual(dex_ping_owners(self.cog, 123, "Solgaleo"), [])
+        settings["paused"] = False
+        self.assertEqual(dex_ping_owners(self.cog, 123, "Solgaleo"), ["456"])
+        await self.service.handle_list_edit(self.counted_page([("Latios", 381, 8)]))
+        self.assertEqual([entry["id"] for entry in settings["queue"]], [791])
+
+    async def test_all_goal_boundaries_and_persisted_counted_queue(self):
+        catch = SimpleNamespace(
+            guild=self.ctx.guild,
+            content="Congratulations <@456>! You caught a Level 22 Latios (52.15%)!",
+            embeds=[],
+        )
+        with TemporaryDirectory() as directory:
+            with patch("bot.BOT_STATE_FILE", str(Path(directory) / "state.json")):
+                self.cog.save_bot_state = PokéTwoNamingBot.save_bot_state.__get__(self.cog)
+                for goal in (10, 100, 1_000, 10_000):
+                    with self.subTest(goal=goal):
+                        settings = self.service.settings(123, 456)
+                        settings["goal"] = goal
+                        settings["queue"] = [{"id": 381, "name": "Latios", "caught": goal - 2}]
+                        self.cog.save_bot_state()
+                        remove_caught_dex_entry(self.cog, catch)
+                        self.cog.bot_state = self.cog.load_bot_state()
+                        settings = self.service.settings(123, 456)
+                        self.assertEqual(settings["queue"][0]["caught"], goal - 1)
+                        remove_caught_dex_entry(self.cog, catch)
+                        self.cog.bot_state = self.cog.load_bot_state()
+                        self.assertEqual(self.service.settings(123, 456)["queue"], [])
+
+    async def test_counted_queue_respects_two_and_all_ping_modes(self):
+        settings = self.service.settings(123, 456)
+        settings["goal"] = 100
+        self.ctx.channel.fetch_message.return_value = self.counted_page(
+            [("Latios", 381, 8), ("Solgaleo", 791, 9), ("Poipole", 803, 10)]
+        )
+        await self.service.append(self.ctx)
+        settings["mode"] = 2
+        self.assertEqual(dex_ping_owners(self.cog, 123, "Solgaleo"), ["456"])
+        self.assertEqual(dex_ping_owners(self.cog, 123, "Poipole"), [])
+        settings["mode"] = "all"
+        self.assertEqual(dex_ping_owners(self.cog, 123, "Poipole"), ["456"])
+        self.service.clear(123, 456)
+        self.assertEqual(dex_ping_owners(self.cog, 123, "Latios"), [])
+
+    async def test_goal_selection_updates_current_queue_and_retains_legacy_entries(self):
+        settings = self.service.settings(123, 456)
+        settings["goal"] = 10_000
+        settings["queue"] = [
+            {"id": 381, "name": "Latios"},
+            {"id": 791, "name": "Solgaleo", "caught": 9},
+            {"id": 803, "name": "Poipole", "caught": 10},
+        ]
+        view = DexSettingsView(self.service, 123, 456)
+        settings_message = SimpleNamespace(edit=AsyncMock())
+        interaction = SimpleNamespace(
+            user=SimpleNamespace(id=456),
+            message=settings_message,
+            response=SimpleNamespace(edit_message=AsyncMock(), send_message=AsyncMock()),
+        )
+        await view.goal.callback(interaction)
+        picker = interaction.response.send_message.await_args.kwargs["view"]
+        for expected in (1, 10, 100, 1_000, 10_000):
+            picker.select_goal._values = [str(expected)]
+            await picker.select_goal.callback(interaction)
+            self.assertEqual(settings["goal"], expected)
+            if expected == 1:
+                self.assertEqual(settings["queue"], [{"id": 381, "name": "Latios"}])
+        self.assertIn("10,000", view.embed().description)
+        self.assertEqual(view.goal.label, "Catch goal: 10,000")
+        settings_message.edit.assert_awaited()
+
+    async def test_import_of_completed_page_keeps_tracking_next_page(self):
+        settings = self.service.settings(123, 456)
+        settings["goal"] = 10
+        self.ctx.channel.fetch_message.return_value = self.counted_page(
+            [("Latios", 381, 10)]
+        )
+        await self.service.append(self.ctx)
+        self.assertEqual(settings["queue"], [])
+        self.assertIn("Added **0**", self.ctx.send.await_args.args[0])
+        await self.service.handle_list_edit(self.counted_page([("Solgaleo", 791, 9)]))
+        self.assertEqual(settings["queue"], [{"id": 791, "name": "Solgaleo", "caught": 9}])
+
+    async def test_reimport_refreshes_progress_without_reducing_it(self):
+        settings = self.service.settings(123, 456)
+        settings["goal"] = 10
+        self.ctx.channel.fetch_message.return_value = self.counted_page([("Latios", 381, 8)])
+        await self.service.append(self.ctx)
+        self.ctx.channel.fetch_message.return_value = self.counted_page([("Latios", 381, 9)])
+        await self.service.append(self.ctx)
+        self.assertEqual(settings["queue"][0]["caught"], 9)
+        self.ctx.channel.fetch_message.return_value = self.counted_page([("Latios", 381, 8)])
+        await self.service.append(self.ctx)
+        self.assertEqual(settings["queue"][0]["caught"], 9)
+        self.ctx.channel.fetch_message.return_value = self.counted_page([("Latios", 381, 10)])
+        await self.service.append(self.ctx)
+        self.assertEqual(settings["queue"], [])

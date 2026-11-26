@@ -112,8 +112,8 @@ channel renames; errors are logged.
 | `v!cl search <pokemon>` | `v!cl search Pikachu` | Check whether a Pokémon is in your own collection |
 | `v!cl list` | `v!cl list` | List your own collection |
 | `v!cl clear` | `v!cl clear` | Clear your own collection |
-| `v!dex append` | Reply to your Pokétwo Pokédex with `v!dex append` | Track missing Pokémon on this page and subsequent visited pages |
-| `v!dexhelp` | `v!dexhelp` | Pause dex pings, choose 1, 2, or all targets, or clear the dex queue |
+| `v!dex append` | Reply to your Pokétwo Pokédex with `v!dex append` | Track Pokémon below your catch goal on this and subsequent visited pages |
+| `v!dexhelp` | `v!dexhelp` | Choose a catch goal, pause pings, select 1, 2, or all targets, or clear the dex queue |
 | `v!permission <role_id>` | `v!permission 123456789` | Grant a role restricted-command access |
 | `v!training` | `v!training` | Show reviewed training images in the review channel |
 | `v!export_training` | `v!export_training` | Download reviewed images for retraining |
@@ -293,17 +293,25 @@ own collection. Use `v!cl add <category>` to add every Pokémon from a
 server category to your collection. Spawn output lists shiny hunts before
 collections. A reserve replaces both sections.
 
-For Pokédex tracking, reply to your Pokétwo missing-entry list with
+For Pokédex tracking, select a catch goal in `v!dexhelp` first (1 by default,
+or 10, 100, 1,000, or 10,000). Reply to your Pokétwo Pokédex list with
 `v!dex append`, then use Pokétwo's page arrows to import more pages in order.
+Both missing and caught entries are supported. Entries already at or above the
+goal are skipped; others retain their displayed catch count.
 Tracking page edits lasts 30 minutes after the last page change or until the
 bot restarts; unvisited pages are not imported. Already imported Pokémon stay
 in the per-user, per-server queue across restarts and leaving or rejoining the
-server, until caught or cleared. If page tracking stops, reply with
-`v!dex append` again to continue importing. `v!dexhelp` shows the active
+server, until the catch goal is reached or the queue is cleared. If page
+tracking stops, reply with `v!dex append` again to continue importing.
+`v!dexhelp` shows the active
 targets and lets you pause or resume dex pings, cycle between the first 1,
 first 2, or all remaining entries, and clear the queue. Pokétwo catch
-confirmations observed in that server remove the caught species from the
-queue, including when pings are paused.
+confirmations observed in that server advance the species' count, including
+when pings are paused. Catches while the bot is offline or in other servers
+cannot be observed; re-import a fresh Pokédex page to update queued counts.
+Changing the goal also applies to the current queue and removes entries at or
+above the new goal. If you increase the goal, re-import pages to add species
+that were previously skipped or completed.
 Dex tracking is separate from `v!cl` and breeding boxes; clearing it does not
 remove manually added collection entries. Like other spawn pings, dex pings
 are suppressed when a spawn is reserved.

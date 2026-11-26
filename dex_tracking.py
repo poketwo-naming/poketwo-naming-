@@ -1,4 +1,4 @@
-"""Import missing Pokédex entries and manage their spawn-ping queue."""
+"""Import Pokédex entries and manage their spawn-ping queue."""
 import asyncio
 from dataclasses import dataclass, field
 import re
@@ -8,6 +8,8 @@ import discord
 
 from breeding_boxes import APPEND_SESSION_SECONDS, component_text
 from starboard import parse_catch
+
+CATCH_GOALS = (1, 10, 100, 1_000, 10_000)
 
 
 @dataclass
@@ -19,7 +21,7 @@ class DexSession:
 
 
 def dex_entries(message) -> list[dict]:
-    """Read missing entries in Discord's field/component order."""
+    """Read Pokédex entries and catch counts in field/component order."""
     sections = []
     for embed in message.embeds:
         sections.append("\n".join(filter(None, (embed.title, embed.description))))
@@ -32,14 +34,18 @@ def dex_entries(message) -> list[dict]:
     entries = []
     pattern = (
         r"(?m)^[ \t]*([^\n#]+?)\s*(?:\*\*|__|`)*#\s*(\d+)(?:\*\*|__|`)*\s*"
-        r"(?:❌|:x:|<a?:[^:>\s]+:\d+>)?\s*(?:\*\*)?not\s+caught\s+yet"
+        r"(?:❌|✅|:x:|<a?:[^:>\s]+:\d+>)?\s*(?:\*\*)?"
+        r"(?:(not\s+caught\s+yet)|([\d,]+)\s+caught)"
     )
     for match in re.finditer(pattern, text, re.IGNORECASE):
         name = re.sub(r"<a?:[^:>]+:\d+>", "", match.group(1))
         name = name.replace("*", "").replace("`", "").strip()
         name = re.sub(r"^[^\w]+", "", name).strip()
         if name:
-            entries.append({"id": int(match.group(2)), "name": name})
+            entry = {"id": int(match.group(2)), "name": name}
+            if match.group(4):
+                entry["caught"] = int(match.group(4).replace(",", ""))
+            entries.append(entry)
     return entries
 
 
@@ -80,14 +86,24 @@ def remove_caught_dex_entry(cog, message) -> None:
     species_id = cog.pokemon_species.get(canonical)
     if species_id is None:
         return
-    service = getattr(cog, "dex_tracking_service", None)
-    if service is not None:
-        service.mark_caught(message.guild.id, int(catch.user_id), species_id)
     queue = settings.get("queue", [])
-    remaining = [entry for entry in queue if entry["id"] != species_id]
-    if len(remaining) != len(queue):
-        settings["queue"] = remaining
-        cog.save_bot_state()
+    goal = settings.get("goal", 1)
+    entry = next((item for item in queue if item["id"] == species_id), None)
+    if entry is None:
+        if goal == 1:
+            service = getattr(cog, "dex_tracking_service", None)
+            if service is not None:
+                service.mark_caught(message.guild.id, int(catch.user_id), species_id)
+        return
+    caught = entry.get("caught", 0) + 1
+    if caught >= goal:
+        queue.remove(entry)
+        service = getattr(cog, "dex_tracking_service", None)
+        if service is not None:
+            service.mark_caught(message.guild.id, int(catch.user_id), species_id)
+    else:
+        entry["caught"] = caught
+    cog.save_bot_state()
 
 
 class DexTrackingService:
@@ -126,27 +142,47 @@ class DexTrackingService:
             if key[0] == guild_id and key[3] == user_id:
                 session.seen.add(species_id)
 
-    def add_page(self, settings: dict, session: DexSession, entries: list[dict]) -> int:
+    def add_page(
+        self, settings: dict, session: DexSession, entries: list[dict],
+        guild_id: int, user_id: int,
+    ) -> int:
         queue = settings.setdefault("queue", [])
-        existing = {entry["id"] for entry in queue}
+        existing = {entry["id"]: entry for entry in queue}
+        goal = settings.get("goal", 1)
         added = 0
+        changed = False
         for entry in entries:
             species_id = entry["id"]
-            if species_id not in session.seen and species_id not in existing:
+            if species_id in session.seen:
+                continue
+            current = existing.get(species_id)
+            caught = entry.get("caught", 0)
+            if current is not None and caught > current.get("caught", 0):
+                if caught >= goal:
+                    queue.remove(current)
+                    self.mark_caught(guild_id, user_id, species_id)
+                else:
+                    current["caught"] = caught
+                changed = True
+            if (
+                current is None
+                and caught < goal
+            ):
                 queue.append(entry)
-                existing.add(species_id)
+                existing[species_id] = entry
                 added += 1
+                changed = True
             session.seen.add(species_id)
-        if added:
+        if changed:
             self.cog.save_bot_state()
         return added
 
     @staticmethod
     def status(added: int, total: int) -> str:
         return (
-            f"✅ Added **{added}** missing Pokémon. Dex queue: **{total}**.\n"
+            f"✅ Added **{added}** Pokémon below your catch goal. Dex queue: **{total}**.\n"
             "Added Pokémon stay in your queue, even after a restart, until you "
-            "catch them or clear it in `v!dexhelp`.\n"
+            "reach your catch goal or clear it in `v!dexhelp`.\n"
             "Use the Pokétwo page arrows to add more. Only page tracking stops "
             "30 minutes after the last page change or when the bot restarts."
         )
@@ -169,7 +205,7 @@ class DexTrackingService:
             return
         entries = dex_entries(source)
         if not entries:
-            await ctx.send("❌ No missing Pokédex entries were recognized on this page.")
+            await ctx.send("❌ No Pokédex entries with catch counts were recognized on this page.")
             return
         self.prune()
         key = (ctx.guild.id, ctx.channel.id, source.id, ctx.author.id)
@@ -177,7 +213,7 @@ class DexTrackingService:
         self.sessions[key] = session
         settings = self.settings(ctx.guild.id, ctx.author.id)
         async with session.lock:
-            added = self.add_page(settings, session, entries)
+            added = self.add_page(settings, session, entries, ctx.guild.id, ctx.author.id)
             try:
                 session.status_message = await ctx.send(
                     self.status(added, len(settings["queue"]))
@@ -204,10 +240,10 @@ class DexTrackingService:
                 session.expires_at = monotonic() + APPEND_SESSION_SECONDS
                 settings = self.settings(key[0], key[3])
                 if entries:
-                    added = self.add_page(settings, session, entries)
+                    added = self.add_page(settings, session, entries, key[0], key[3])
                     status = self.status(added, len(settings["queue"]))
                 else:
-                    status = "⚠️ No missing Pokédex entries were recognized on this page."
+                    status = "⚠️ No Pokédex entries with catch counts were recognized on this page."
                 if session.status_message is not None:
                     try:
                         await session.status_message.edit(content=status)
@@ -236,11 +272,15 @@ class DexSettingsView(discord.ui.View):
             title="Pokédex tracking settings",
             description=(
                 "Reply to your Pokétwo Pokédex with `v!dex append`, then use its "
-                "arrows to import more pages. Caught species are removed automatically.\n\n"
+                "arrows to import more pages. Choose your catch goal before importing; "
+                "species are removed when they reach it.\n\n"
                 f"**Pings:** {'Paused' if settings.get('paused') else 'On'}\n"
                 f"**Targets:** {mode}\n"
+                f"**Catch goal:** {settings.get('goal', 1):,} per Pokémon\n"
                 f"**Remaining:** {len(queue)}\n"
                 f"**Active:** {names}\n\n"
+                "Increasing the catch goal requires re-importing skipped or "
+                "completed Pokémon from a fresh Pokédex.\n"
                 "Dex tracking is separate from your `v!cl` collection."
             ),
             color=discord.Color.blurple(),
@@ -250,6 +290,7 @@ class DexSettingsView(discord.ui.View):
         settings = self.service.settings(self.guild_id, self.user_id)
         self.pause.label = "Resume pings" if settings.get("paused") else "Pause pings"
         self.mode.label = f"Targets: {settings.get('mode', 1)}"
+        self.goal.label = f"Catch goal: {settings.get('goal', 1):,}"
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id == self.user_id:
@@ -276,8 +317,58 @@ class DexSettingsView(discord.ui.View):
         settings["mode"] = {1: 2, 2: "all", "all": 1}[settings.get("mode", 1)]
         await self.update(interaction)
 
+    @discord.ui.button(label="Catch goal: 1", style=discord.ButtonStyle.secondary)
+    async def goal(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message(
+            "Choose a catch goal. Entries already at that goal will be removed.",
+            view=DexGoalView(self, interaction.message),
+            ephemeral=True,
+        )
+
     @discord.ui.button(label="Clear dex queue", style=discord.ButtonStyle.danger)
     async def clear(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.service.clear(self.guild_id, self.user_id)
         self.refresh()
         await interaction.response.edit_message(embed=self.embed(), view=self)
+
+
+class DexGoalView(discord.ui.View):
+    def __init__(self, settings_view: DexSettingsView, message: discord.Message):
+        super().__init__(timeout=300)
+        self.settings_view = settings_view
+        self.message = message
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id == self.settings_view.user_id:
+            return True
+        await interaction.response.send_message(
+            "Only the person who opened these settings can use them.", ephemeral=True
+        )
+        return False
+
+    @discord.ui.select(
+        placeholder="Choose a catch goal",
+        options=[
+            discord.SelectOption(label=f"{goal:,} catches per Pokémon", value=str(goal))
+            for goal in CATCH_GOALS
+        ],
+    )
+    async def select_goal(self, interaction: discord.Interaction, select: discord.ui.Select):
+        view = self.settings_view
+        service = view.service
+        settings = service.settings(view.guild_id, view.user_id)
+        goal = int(select.values[0])
+        removed = [item for item in settings.get("queue", []) if item.get("caught", 0) >= goal]
+        for item in removed:
+            service.mark_caught(view.guild_id, view.user_id, item["id"])
+        settings["goal"] = goal
+        settings["queue"] = [
+            item for item in settings.get("queue", []) if item.get("caught", 0) < goal
+        ]
+        service.cog.save_bot_state()
+        view.refresh()
+        await interaction.response.edit_message(
+            content=f"Catch goal set to {goal:,}. Removed {len(removed)} completed entries.",
+            view=None,
+        )
+        await self.message.edit(embed=view.embed(), view=view)
