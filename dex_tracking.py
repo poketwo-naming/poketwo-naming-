@@ -1,6 +1,8 @@
 """Import Pokédex entries and manage their spawn-ping queue."""
 import asyncio
 from dataclasses import dataclass, field
+from itertools import islice
+import logging
 import re
 from time import monotonic
 
@@ -10,6 +12,7 @@ from breeding_boxes import APPEND_SESSION_SECONDS, component_text
 from starboard import parse_catch
 
 CATCH_GOALS = (1, 10, 100, 1_000, 10_000)
+TARGET_MODES = (1, 2, 5, 10, "all")
 
 
 @dataclass
@@ -49,9 +52,29 @@ def dex_entries(message) -> list[dict]:
     return entries
 
 
+def active_dex_entries(cog, guild_id: int, settings: dict) -> list[dict]:
+    queue = settings.get("queue", [])
+    reserves = cog.bot_state.get("reserves", {}).get(str(guild_id), {})
+    if reserves:
+        available = (
+            item for item in queue
+            if not cog.reserve_user_ids(
+                guild_id, cog.resolve_pokemon_name(item["name"]) or item["name"]
+            )
+        )
+    else:
+        available = iter(queue)
+    mode = settings.get("mode", 1)
+    return list(available) if mode == "all" else list(islice(available, mode))
+
+
 def dex_ping_owners(cog, guild_id: int, pokemon_name: str) -> list[str]:
     species_id = getattr(cog, "pokemon_species", {}).get(pokemon_name)
     if species_id is None:
+        return []
+    if cog.bot_state.get("reserves", {}).get(str(guild_id)) and cog.reserve_user_ids(
+        guild_id, pokemon_name
+    ):
         return []
     owners = []
     for user_id, settings in cog.bot_state.get("dex_tracking", {}).get(
@@ -59,9 +82,7 @@ def dex_ping_owners(cog, guild_id: int, pokemon_name: str) -> list[str]:
     ).items():
         if settings.get("paused", False):
             continue
-        queue = settings.get("queue", [])
-        limit = settings.get("mode", 1)
-        active = queue if limit == "all" else queue[:limit]
+        active = active_dex_entries(cog, guild_id, settings)
         if any(item["id"] == species_id for item in active):
             owners.append(user_id)
     return cog.current_guild_member_ids(guild_id, owners)
@@ -111,6 +132,36 @@ class DexTrackingService:
         self.cog = cog
         self.poketwo_id = poketwo_id
         self.sessions: dict[tuple[int, int, int, int], DexSession] = {}
+        self.settings_views: set[DexSettingsView] = set()
+        self.refresh_task: asyncio.Task | None = None
+        self.refresh_pending = False
+
+    def state_saved(self) -> None:
+        if not self.settings_views:
+            return
+        self.refresh_pending = True
+        if self.refresh_task is None or self.refresh_task.done():
+            self.refresh_task = asyncio.create_task(self.refresh_settings_views())
+
+    async def refresh_settings_views(self) -> None:
+        while self.refresh_pending:
+            self.refresh_pending = False
+            for view in list(self.settings_views):
+                if view.message is None:
+                    continue
+                embed = view.embed()
+                if embed.to_dict() == view.last_embed:
+                    continue
+                view.refresh()
+                try:
+                    await view.message.edit(embed=embed, view=view)
+                except discord.NotFound:
+                    self.settings_views.discard(view)
+                    view.stop()
+                except discord.HTTPException:
+                    logging.getLogger(__name__).exception("Could not refresh dex settings")
+                else:
+                    view.last_embed = embed.to_dict()
 
     def settings(self, guild_id: int, user_id: int) -> dict:
         return self.cog.bot_state.setdefault("dex_tracking", {}).setdefault(
@@ -258,13 +309,15 @@ class DexSettingsView(discord.ui.View):
         self.service = service
         self.guild_id = guild_id
         self.user_id = user_id
+        self.message: discord.Message | None = None
+        self.last_embed: dict | None = None
         self.refresh()
 
     def embed(self) -> discord.Embed:
         settings = self.service.settings(self.guild_id, self.user_id)
         queue = settings.get("queue", [])
         mode = settings.get("mode", 1)
-        active = queue if mode == "all" else queue[:mode]
+        active = active_dex_entries(self.service.cog, self.guild_id, settings)
         names = ", ".join(item["name"] for item in active[:20]) or "None"
         if len(active) > 20:
             names += f" and {len(active) - 20} more"
@@ -279,6 +332,7 @@ class DexSettingsView(discord.ui.View):
                 f"**Catch goal:** {settings.get('goal', 1):,} per Pokémon\n"
                 f"**Remaining:** {len(queue)}\n"
                 f"**Active:** {names}\n\n"
+                "Reserved Pokémon are temporarily skipped and return when free.\n"
                 "Increasing the catch goal requires re-importing skipped or "
                 "completed Pokémon from a fresh Pokédex.\n"
                 "Dex tracking is separate from your `v!cl` collection."
@@ -303,7 +357,12 @@ class DexSettingsView(discord.ui.View):
     async def update(self, interaction: discord.Interaction) -> None:
         self.service.cog.save_bot_state()
         self.refresh()
-        await interaction.response.edit_message(embed=self.embed(), view=self)
+        embed = self.embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+        self.last_embed = embed.to_dict()
+
+    async def on_timeout(self) -> None:
+        self.service.settings_views.discard(self)
 
     @discord.ui.button(label="Pause pings", style=discord.ButtonStyle.primary)
     async def pause(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -314,7 +373,8 @@ class DexSettingsView(discord.ui.View):
     @discord.ui.button(label="Targets: 1", style=discord.ButtonStyle.secondary)
     async def mode(self, interaction: discord.Interaction, button: discord.ui.Button):
         settings = self.service.settings(self.guild_id, self.user_id)
-        settings["mode"] = {1: 2, 2: "all", "all": 1}[settings.get("mode", 1)]
+        mode = settings.get("mode", 1)
+        settings["mode"] = TARGET_MODES[(TARGET_MODES.index(mode) + 1) % len(TARGET_MODES)]
         await self.update(interaction)
 
     @discord.ui.button(label="Catch goal: 1", style=discord.ButtonStyle.secondary)
@@ -329,7 +389,9 @@ class DexSettingsView(discord.ui.View):
     async def clear(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.service.clear(self.guild_id, self.user_id)
         self.refresh()
-        await interaction.response.edit_message(embed=self.embed(), view=self)
+        embed = self.embed()
+        await interaction.response.edit_message(embed=embed, view=self)
+        self.last_embed = embed.to_dict()
 
 
 class DexGoalView(discord.ui.View):
@@ -371,4 +433,6 @@ class DexGoalView(discord.ui.View):
             content=f"Catch goal set to {goal:,}. Removed {len(removed)} completed entries.",
             view=None,
         )
-        await self.message.edit(embed=view.embed(), view=view)
+        embed = view.embed()
+        await self.message.edit(embed=embed, view=view)
+        view.last_embed = embed.to_dict()

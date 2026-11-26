@@ -359,7 +359,7 @@ COMMAND_CATALOG = (
     (
         "Collections",
         "v!dexhelp",
-        "Manages dex pings, catch goals, target count, and the queue.",
+        "Manages dex pings, catch goals, 1/2/5/10/all targets, and the queue.",
     ),
     (
         "Administration",
@@ -3225,6 +3225,10 @@ class PokéTwoNamingBot(commands.Cog):
 
     async def cog_unload(self):
         """Close shared resources."""
+        refresh_task = self.dex_tracking_service.refresh_task
+        if refresh_task is not None and not refresh_task.done():
+            refresh_task.cancel()
+            await asyncio.gather(refresh_task, return_exceptions=True)
         for task in self.spawn_preview_tasks:
             task.cancel()
         if self.spawn_preview_tasks:
@@ -3336,6 +3340,9 @@ class PokéTwoNamingBot(commands.Cog):
             f.flush()
             os.fsync(f.fileno())
         os.replace(temporary_file, BOT_STATE_FILE)
+        service = getattr(self, "dex_tracking_service", None)
+        if service is not None:
+            service.state_saved()
 
     def breeding_user_boxes(self, guild_id: int, user_id: int) -> dict:
         """Return one user's globally available breeding boxes."""
@@ -6757,7 +6764,10 @@ class PokéTwoNamingBot(commands.Cog):
             await ctx.send("❌ Dex tracking can only be used inside a server.")
             return
         view = DexSettingsView(self.dex_tracking_service, ctx.guild.id, ctx.author.id)
-        await ctx.send(embed=view.embed(), view=view)
+        embed = view.embed()
+        view.message = await ctx.send(embed=embed, view=view)
+        view.last_embed = embed.to_dict()
+        self.dex_tracking_service.settings_views.add(view)
 
     @commands.group(name="cl", invoke_without_command=True)
     async def collection(self, ctx):

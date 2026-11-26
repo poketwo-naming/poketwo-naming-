@@ -9,11 +9,10 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**Pokédex catch goals**\n"
-    "• In `v!dexhelp`, choose 1, 10, 100, 1,000, or 10,000 catches per Pokémon.\n"
-    "• `v!dex append` now reads caught counts too, skipping Pokémon already "
-    "at your goal and tracking the others until they reach it.\n"
-    "• Pause, clear, and 1/2/all target controls still work as before."
+    "**Pokédex target update**\n"
+    "• `v!dexhelp` now supports 5 or 10 active targets, alongside 1, 2, and all.\n"
+    "• Reserved Pokémon are temporarily skipped and return automatically when "
+    "their reserve is removed. Reservations remain form-specific."
 )
 
 

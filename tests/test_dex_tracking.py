@@ -1,3 +1,4 @@
+import asyncio
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -6,9 +7,9 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import discord
 
-from bot import PokéTwoNamingBot
+from bot import ClearReservesView, PokéTwoNamingBot
 from dex_tracking import (
-    DexSettingsView, DexTrackingService, dex_entries, dex_ping_owners,
+    DexSettingsView, DexTrackingService, active_dex_entries, dex_entries, dex_ping_owners,
     remove_caught_dex_entry,
 )
 
@@ -90,6 +91,8 @@ class DexTrackingTests(unittest.IsolatedAsyncioTestCase):
         await view.mode.callback(interaction)
         self.assertEqual(dex_ping_owners(self.cog, 123, "Solgaleo"), ["456"])
         self.assertEqual(dex_ping_owners(self.cog, 123, "Poipole"), [])
+        await view.mode.callback(interaction)
+        await view.mode.callback(interaction)
         await view.mode.callback(interaction)
         self.assertEqual(dex_ping_owners(self.cog, 123, "Poipole"), ["456"])
         await view.pause.callback(interaction)
@@ -201,6 +204,115 @@ class DexTrackingTests(unittest.IsolatedAsyncioTestCase):
         self.cog.bot_state["reserves"] = {"123": {"Latios": ["789"]}}
         content, _ = self.cog.format_spawn_prediction("Latios", 99, 123)
         self.assertNotIn("Dex pings:", content)
+
+    async def test_target_modes_and_reserved_queue_reactivates_in_order(self):
+        settings = self.service.settings(123, 456)
+        settings["queue"] = [
+            {"id": number, "name": name} for name, number in
+            [("Latios", 381), ("Solgaleo", 791), ("Poipole", 803), ("Kubfu", 891)]
+        ]
+        self.cog.bot_state["reserves"] = {"123": {"Latios": ["789", "999"]}}
+        view = DexSettingsView(self.service, 123, 456)
+        interaction = SimpleNamespace(response=SimpleNamespace(edit_message=AsyncMock()))
+        self.assertIn("**Active:** Solgaleo", view.embed().description)
+        self.assertEqual(dex_ping_owners(self.cog, 123, "Latios"), [])
+        self.assertEqual(dex_ping_owners(self.cog, 123, "Solgaleo"), ["456"])
+        self.cog.remove_reserve_owner(123, "Latios", 789)
+        self.assertEqual(dex_ping_owners(self.cog, 123, "Solgaleo"), ["456"])
+        self.cog.remove_reserve_owner(123, "Latios", 999)
+        self.assertEqual(dex_ping_owners(self.cog, 123, "Latios"), ["456"])
+        self.assertEqual(dex_ping_owners(self.cog, 123, "Solgaleo"), [])
+        self.assertEqual(len(settings["queue"]), 4)
+        for expected in (2, 5, 10, "all", 1):
+            await view.mode.callback(interaction)
+            self.assertEqual(settings["mode"], expected)
+
+    async def test_target_limits_and_reserved_forms(self):
+        self.cog.pokemon_species.update({f"Species {i}": 2000 + i for i in range(12)})
+        self.cog.class_names.update({
+            name.casefold(): name for name in self.cog.pokemon_species
+        })
+        settings = self.service.settings(123, 456)
+        settings["queue"] = [{"id": 52, "name": "Meowth"}] + [
+            {"id": 2000 + i, "name": f"Species {i}"} for i in range(12)
+        ]
+        self.cog.bot_state["reserves"] = {"123": {"Alolan Meowth": ["789"]}}
+        for mode, count in ((1, 1), (2, 2), (5, 5), (10, 10), ("all", 13)):
+            settings["mode"] = mode
+            self.assertEqual(len(active_dex_entries(self.cog, 123, settings)), count)
+            self.assertEqual(dex_ping_owners(self.cog, 123, "Meowth"), ["456"])
+            self.assertEqual(dex_ping_owners(self.cog, 123, "Alolan Meowth"), [])
+        self.cog.bot_state["reserves"]["123"]["Meowth"] = ["456"]
+        settings["mode"] = 1
+        self.assertEqual(active_dex_entries(self.cog, 123, settings)[0]["name"], "Species 0")
+        self.assertEqual(len(settings["queue"]), 13)
+
+    async def test_open_settings_refresh_on_reserve_changes_and_cleanup(self):
+        settings = self.service.settings(123, 456)
+        settings["queue"] = [{"id": 381, "name": "Latios"}, {"id": 791, "name": "Solgaleo"}]
+        self.cog.bot_state["reserves"] = {"123": {}}
+        with TemporaryDirectory() as directory:
+            with patch("bot.BOT_STATE_FILE", str(Path(directory) / "state.json")):
+                self.cog.save_bot_state = PokéTwoNamingBot.save_bot_state.__get__(self.cog)
+                self.ctx.send.return_value = SimpleNamespace(edit=AsyncMock())
+                await PokéTwoNamingBot.dex_help.callback(self.cog, self.ctx)
+                view = self.ctx.send.await_args.kwargs["view"]
+                self.cog.add_reserve_owner(123, "Latios", 789)
+                self.cog.save_bot_state()
+                await self.service.refresh_task
+                self.assertIn("**Active:** Solgaleo", view.message.edit.await_args.kwargs["embed"].description)
+                self.cog.remove_reserve_owner(123, "Latios")
+                self.cog.save_bot_state()
+                await self.service.refresh_task
+                self.assertIn("**Active:** Latios", view.message.edit.await_args.kwargs["embed"].description)
+                await view.on_timeout()
+                self.assertNotIn(view, self.service.settings_views)
+
+    async def test_reserve_changes_during_refresh_show_latest_state(self):
+        settings = self.service.settings(123, 456)
+        settings["queue"] = [{"id": 381, "name": "Latios"}, {"id": 791, "name": "Solgaleo"}]
+        self.cog.bot_state["reserves"] = {"123": {}}
+        started = asyncio.Event()
+        release = asyncio.Event()
+
+        async def edit(**kwargs):
+            started.set()
+            await release.wait()
+
+        with TemporaryDirectory() as directory:
+            with patch("bot.BOT_STATE_FILE", str(Path(directory) / "state.json")):
+                self.cog.save_bot_state = PokéTwoNamingBot.save_bot_state.__get__(self.cog)
+                self.ctx.send.return_value = SimpleNamespace(edit=AsyncMock(side_effect=edit))
+                await PokéTwoNamingBot.dex_help.callback(self.cog, self.ctx)
+                view = self.ctx.send.await_args.kwargs["view"]
+                self.cog.add_reserve_owner(123, "Latios", 789)
+                self.cog.save_bot_state()
+                await started.wait()
+                self.cog.remove_reserve_owner(123, "Latios")
+                self.cog.save_bot_state()
+                release.set()
+                await self.service.refresh_task
+                self.assertEqual(view.message.edit.await_count, 2)
+                self.assertIn("**Active:** Latios", view.message.edit.await_args.kwargs["embed"].description)
+
+    async def test_clear_all_reserves_refreshes_open_dex_settings(self):
+        settings = self.service.settings(123, 456)
+        settings["queue"] = [{"id": 381, "name": "Latios"}, {"id": 791, "name": "Solgaleo"}]
+        self.cog.bot_state["reserves"] = {"123": {"Latios": ["789"]}}
+        with TemporaryDirectory() as directory:
+            with patch("bot.BOT_STATE_FILE", str(Path(directory) / "state.json")):
+                self.cog.save_bot_state = PokéTwoNamingBot.save_bot_state.__get__(self.cog)
+                self.ctx.send.return_value = SimpleNamespace(edit=AsyncMock())
+                await PokéTwoNamingBot.dex_help.callback(self.cog, self.ctx)
+                view = self.ctx.send.await_args.kwargs["view"]
+                self.assertIn("**Active:** Solgaleo", view.embed().description)
+                interaction = SimpleNamespace(
+                    user=SimpleNamespace(id=456),
+                    response=SimpleNamespace(edit_message=AsyncMock()),
+                )
+                await ClearReservesView(self.cog, 123, 456).confirm_clear.callback(interaction)
+                await self.service.refresh_task
+                self.assertIn("**Active:** Latios", view.message.edit.await_args.kwargs["embed"].description)
 
     def test_description_entries_and_caught_entries(self):
         embed = discord.Embed(

@@ -113,7 +113,7 @@ channel renames; errors are logged.
 | `v!cl list` | `v!cl list` | List your own collection |
 | `v!cl clear` | `v!cl clear` | Clear your own collection |
 | `v!dex append` | Reply to your Pokétwo Pokédex with `v!dex append` | Track Pokémon below your catch goal on this and subsequent visited pages |
-| `v!dexhelp` | `v!dexhelp` | Choose a catch goal, pause pings, select 1, 2, or all targets, or clear the dex queue |
+| `v!dexhelp` | `v!dexhelp` | Choose a catch goal, pause pings, select 1, 2, 5, 10, or all targets, or clear the dex queue |
 | `v!permission <role_id>` | `v!permission 123456789` | Grant a role restricted-command access |
 | `v!training` | `v!training` | Show reviewed training images in the review channel |
 | `v!export_training` | `v!export_training` | Download reviewed images for retraining |
@@ -303,9 +303,13 @@ bot restarts; unvisited pages are not imported. Already imported Pokémon stay
 in the per-user, per-server queue across restarts and leaving or rejoining the
 server, until the catch goal is reached or the queue is cleared. If page
 tracking stops, reply with `v!dex append` again to continue importing.
-`v!dexhelp` shows the active
-targets and lets you pause or resume dex pings, cycle between the first 1,
-first 2, or all remaining entries, and clear the queue. Pokétwo catch
+`v!dexhelp` shows the active targets and lets you pause or resume dex pings,
+cycle between the first 1, 2, 5, 10, or all available entries, and clear the
+queue. Entries reserved through Vivillon are temporarily skipped without
+being removed; they automatically return to their original place when the
+reservation is cleared. Reservations are form-specific: an Alolan Meowth
+reserve does not skip normal Meowth. Open settings update when reservations
+change. Pokétwo catch
 confirmations observed in that server advance the species' count, including
 when pings are paused. Catches while the bot is offline or in other servers
 cannot be observed; re-import a fresh Pokédex page to update queued counts.
