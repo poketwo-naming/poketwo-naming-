@@ -29,6 +29,7 @@ class BreedingBoxTests(unittest.IsolatedAsyncioTestCase):
         )
         self.service = BreedingBoxService(self.cog, 716390085896962058)
         self.cog.breeding_box_service = self.service
+        self.cog.dex_tracking_service = SimpleNamespace(handle_list_edit=AsyncMock())
         self.ctx = SimpleNamespace(
             guild=SimpleNamespace(id=123),
             author=SimpleNamespace(id=456, display_name="Trainer"),

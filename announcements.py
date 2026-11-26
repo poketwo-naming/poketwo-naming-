@@ -9,10 +9,13 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**Pokémon naming aliases update**\n"
-    "• Added 17 new preferred catch names, including sleima, carbou, ninfia, "
-    "gekkoga, and olini.\n"
-    "• These names now work in commands alongside the original Pokémon names."
+    "**Pokédex tracking is here!**\n"
+    "• Reply to your Pokétwo Pokédex with `v!dex append` and use its arrows "
+    "to add more missing Pokémon.\n"
+    "• Get spawn pings for your first 1, first 2, or all missing targets; caught "
+    "Pokémon are automatically removed.\n"
+    "• Use `v!dexhelp` to pause or resume pings, change targets, or clear your "
+    "dex queue. Your collection and breeding boxes stay separate."
 )
 
 

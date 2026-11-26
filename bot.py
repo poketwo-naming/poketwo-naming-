@@ -27,6 +27,12 @@ from geonamescache import GeonamesCache
 from PIL import Image, UnidentifiedImageError
 
 from breeding_boxes import BreedingBoxService
+from dex_tracking import (
+    DexSettingsView,
+    DexTrackingService,
+    dex_ping_owners,
+    remove_caught_dex_entry,
+)
 from pokemon_recognition import PokemonImageRecognizer
 from starboard import StarboardService, StarboardSettingsView
 from roles_channels import RolesChannelsSettingsView
@@ -345,6 +351,16 @@ COMMAND_CATALOG = (
     ),
     ("Collections", "v!cl list", "Lists your own collection."),
     ("Collections", "v!cl clear", "Clears your own collection."),
+    (
+        "Collections",
+        "v!dex append",
+        "Replies to a Pokétwo Pokédex to track missing entries and visited pages.",
+    ),
+    (
+        "Collections",
+        "v!dexhelp",
+        "Manages dex pings, target count, and the missing-Pokémon queue.",
+    ),
     (
         "Administration",
         "v!permission <role_id>",
@@ -2636,6 +2652,7 @@ class PokéTwoNamingBot(commands.Cog):
         self.starboard_service = StarboardService(self)
         self.readyup_views = {}
         self.breeding_box_service = BreedingBoxService(self, POKETWO_BOT_ID)
+        self.dex_tracking_service = DexTrackingService(self, POKETWO_BOT_ID)
         self.seed_restricted_roles()
         self.active_incenses = {
             int(channel_id): float(expires_at)
@@ -2840,6 +2857,10 @@ class PokéTwoNamingBot(commands.Cog):
                         f"<@{user_id}>" for user_id in collection_owners
                     )
                     content.append(f"Collection pings: {mentions}")
+                dex_owners = dex_ping_owners(self, guild_id, pokemon_name)
+                if dex_owners:
+                    mentions = ", ".join(f"<@{user_id}>" for user_id in dex_owners)
+                    content.append(f"Dex pings: {mentions}")
                 type_pingers = self.type_ping_owners(pokemon_name, guild_id)
                 if type_pingers:
                     mentions = ", ".join(
@@ -4252,10 +4273,14 @@ class PokéTwoNamingBot(commands.Cog):
         guild_key = str(guild_id)
         user_key = str(user_id)
         changed = False
-        for state_key in ("shiny_hunts", "collections", "type_pings", "quest_pings"):
+        for state_key in (
+            "shiny_hunts", "collections", "type_pings", "quest_pings", "dex_tracking"
+        ):
             settings = self.bot_state.setdefault(state_key, {})
             guild_settings = settings.get(guild_key)
             if isinstance(guild_settings, dict) and user_key in guild_settings:
+                if state_key == "dex_tracking":
+                    self.dex_tracking_service.cancel_sessions(guild_id, user_id)
                 guild_settings.pop(user_key)
                 changed = True
 
@@ -4299,6 +4324,7 @@ class PokéTwoNamingBot(commands.Cog):
             return
         # Check if message is from Pokétwo bot
         if message.author.id == POKETWO_BOT_ID:
+            remove_caught_dex_entry(self, message)
             self.track_incense(message)
             await self.maybe_pause_after_incense_purchase(message)
             if message.guild and self.bot_state.get("guild_settings", {}).get(
@@ -4335,6 +4361,7 @@ class PokéTwoNamingBot(commands.Cog):
         """Follow edited Pokétwo list pages, even if the message is uncached."""
         if {"content", "embeds", "components"}.intersection(payload.data):
             await self.breeding_box_service.handle_list_edit(payload.message)
+            await self.dex_tracking_service.handle_list_edit(payload.message)
 
     @commands.Cog.listener()
     async def on_message_edit(self, before, after):
@@ -4483,6 +4510,7 @@ class PokéTwoNamingBot(commands.Cog):
                 if message.guild
                 else []
             )
+            dex_owners = []
             if reserved_user_ids:
                 embed.add_field(
                     name="Reserved",
@@ -4510,6 +4538,7 @@ class PokéTwoNamingBot(commands.Cog):
                         ),
                         inline=True,
                     )
+                dex_owners = dex_ping_owners(self, message.guild.id, pokemon_name)
             embed.set_image(url="attachment://spawn-review.webp")
             with Image.open(BytesIO(image_data)) as image:
                 review_buffer = BytesIO()
@@ -4524,6 +4553,10 @@ class PokéTwoNamingBot(commands.Cog):
                 "file": discord.File(review_buffer, filename="spawn-review.webp"),
                 "view": SpawnReviewView(self, pokemon_name, image_data),
             }
+            if dex_owners:
+                send_kwargs["content"] = "Dex pings: " + ", ".join(
+                    f"<@{user_id}>" for user_id in dex_owners
+                )
         else:
             defer_prediction_preview = True
             content, embed = self.format_spawn_prediction(
@@ -6654,6 +6687,28 @@ class PokéTwoNamingBot(commands.Cog):
             await ctx.send(f"✅ Cleared **{count}** user(s) from the ready-up queue.")
         else:
             await ctx.send("The ready-up queue is already empty.")
+
+    @commands.group(name="dex", invoke_without_command=True)
+    async def dex(self, ctx):
+        """Show dex import usage."""
+        await ctx.send(
+            "Reply to your Pokétwo Pokédex with `v!dex append`. "
+            "Use `v!dexhelp` for settings."
+        )
+
+    @dex.command(name="append")
+    async def append_dex(self, ctx):
+        """Track missing Pokémon from a Pokétwo Pokédex."""
+        await self.dex_tracking_service.append(ctx)
+
+    @commands.command(name="dexhelp")
+    async def dex_help(self, ctx):
+        """Open the dex tracking settings."""
+        if ctx.guild is None:
+            await ctx.send("❌ Dex tracking can only be used inside a server.")
+            return
+        view = DexSettingsView(self.dex_tracking_service, ctx.guild.id, ctx.author.id)
+        await ctx.send(embed=view.embed(), view=view)
 
     @commands.group(name="cl", invoke_without_command=True)
     async def collection(self, ctx):

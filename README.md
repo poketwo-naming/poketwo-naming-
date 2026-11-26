@@ -112,6 +112,8 @@ channel renames; errors are logged.
 | `v!cl search <pokemon>` | `v!cl search Pikachu` | Check whether a Pokémon is in your own collection |
 | `v!cl list` | `v!cl list` | List your own collection |
 | `v!cl clear` | `v!cl clear` | Clear your own collection |
+| `v!dex append` | Reply to your Pokétwo Pokédex with `v!dex append` | Track missing Pokémon on this page and subsequent visited pages |
+| `v!dexhelp` | `v!dexhelp` | Pause dex pings, choose 1, 2, or all targets, or clear the dex queue |
 | `v!permission <role_id>` | `v!permission 123456789` | Grant a role restricted-command access |
 | `v!training` | `v!training` | Show reviewed training images in the review channel |
 | `v!export_training` | `v!export_training` | Download reviewed images for retraining |
@@ -287,6 +289,18 @@ Collections are personal and unrestricted: each member can only modify their
 own collection. Use `v!cl add <category>` to add every Pokémon from a
 server category to your collection. Spawn output lists shiny hunts before
 collections. A reserve replaces both sections.
+
+For Pokédex tracking, reply to your Pokétwo missing-entry list with
+`v!dex append`, then use Pokétwo's page arrows to import more pages in order.
+Tracking page edits lasts 30 minutes after the last page change or until the
+bot restarts; unvisited pages are not imported. The queue and settings persist
+per user and server. `v!dexhelp` shows the active targets and lets you pause
+or resume dex pings, cycle between the first 1, first 2, or all remaining
+entries, and clear the queue. Pokétwo catch confirmations in that server
+remove the caught species from the queue, including when pings are paused.
+Dex tracking is separate from `v!cl` and breeding boxes; clearing it does not
+remove manually added collection entries. Like other spawn pings, dex pings
+are suppressed when a spawn is reserved.
 
 Active incense counts expire automatically after 90 seconds without a Pokétwo
 spawn in that channel. Override the inactivity window with

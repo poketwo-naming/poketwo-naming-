@@ -355,6 +355,25 @@ class SpawnThumbnailTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sent["view"].pokemon_name, "Pikachu")
         self.assertEqual(len(self.cog.message_send_times), 1)
 
+    async def test_low_confidence_review_sends_dex_mentions_in_message_content(self):
+        self.channel.id = TRAINING_REVIEW_CHANNEL_ID
+        self.recognize.return_value = ("Pikachu", 20.0, 0.02)
+        self.cog.pokemon_types = {"Pikachu": []}
+        self.cog.pokemon_species = {"Pikachu": 25}
+        self.cog.bot_state = {
+            "dex_tracking": {"123": {"456": {
+                "queue": [{"id": 25, "name": "Pikachu"}], "mode": 1,
+            }}},
+        }
+        self.cog.reserve_user_ids = Mock(return_value=[])
+        self.cog.collection_owners_for_spawn = Mock(return_value=[])
+
+        await self.cog.handle_poketwo_spawn(self.message)
+
+        self.assertEqual(
+            self.channel.send.await_args.kwargs["content"], "Dex pings: <@456>"
+        )
+
     async def test_identical_images_reuse_prediction_but_changed_images_do_not(self):
         self.recognize.side_effect = [
             ("Pikachu", 99.0, 0.02),
