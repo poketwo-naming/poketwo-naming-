@@ -32,7 +32,7 @@ def dex_entries(message) -> list[dict]:
     entries = []
     pattern = (
         r"(?m)^[ \t]*([^\n#]+?)\s*(?:\*\*|__|`)*#\s*(\d+)(?:\*\*|__|`)*\s*"
-        r"(?:❌|:x:)?\s*(?:\*\*)?not\s+caught\s+yet"
+        r"(?:❌|:x:|<a?:[^:>\s]+:\d+>)?\s*(?:\*\*)?not\s+caught\s+yet"
     )
     for match in re.finditer(pattern, text, re.IGNORECASE):
         name = re.sub(r"<a?:[^:>]+:\d+>", "", match.group(1))

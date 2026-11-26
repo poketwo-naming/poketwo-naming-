@@ -190,3 +190,42 @@ class DexTrackingTests(unittest.IsolatedAsyncioTestCase):
         )
         message = SimpleNamespace(content="", embeds=[], components=[container])
         self.assertEqual(dex_entries(message), [{"id": 984, "name": "Great Tusk"}])
+
+    async def test_poketwo_custom_emoji_fields_import_and_follow_pages(self):
+        names = [
+            ("Kingler", 99), ("Marowak", 105), ("Zapdos", 145),
+            ("Ariados", 168), ("Cleffa", 173), ("Quagsire", 195),
+            ("Qwilfish", 211), ("Octillery", 224), ("Mantine", 226),
+            ("Entei", 244), ("Suicune", 245), ("Ho-Oh", 250),
+            ("Camerupt", 323), ("Cradily", 346), ("Walrein", 365),
+            ("Relicanth", 369), ("Regirock", 377), ("Regice", 378),
+            ("Registeel", 379), ("Latias", 380), ("Latios", 381),
+        ]
+
+        def page(entries):
+            embed = discord.Embed(title="Your pokédex")
+            for name, number in entries:
+                embed.add_field(
+                    name=f"<:_:123456789> {name} #{number}",
+                    value="<:_:725819513119047822> Not caught yet!\n"
+                    "<:_:725819513119047822> Not hatched yet!",
+                )
+            embed.add_field(
+                name="<:_:123456789> Pikachu #25",
+                value="<:_:725819513358254101> 1 caught!\n"
+                "<:_:725819513119047822> Not hatched yet!",
+            )
+            return SimpleNamespace(
+                id=555, guild=self.ctx.guild, channel=self.ctx.channel,
+                author=SimpleNamespace(id=716390085896962058),
+                content="", embeds=[embed], components=[],
+            )
+
+        self.ctx.channel.fetch_message.return_value = page(names)
+        await self.service.append(self.ctx)
+        queue = self.service.settings(123, 456)["queue"]
+        self.assertEqual(queue, [{"id": number, "name": name} for name, number in names])
+        await self.service.handle_list_edit(page([("Rayquaza", 384), ("Jirachi", 385)]))
+        self.assertEqual(
+            queue[-2:], [{"id": 384, "name": "Rayquaza"}, {"id": 385, "name": "Jirachi"}]
+        )
