@@ -322,6 +322,12 @@ class StarboardService:
             embed.set_footer(text="Catch Detection System")
         sprite_name = catch.pokemon.removeprefix("Gigantamax ")
         sprite_id = (GMAX_IDS.get(sprite_name.casefold()) if kind == "gmax" else None)
+        custom_sprite = (
+            self.cog.custom_sprite_url(sprite_name) if sprite_id is None else None
+        )
+        if custom_sprite is not None:
+            embed.set_thumbnail(url=custom_sprite)
+            return embed
         if sprite_id is None:
             sprite_id = self.cog.pokemon_sprite_ids.get(sprite_name)
         if sprite_id is None:

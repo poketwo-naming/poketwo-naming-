@@ -2709,10 +2709,12 @@ class PokéTwoNamingBot(commands.Cog):
 
     def custom_sprite_url(self, pokemon_name: str) -> str | None:
         """Return the custom sprite URL for a Pokémon if available."""
-        sprite_id = self.pokemon_sprite_ids.get(pokemon_name)
-        if sprite_id is None:
+        if os.path.basename(pokemon_name) != pokemon_name:
             return None
-        return f"{CUSTOM_SPRITE_BASE_URL}/{sprite_id}.png"
+        filename = f"{pokemon_name}.png"
+        if not os.path.isfile(os.path.join("pokemon_sprites", filename)):
+            return None
+        return f"{CUSTOM_SPRITE_BASE_URL}/{quote(filename)}"
 
     def resolve_pokemon_family(
         self,
@@ -4512,15 +4514,9 @@ class PokéTwoNamingBot(commands.Cog):
                 message.guild.id if message.guild else None,
                 shiny_hunters,
             )
-            custom_sprite_path = os.path.join(
-                "pokemon_sprites",
-                f"{pokemon_name}.png",
-            )
-            if os.path.isfile(custom_sprite_path):
-                sprite_filename = quote(f"{pokemon_name}.png")
-                thumbnail_url = (
-                    f"{CUSTOM_SPRITE_BASE_URL}/{sprite_filename}"
-                )
+            custom_sprite = self.custom_sprite_url(pokemon_name)
+            if custom_sprite is not None:
+                thumbnail_url = custom_sprite
             elif pokemon_name in CUSTOM_SPRITE_IDENTIFIERS:
                 thumbnail_url = self.spawn_image_url(message)
                 if thumbnail_url is None:

@@ -120,6 +120,27 @@ class StarboardTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("**Chain:** `2090`", embed.description)
         self.assertTrue(embed.thumbnail.url.endswith("/shiny/280.png"))
 
+    async def test_custom_sprite_is_used_for_high_iv_and_shiny_catches(self):
+        self.message.content = (
+            "Congratulations <@999>! You caught a Level 1 Peakychu:female: (92.47%)!"
+        )
+        await self.service.handle(self.message)
+        embed = self.channels[3].send.await_args.kwargs["embed"]
+        self.assertIn("Peakychu ♀", embed.description)
+        expected = (
+            "https://raw.githubusercontent.com/poketwo-naming/"
+            "poketwo-naming-/main/pokemon_sprites/Peakychu.png"
+        )
+        self.assertEqual(embed.thumbnail.url, expected)
+
+        self.message.id += 1
+        self.message.content += "\nThese colors seem unusual... ✨"
+        await self.service.handle(self.message)
+        self.assertEqual(
+            self.channels[2].send.await_args.kwargs["embed"].thumbnail.url,
+            expected,
+        )
+
     async def test_shiny_female_nidoran_uses_female_artwork(self):
         self.message.content = (
             "Congratulations <@999>! You caught a Level 21 Nidoran♀️:female: "

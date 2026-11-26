@@ -56,7 +56,8 @@ Changing these channels requires Manage Server. Catches can appear on multiple
 boards, and Gigantamax and extreme-IV matches each receive their own post.
 Posts link to the original catch. Pokétwo's gender emoji, labeled IVs and shiny
 streak counts are recognized; chain values are shown when present in the catch
-message.
+message. Custom sprites such as Peakychu are used on catch posts, including
+shiny posts when a separate shiny sprite is unavailable.
 Vivillon starboard posts show the Gigantamax spawn rate when a rate is known,
 including on overlapping low- and high-IV posts. Other missing spawn rates
 are labelled unknown. The shiny board
