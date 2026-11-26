@@ -141,6 +141,19 @@ class StarboardTests(unittest.IsolatedAsyncioTestCase):
             expected,
         )
 
+    async def test_partner_pikachu_uses_custom_sprite(self):
+        self.message.content = (
+            "Congratulations <@999>! You caught a Level 20 "
+            "Partner Pikachu:male: (85.48%)!"
+        )
+        await self.service.handle(self.message)
+        embed = self.channels[1].send.await_args.kwargs["embed"]
+        self.assertEqual(
+            embed.thumbnail.url,
+            "https://raw.githubusercontent.com/poketwo-naming/"
+            "poketwo-naming-/main/pokemon_sprites/partner%20pikachu.png",
+        )
+
     async def test_shiny_female_nidoran_uses_female_artwork(self):
         self.message.content = (
             "Congratulations <@999>! You caught a Level 21 Nidoran♀️:female: "
@@ -177,7 +190,18 @@ class StarboardTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(embed.title, "⭐ Rare Catch Detected!")
                 self.assertIn(f"{name} ♀", embed.description)
                 self.assertIn("1 out of 69,043", embed.description)
-                self.assertTrue(embed.thumbnail.url)
+                if name == "Partner Eevee":
+                    self.assertEqual(
+                        embed.thumbnail.url,
+                        "https://raw.githubusercontent.com/poketwo-naming/"
+                        "poketwo-naming-/main/pokemon_sprites/partner%20eevee.png",
+                    )
+                else:
+                    self.assertEqual(
+                        embed.thumbnail.url,
+                        "https://raw.githubusercontent.com/poketwo-naming/"
+                        "poketwo-naming-/main/pokemon_sprites/partner%20pikachu.png",
+                    )
         self.channels[2].send.assert_not_awaited()
         self.channels[3].send.assert_not_awaited()
 

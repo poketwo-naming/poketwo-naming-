@@ -2728,9 +2728,26 @@ class PokéTwoNamingBot(commands.Cog):
         """Return the custom sprite URL for a Pokémon if available."""
         if os.path.basename(pokemon_name) != pokemon_name:
             return None
-        filename = f"{pokemon_name}.png"
-        if not os.path.isfile(os.path.join("pokemon_sprites", filename)):
+        requested_filename = f"{pokemon_name}.png"
+        sprite_directory = "pokemon_sprites"
+        if not os.path.isdir(sprite_directory):
             return None
+        exact_path = os.path.join(sprite_directory, requested_filename)
+        if os.path.isfile(exact_path):
+            filename = requested_filename
+        else:
+            requested_folded = requested_filename.casefold()
+            filename = next(
+                (
+                    entry
+                    for entry in os.listdir(sprite_directory)
+                    if entry.casefold() == requested_folded
+                    and os.path.isfile(os.path.join(sprite_directory, entry))
+                ),
+                None,
+            )
+            if filename is None:
+                return None
         return f"{CUSTOM_SPRITE_BASE_URL}/{quote(filename)}"
 
     def resolve_pokemon_family(

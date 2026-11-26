@@ -9,9 +9,9 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**Pokédex settings maintenance**\n"
-    "• Fixed a type-checking error in the live dex settings update code. "
-    "Dex tracking behavior is unchanged."
+    "**Starboard sprite fix**\n"
+    "• Partner Eevee and Partner Pikachu catches now show their correct custom "
+    "sprites on the starboard."
 )
 
 
