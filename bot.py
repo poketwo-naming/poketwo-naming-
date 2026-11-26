@@ -37,8 +37,6 @@ from tools.build_pokemon_types import (
 
 
 POKETWO_BOT_ID = 716390085896962058
-BUIZIE_USER_ID = 1361891816697233510
-BUIZIE_THUMBNAIL = os.path.join(os.path.dirname(__file__), "assets", "buizie.png")
 BREEDING_BOX_LIMIT = 7_500
 MISSINGNO_ALERT_ROLE_ID = 1573065640762151003
 TIMEZONE_ROLE_ID = 1553235133119598652
@@ -4291,27 +4289,10 @@ class PokéTwoNamingBot(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        """Listen for Pokétwo spawns and the Buizie naming response."""
+        """Listen for Pokétwo spawn messages"""
         # Ignore bot's own messages
         if message.author.id == self.bot.user.id:
             return
-        if message.author.id == BUIZIE_USER_ID:
-            copy_command = "@Pokétwo#8236 c buizie"
-            embed = discord.Embed(
-                title="Catch buizie",
-                description=f"**Copy Below**\n```\n{copy_command}\n```",
-                color=discord.Color.blurple(),
-            )
-            embed.set_thumbnail(url="attachment://buizie.png")
-            await message.channel.send(
-                content=(
-                    "buizie 100.00%\n"
-                    "Best name: buizie\n"
-                    f"Click to Copy -> `{copy_command}`"
-                ),
-                embed=embed,
-                file=discord.File(BUIZIE_THUMBNAIL, filename="buizie.png"),
-            )
         if re.fullmatch(r"[hH]!grab\s*", message.content):
             ctx = await self.bot.get_context(message)
             await self.grab_reserves(ctx, h_mode=True)
