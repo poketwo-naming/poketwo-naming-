@@ -1,6 +1,8 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 import discord
 
@@ -102,13 +104,55 @@ class DexTrackingTests(unittest.IsolatedAsyncioTestCase):
         await self.service.handle_list_edit(self.page([("Kubfu", 891)]))
         self.assertEqual(self.service.settings(123, 456)["queue"], [])
 
-    async def test_member_removal_cancels_page_tracking(self):
+    async def test_member_removal_preserves_queue_and_cancels_page_tracking(self):
         self.ctx.channel.fetch_message.return_value = self.page([("Latios", 381)])
         await self.service.append(self.ctx)
         self.cog.bot = SimpleNamespace(guilds=[])
         self.cog.clear_member_server_data(123, 456)
         await self.service.handle_list_edit(self.page([("Solgaleo", 791)]))
-        self.assertNotIn("456", self.cog.bot_state["dex_tracking"]["123"])
+        self.assertEqual(
+            self.service.settings(123, 456)["queue"], [{"id": 381, "name": "Latios"}]
+        )
+
+    async def test_expired_session_and_restart_keep_saved_queue_until_caught_or_cleared(self):
+        self.ctx.channel.fetch_message.return_value = self.page(
+            [("Latios", 381), ("Solgaleo", 791)]
+        )
+        with TemporaryDirectory() as directory:
+            with patch("bot.BOT_STATE_FILE", str(Path(directory) / "state.json")):
+                self.cog.save_bot_state = PokéTwoNamingBot.save_bot_state.__get__(self.cog)
+                await self.service.append(self.ctx)
+                status = self.ctx.send.await_args.args[0]
+                self.assertIn("Added Pokémon stay in your queue", status)
+                self.assertIn("Only page tracking stops", status)
+
+                for session in self.service.sessions.values():
+                    session.expires_at = 0
+                await self.service.handle_list_edit(self.page([("Poipole", 803)]))
+                self.assertEqual(len(self.service.settings(123, 456)["queue"]), 2)
+
+                self.cog.bot_state = self.cog.load_bot_state()
+                self.service = DexTrackingService(self.cog, 716390085896962058)
+                self.cog.dex_tracking_service = self.service
+                self.assertEqual(dex_ping_owners(self.cog, 123, "Latios"), ["456"])
+                self.assertEqual(
+                    self.service.settings(123, 456)["queue"],
+                    [{"id": 381, "name": "Latios"}, {"id": 791, "name": "Solgaleo"}],
+                )
+                catch = SimpleNamespace(
+                    guild=self.ctx.guild,
+                    content="Congratulations <@456>! You caught a Level 8 Latios (50.00%)!",
+                    embeds=[],
+                )
+                remove_caught_dex_entry(self.cog, catch)
+                self.cog.bot_state = self.cog.load_bot_state()
+                self.assertEqual(
+                    self.service.settings(123, 456)["queue"],
+                    [{"id": 791, "name": "Solgaleo"}],
+                )
+                self.service.clear(123, 456)
+                self.cog.bot_state = self.cog.load_bot_state()
+                self.assertEqual(self.service.settings(123, 456)["queue"], [])
 
     async def test_species_matching_and_catch_from_inactive_queue(self):
         settings = self.service.settings(123, 456)

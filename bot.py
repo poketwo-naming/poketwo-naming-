@@ -4273,14 +4273,13 @@ class PokéTwoNamingBot(commands.Cog):
         guild_key = str(guild_id)
         user_key = str(user_id)
         changed = False
-        for state_key in (
-            "shiny_hunts", "collections", "type_pings", "quest_pings", "dex_tracking"
-        ):
+        dex_service = getattr(self, "dex_tracking_service", None)
+        if dex_service is not None:
+            dex_service.cancel_sessions(guild_id, user_id)
+        for state_key in ("shiny_hunts", "collections", "type_pings", "quest_pings"):
             settings = self.bot_state.setdefault(state_key, {})
             guild_settings = settings.get(guild_key)
             if isinstance(guild_settings, dict) and user_key in guild_settings:
-                if state_key == "dex_tracking":
-                    self.dex_tracking_service.cancel_sessions(guild_id, user_id)
                 guild_settings.pop(user_key)
                 changed = True
 

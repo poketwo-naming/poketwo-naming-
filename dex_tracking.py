@@ -145,8 +145,10 @@ class DexTrackingService:
     def status(added: int, total: int) -> str:
         return (
             f"✅ Added **{added}** missing Pokémon. Dex queue: **{total}**.\n"
-            "Use the Pokétwo page arrows to add more. Tracking lasts 30 minutes "
-            "after the last page change or until restart. Use `v!dexhelp` for settings."
+            "Added Pokémon stay in your queue, even after a restart, until you "
+            "catch them or clear it in `v!dexhelp`.\n"
+            "Use the Pokétwo page arrows to add more. Only page tracking stops "
+            "30 minutes after the last page change or when the bot restarts."
         )
 
     async def append(self, ctx) -> None:

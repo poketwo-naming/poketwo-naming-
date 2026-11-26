@@ -9,10 +9,10 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**Pokédex import fix**\n"
-    "• Fixed `v!dex append` not recognizing missing Pokémon when Pokétwo "
-    "uses its custom status emojis.\n"
-    "• Visited Pokédex pages continue adding missing Pokémon in order."
+    "**Pokédex queue persistence**\n"
+    "• Imported Pokémon stay in your dex queue through restarts and "
+    "leaving or rejoining the server, until caught or cleared in `v!dexhelp`.\n"
+    "• The 30-minute limit only applies to importing new pages with the arrows."
 )
 
 

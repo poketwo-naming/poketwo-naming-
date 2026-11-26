@@ -296,11 +296,14 @@ collections. A reserve replaces both sections.
 For Pokédex tracking, reply to your Pokétwo missing-entry list with
 `v!dex append`, then use Pokétwo's page arrows to import more pages in order.
 Tracking page edits lasts 30 minutes after the last page change or until the
-bot restarts; unvisited pages are not imported. The queue and settings persist
-per user and server. `v!dexhelp` shows the active targets and lets you pause
-or resume dex pings, cycle between the first 1, first 2, or all remaining
-entries, and clear the queue. Pokétwo catch confirmations in that server
-remove the caught species from the queue, including when pings are paused.
+bot restarts; unvisited pages are not imported. Already imported Pokémon stay
+in the per-user, per-server queue across restarts and leaving or rejoining the
+server, until caught or cleared. If page tracking stops, reply with
+`v!dex append` again to continue importing. `v!dexhelp` shows the active
+targets and lets you pause or resume dex pings, cycle between the first 1,
+first 2, or all remaining entries, and clear the queue. Pokétwo catch
+confirmations observed in that server remove the caught species from the
+queue, including when pings are paused.
 Dex tracking is separate from `v!cl` and breeding boxes; clearing it does not
 remove manually added collection entries. Like other spawn pings, dex pings
 are suppressed when a spawn is reserved.
