@@ -9,13 +9,11 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**Pokédex tracking is here!**\n"
-    "• Reply to your Pokétwo Pokédex with `v!dex append` and use its arrows "
-    "to add more missing Pokémon.\n"
-    "• Get spawn pings for your first 1, first 2, or all missing targets; caught "
-    "Pokémon are automatically removed.\n"
-    "• Use `v!dexhelp` to pause or resume pings, change targets, or clear your "
-    "dex queue. Your collection and breeding boxes stay separate."
+    "**Category reserve search**\n"
+    "• Use `v!r search <category>` to see which Pokémon are reserved and "
+    "who reserved them.\n"
+    "• The end of the list shows the Pokémon in that category that aren't "
+    "reserved. Longer results have page buttons."
 )
 
 

@@ -128,6 +128,68 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
             "No members have reserved this Pokémon.",
         )
 
+    async def test_category_search_shows_reservations_then_unreserved(self):
+        self.cog.bot_state["categories"]["123"]["featured"].append("Meowth")
+        self.cog.bot_state["reserves"]["123"].pop("Eevee")
+        self.ctx.message = SimpleNamespace(content="v!r search FeAtUrEd")
+
+        await self.cog.dispatch_reservations(self.ctx)
+
+        embed = self.ctx.send.await_args.kwargs["embed"]
+        self.assertEqual(embed.title, "featured Category Reservations")
+        self.assertEqual(
+            embed.description,
+            "**Reserved**\n"
+            "• **Pikachu** — <@456>\n"
+            "• **Pikachu** — <@789>\n\n"
+            "**Not reserved**\n"
+            "• **Eevee**\n"
+            "• **Meowth**",
+        )
+
+    async def test_category_search_handles_all_reserved_and_all_unreserved(self):
+        await self.cog.search_reserve(self.ctx, "featured")
+        embed = self.ctx.send.await_args.kwargs["embed"]
+        self.assertIn("• **Eevee** — <@456>", embed.description)
+        self.assertIn("All Pokémon in this category are reserved.", embed.description)
+
+        self.cog.bot_state["reserves"]["123"] = {}
+        await self.cog.search_reserve(self.ctx, "featured")
+        embed = self.ctx.send.await_args.kwargs["embed"]
+        self.assertIn("No Pokémon are reserved.", embed.description)
+        self.assertIn("• **Pikachu**\n• **Eevee**", embed.description)
+
+    async def test_category_search_paginates_without_losing_entries(self):
+        pokemon = [f"Pokémon {index}" for index in range(45)]
+        self.cog.bot_state["categories"]["123"]["featured"] = pokemon
+        self.cog.bot_state["reserves"]["123"] = {
+            name: ["456", "789"] for name in pokemon[:15]
+        }
+        self.ctx.author = SimpleNamespace(id=456)
+
+        await self.cog.search_reserve(self.ctx, "featured")
+
+        view = self.ctx.send.await_args.kwargs["view"]
+        self.assertGreater(len(view.pages), 1)
+        description = "\n".join(page.description for page in view.pages)
+        self.assertLess(description.index("**Not reserved**"), description.index("• **Pokémon 15**"))
+        for name in pokemon[:15]:
+            self.assertIn(f"• **{name}** — <@456>", description)
+            self.assertIn(f"• **{name}** — <@789>", description)
+        for name in pokemon[15:]:
+            self.assertIn(f"• **{name}**", description)
+        self.assertTrue(all(len(page.description) <= 4096 for page in view.pages))
+        interaction = SimpleNamespace(response=SimpleNamespace(edit_message=AsyncMock()))
+        await view.next_button.callback(interaction)
+        self.assertIs(interaction.response.edit_message.await_args.kwargs["embed"], view.pages[1])
+
+    async def test_category_search_handles_empty_category(self):
+        self.cog.bot_state["categories"]["123"]["empty"] = []
+
+        await self.cog.search_reserve(self.ctx, "empty")
+
+        self.ctx.send.assert_awaited_once_with("❌ Category **empty** is empty.")
+
     async def test_grab_readyup_button_adds_each_user_once(self):
         self.cog.readyup_views = {}
         view = GrabReservesView(

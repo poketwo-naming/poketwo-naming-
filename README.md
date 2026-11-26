@@ -95,7 +95,7 @@ channel renames; errors are logged.
 | `v!r add all <pokemon,...> <@user>` | `v!r add all Arceus, Eevee @user` | Reserve all matching forms (restricted) |
 | `v!r remove <pokemon,...|category> [@user]` | `v!r remove rare @user` | Remove Pokémon or all reserved members of a category (restricted) |
 | `v!r e <@user>` | Reply to a reserve list with `v!r e @user` | Confirm an exchange of the user's reserves to members in the list (restricted) |
-| `v!r search <pokemon>` | `v!r search Pikachu` | Show who has a Pokémon reserved in an embed |
+| `v!r search <pokemon\|category>` | `v!r search Pikachu` or `v!r search rare` | Show reservations; category results end with unreserved Pokémon |
 | `v!r list [@user]` | `v!r list @user` | List all server reserves or one member's reserves |
 | `v!reserve list [@user]` | `v!reserve list @user` | Long-form reserve list command |
 | `v!rafk` | `v!rafk` | Release your reserves or a category and request a staff-approved FFA announcement |
@@ -190,7 +190,10 @@ threshold can be changed with `REVIEW_CONFIDENCE_THRESHOLD`.
 
 Multiple members can reserve the same Pokémon; each receives the reserve ping
 when that Pokémon is recognized. Existing single-member reserves remain valid.
-`v!r search <pokemon>` and `v!r list` are available to everyone.
+`v!r search <pokemon|category>` and `v!r list` are available to everyone.
+Category searches show each Pokémon's reserving members first, followed by
+the Pokémon with no reservations. Use the page buttons for longer results.
+Category names take precedence if they match a Pokémon name.
 `v!r add` and `v!r remove` are restricted to administrators and members with the
 configured restricted role. Removing a category removes those Pokémon reserves
 for all reserving members, or only the mentioned member when `@user` is supplied.

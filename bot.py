@@ -279,8 +279,8 @@ COMMAND_CATALOG = (
     ),
     (
         "Reservations",
-        "v!r search <pokemon>",
-        "Shows who has a Pokémon reserved in an embed.",
+        "v!r search <pokemon|category>",
+        "Shows reservations and, for categories, unreserved Pokémon.",
     ),
     (
         "Reservations",
@@ -6152,7 +6152,7 @@ class PokéTwoNamingBot(commands.Cog):
                 "Use `v!r list [@user]` / `v!reserve list [@user]`, "
                 "`v!r add <pokemon,...> <@user> [<@user2> ...]`, "
                 "`v!r remove <pokemon,...|category> [@user]`, "
-                "`v!r search <pokemon>`, `v!r clear`, or `v!r all`."
+                "`v!r search <pokemon|category>`, `v!r clear`, or `v!r all`."
             )
         else:
             await ctx.send(
@@ -6411,14 +6411,64 @@ class PokéTwoNamingBot(commands.Cog):
         await ctx.send(result)
 
     async def search_reserve(self, ctx, pokemon_input: str):
-        """Show who has a Pokémon reserved, without requiring restricted access."""
+        """Show reservations for a Pokémon or category."""
         if ctx.guild is None:
             await ctx.send("Reservations can only be viewed inside a server.")
             return
         if not pokemon_input.strip():
-            await ctx.send("Usage: `v!r search <pokemon>`")
+            await ctx.send("Usage: `v!r search <pokemon|category>`")
             return
         search_input = pokemon_input.strip()
+        category_key = self.find_category(ctx.guild.id, search_input)
+        if category_key is not None:
+            pokemon_names = self.guild_categories(ctx.guild.id)[category_key]
+            if not pokemon_names:
+                await ctx.send(f"❌ Category **{category_key}** is empty.")
+                return
+            reserved = []
+            unreserved = []
+            for pokemon_name in pokemon_names:
+                user_ids = self.reserve_user_ids(ctx.guild.id, pokemon_name)
+                if user_ids:
+                    reserved.extend(
+                        f"• **{pokemon_name}** — <@{user_id}>"
+                        for user_id in user_ids
+                    )
+                else:
+                    unreserved.append(f"• **{pokemon_name}**")
+            lines = (
+                ["**Reserved**"]
+                + (reserved or ["No Pokémon are reserved."])
+                + ["", "**Not reserved**"]
+                + (unreserved or ["All Pokémon in this category are reserved."])
+            )
+            chunks = []
+            chunk = []
+            for line in lines:
+                if chunk and (
+                    len(chunk) >= 20
+                    or len("\n".join(chunk)) + len(line) + 1 > 3900
+                ):
+                    chunks.append(chunk)
+                    chunk = []
+                chunk.append(line)
+            if chunk:
+                chunks.append(chunk)
+            embeds = [
+                discord.Embed(
+                    title=f"{category_key[:230]} Category Reservations",
+                    description="\n".join(page),
+                    color=discord.Color.purple(),
+                ).set_footer(text=f"Page {index} of {len(chunks)}")
+                for index, page in enumerate(chunks, 1)
+            ]
+            if len(embeds) == 1:
+                await ctx.send(embed=embeds[0])
+            else:
+                await ctx.send(
+                    embed=embeds[0], view=ReserveListView(ctx.author.id, embeds)
+                )
+            return
         all_forms = search_input.casefold().startswith("all ")
         family_input = search_input[4:].strip() if all_forms else search_input
         pokemon_names = (
