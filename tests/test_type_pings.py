@@ -33,6 +33,11 @@ class TypePingTests(unittest.IsolatedAsyncioTestCase):
             "Bulbasaur": "Bulbasaur",
             "Charmander": "Charmander",
         }
+        self.cog.pokemon_species = {
+            "Bulbasaur": 1,
+            "Charmander": 4,
+            "Alolan Raichu": 26,
+        }
         self.cog.save_bot_state = Mock()
         self.user_id = 456
 
@@ -290,6 +295,56 @@ class TypePingTests(unittest.IsolatedAsyncioTestCase):
             await view.update_regions(interaction, ["Alola"])
         self.assertEqual(self.cog.bot_state["quest_pings"]["456"], ["Johto", "Kanto"])
         interaction.response.send_message.assert_awaited_once()
+
+    async def test_quest_pings_match_selected_regions_only(self):
+        self.cog.pokemon_species.update({"Chikorita": 152, "Treecko": 252})
+        self.cog.pokemon_types.update({"Chikorita": ["grass"], "Treecko": ["grass"]})
+        self.cog.pokemon_best_names.update({"Chikorita": "Chikorita", "Treecko": "Treecko"})
+        view = QuestPingView(self.cog, self.user_id, guild_id=123)
+        select = view.children[0]
+        select._values = ["Kanto"]
+        await select.callback(self.interaction())
+
+        content, _ = self.cog.format_spawn_prediction("Bulbasaur", 99.0, 123)
+        self.assertIn("Quest pings: <@456>", content)
+        content, _ = self.cog.format_spawn_prediction("Chikorita", 99.0, 123)
+        self.assertNotIn("Quest pings:", content)
+        self.assertEqual(self.cog.quest_ping_owners("Treecko", 123), [])
+
+        await view.update_regions(self.interaction(), ["Kanto", "Hoenn"])
+        self.assertEqual(self.cog.quest_ping_owners("Treecko", 123), ["456"])
+        self.assertEqual(self.cog.quest_ping_owners("Chikorita", 123), [])
+        self.assertEqual(self.cog.quest_ping_owners("Treecko", 789), [])
+
+        await view.children[2].callback(self.interaction())
+        self.assertEqual(self.cog.quest_ping_owners("Bulbasaur", 123), [])
+
+    def test_pokemon_origin_and_additional_quest_categories(self):
+        examples = {
+            "Bulbasaur": (1, {"Kanto"}),
+            "Chikorita": (152, {"Johto"}),
+            "Treecko": (252, {"Hoenn"}),
+            "Turtwig": (387, {"Sinnoh"}),
+            "Snivy": (495, {"Unova"}),
+            "Chespin": (650, {"Kalos"}),
+            "Rowlet": (722, {"Alola"}),
+            "Grookey": (810, {"Galar"}),
+            "Wyrdeer": (899, {"Hisui"}),
+            "Sprigatito": (906, {"Paldea"}),
+            "Dipplin": (1011, {"Paldea", "Kitakami"}),
+            "Bloodmoon Ursaluna": (901, {"Hisui", "Kitakami"}),
+            "Great Tusk": (984, {"Paldea", "Paradox"}),
+            "Iron Leaves": (1010, {"Paldea", "Paradox"}),
+            "Alolan Raichu": (26, {"Kanto", "Alola"}),
+            "Blaze Breed Tauros": (128, {"Kanto", "Paldea"}),
+            "MissingNo": ("MissingNo", set()),
+        }
+        self.cog.pokemon_species.update(
+            {name: species_id for name, (species_id, _) in examples.items()}
+        )
+        for name, (_, expected) in examples.items():
+            with self.subTest(pokemon=name):
+                self.assertEqual(set(self.cog._get_pokemon_regions(name)), expected)
 
     async def test_menu_displays_all_types_and_initial_off_state(self):
         view = TypePingView(self.cog, self.user_id)

@@ -131,6 +131,11 @@ Type and region names are case-insensitive. Adding names preserves existing
 selections; use the menu to turn individual options off. If any name is
 unrecognized, no selections are changed.
 
+Quest pings match a Pokémon's species origin region. Regional forms also match
+their form's region, and Kitakami and Paradox are additional categories, so
+some Pokémon match more than one selection. Kitakami covers Pokémon introduced
+in Kitakami and Bloodmoon Ursaluna, not the entire Kitakami Pokédex.
+
 Use quotes around multiword box names when a command has more than one box
 argument, for example `v!box transfer "Main Box" "Egg Box" 1`.
 `v!box append` reads the current page of a replied Pokétwo list and follows its

@@ -9,8 +9,9 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**Reserve command update**\n"
-    "• `v!r add <pokemon> <@user1> <@user2>` now supports adding reserves to multiple users in one command."
+    "**Quest ping fix**\n"
+    "• `v!qp` now only pings you for the regions you selected. "
+    "Pokémon can also match their regional form, Kitakami, or Paradox category."
 )
 
 

@@ -85,6 +85,26 @@ REGIONS = {
     "Kitakami": None,
     "Paradox": None,
 }
+QUEST_ORIGIN_RANGES = (
+    (1, 151, "Kanto"),
+    (152, 251, "Johto"),
+    (252, 386, "Hoenn"),
+    (387, 493, "Sinnoh"),
+    (494, 649, "Unova"),
+    (650, 721, "Kalos"),
+    (722, 809, "Alola"),
+    (810, 898, "Galar"),
+    (899, 905, "Hisui"),
+    (906, 1025, "Paldea"),
+)
+PARADOX_SPECIES_IDS = set(range(984, 996)) | {
+    1005, 1006, 1007, 1008, 1009, 1010, 1020, 1021, 1022, 1023,
+}
+PALDEAN_TAUROS_FORMS = {
+    "Combat Breed Tauros",
+    "Blaze Breed Tauros",
+    "Aqua Breed Tauros",
+}
 TIMEZONE_PHASE_EMOJIS = {
     "day": "☀️",
     "night": "🌙",
@@ -3014,15 +3034,37 @@ class PokéTwoNamingBot(commands.Cog):
         return self.current_guild_member_ids(guild_id, owners)
 
     def _get_pokemon_regions(self, pokemon_name: str) -> list[str]:
-        """Return which regions a Pokémon belongs to."""
-        regions = []
+        """Return the species' origin and applicable form or quest categories."""
+        species_id = self.pokemon_species[pokemon_name]
+        if species_id == "MissingNo":
+            return []
+        if not isinstance(species_id, int):
+            raise ValueError(f"Invalid species ID for {pokemon_name}: {species_id!r}")
+
+        regions = [
+            region
+            for first, last, region in QUEST_ORIGIN_RANGES
+            if first <= species_id <= last
+        ]
+        if not regions:
+            logging.getLogger(__name__).warning(
+                "No quest-ping origin region for %s (species ID %s)",
+                pokemon_name,
+                species_id,
+            )
         for region, prefix in REGIONS.items():
-            if prefix and pokemon_name.startswith(prefix):
+            if prefix and pokemon_name.startswith(prefix) and region not in regions:
                 regions.append(region)
-            elif not prefix and not any(
-                pokemon_name.startswith(p) for p in REGIONAL_PREFIXES
-            ):
-                regions.append(region)
+        if pokemon_name in PALDEAN_TAUROS_FORMS and "Paldea" not in regions:
+            regions.append("Paldea")
+        if (
+            1011 <= species_id <= 1017
+            or pokemon_name == "Bloodmoon Ursaluna"
+            or species_id == 1025
+        ):
+            regions.append("Kitakami")
+        if species_id in PARADOX_SPECIES_IDS:
+            regions.append("Paradox")
         return regions
 
     def reserve_user_ids(self, guild_id, pokemon_name: str) -> list[str]:
