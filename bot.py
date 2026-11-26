@@ -4307,10 +4307,28 @@ class PokéTwoNamingBot(commands.Cog):
                 await self.starboard_service.handle(message)
             if message.guild and self.premium_tier(message.guild.id) is None:
                 return
+            if self.naming_channel_disabled(message):
+                return
             if self.is_spawn_message(message) and self.channel_within_incense_capacity(
                 message
             ):
                 await self.handle_poketwo_spawn(message)
+
+    def naming_channel_disabled(self, message) -> bool:
+        """Return whether Vivillon naming is disabled in this message's channel."""
+        if message.guild is None:
+            return False
+        roles_channels = (
+            self.bot_state.get("guild_settings", {})
+            .get(str(message.guild.id), {})
+            .get("roles_channels", {})
+        )
+        disabled_channels = roles_channels.get("disabled_naming_channels", [])
+        if not isinstance(disabled_channels, list):
+            return False
+        return str(message.channel.id) in {
+            str(channel_id) for channel_id in disabled_channels
+        }
 
     @commands.Cog.listener()
     async def on_raw_message_edit(self, payload):

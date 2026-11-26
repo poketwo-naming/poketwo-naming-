@@ -9,9 +9,10 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**Pokémon recognition update**\n"
-    "• Blipbug, Greavard, and Pyroar spawns now recognize correctly instead of being "
-    "mistaken for Ducklett, Pancham, or Gossifleur."
+    "**Roles & Channels settings update**\n"
+    "• Roles & Channels settings now use pages with six settings per page.\n"
+    "• You can select channels where Vivillon will not name Pokétwo spawns, "
+    "without affecting starboards or other features."
 )
 
 

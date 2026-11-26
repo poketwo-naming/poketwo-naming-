@@ -58,6 +58,9 @@ Posts link to the original catch. Pokétwo's gender emoji, labeled IVs and shiny
 streak counts are recognized; chain values are shown when present in the catch
 message. Custom sprites such as Peakychu are used on catch posts, including
 shiny posts when a separate shiny sprite is unavailable.
+Use `v!settings` → **Roles & Channels**, then the next page, to select channels
+where Vivillon should not identify spawns. This only disables naming predictions;
+starboards and other bot features continue to run in those channels.
 Vivillon starboard posts show the Gigantamax spawn rate when a rate is known,
 including on overlapping low- and high-IV posts. Other missing spawn rates
 are labelled unknown. The shiny board
