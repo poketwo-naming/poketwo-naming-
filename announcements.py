@@ -9,10 +9,10 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**Roles & Channels settings update**\n"
-    "• Roles & Channels settings now use pages with six settings per page.\n"
-    "• You can select channels where Vivillon will not name Pokétwo spawns, "
-    "without affecting starboards or other features."
+    "**Pokémon naming aliases update**\n"
+    "• Added 17 new preferred catch names, including sleima, carbou, ninfia, "
+    "gekkoga, and olini.\n"
+    "• These names now work in commands alongside the original Pokémon names."
 )
 
 

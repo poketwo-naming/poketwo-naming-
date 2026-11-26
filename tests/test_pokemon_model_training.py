@@ -1,4 +1,6 @@
+import json
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -10,6 +12,37 @@ from tools.build_pokemon_types import resolve_class_identifier
 
 
 class PokemonModelTrainingTests(unittest.TestCase):
+    def test_requested_catch_names_are_best_names_and_command_aliases(self):
+        preferred_names = {
+            "Grimer": "sleima",
+            "Charcadet": "carbou",
+            "Scovillain": "sukoviran",
+            "Tatsugiri": "nigiragi",
+            "Smoliv": "olini",
+            "Growlithe": "gadi",
+            "Bagon": "draby",
+            "Fidough": "hefel",
+            "Tandemaus": "zwieps",
+            "Quaxly": "kwaks",
+            "Greninja": "gekkoga",
+            "Grimmsnarl": "oronge",
+            "Magmar": "buba",
+            "Toedscool": "tentagra",
+            "Orthworm": "schlurm",
+            "Decidueye": "silvarro",
+            "Sylveon": "ninfia",
+        }
+        with Path("pokemon_best_names.json").open(encoding="utf-8") as source:
+            best_names = json.load(source)
+        with Path("pokemon_aliases.json").open(encoding="utf-8") as source:
+            aliases = json.load(source)
+
+        for pokemon, preferred in preferred_names.items():
+            with self.subTest(pokemon=pokemon):
+                self.assertEqual(best_names[pokemon], preferred)
+                self.assertEqual(aliases[preferred], pokemon)
+                self.assertEqual(aliases[pokemon.casefold()], pokemon)
+
     def test_name_generation_preserves_woguru_alias(self):
         rows = {
             "pokemon.csv": [
