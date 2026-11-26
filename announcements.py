@@ -9,8 +9,9 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**Catch embed sprite fix**\n"
-    "• Catch starboards now use the custom Peakychu sprite instead of normal Pikachu artwork."
+    "**Pokémon recognition update**\n"
+    "• Blipbug, Greavard, and Pyroar spawns now recognize correctly instead of being "
+    "mistaken for Ducklett, Pancham, or Gossifleur."
 )
 
 

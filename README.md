@@ -321,10 +321,10 @@ encoder, `pokemon_types.json`, `pokemon_sprite_ids.json`,
 `pokemon_best_names.json`, `pokemon_aliases.json`, and `pokemon_species.json` files.
 
 To teach the bot commonly confused Pokémon (Alolan Meowth/Rattata, Blipbug,
-Deerling seasonal forms, Luxray, Pikipek, Smoliv, Finizen, Palafin, Hero Palafin, and
-Squawkabilly plumage forms) after adding images to their folders, rebuild the
-lightweight refinement file without retraining. Pass extra folder names to add
-more classes:
+Ducklett, Greavard, Pancham, Pyroar, Gossifleur, Deerling seasonal forms, Luxray,
+Pikipek, Smoliv, Finizen, Palafin, Hero Palafin, and Squawkabilly plumage forms)
+after adding images to their folders, rebuild the lightweight refinement file
+without retraining. Pass extra folder names to add more classes:
 
 ```bash
 python tools/build_pokemon_refinements.py
