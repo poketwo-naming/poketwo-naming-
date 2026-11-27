@@ -269,13 +269,13 @@ COMMAND_CATALOG = (
     ),
     (
         "Reservations",
-        "v!r add [all] <pokemon,...> <@user> [<@user2> ...]",
-        "Reserves comma-separated Pokémon/forms for one or more members. Restricted.",
+        "v!r add [all] <pokemon/category,...> <@user> [<@user2> ...]",
+        "Reserves comma-separated Pokémon, forms, or categories for members. Restricted.",
     ),
     (
         "Reservations",
-        "v!r remove <pokemon,...> [@user]",
-        "Removes Pokémon or a category of reservations. Restricted.",
+        "v!r remove <pokemon/category,...> [@user]",
+        "Removes comma-separated Pokémon, forms, or categories. Restricted.",
     ),
     (
         "Reservations",
@@ -4962,6 +4962,40 @@ class PokéTwoNamingBot(commands.Cog):
                 return key
         return None
 
+    def resolve_reservation_list(
+        self,
+        guild_id: int,
+        entry: str,
+        collection_names: list[str] | None = None,
+    ) -> tuple[list[str], list[str], list[str]]:
+        """Resolve reservation targets, expanding each server category."""
+        pokemon_names = []
+        unknown = []
+        empty_categories = []
+        for raw_term in entry.split(","):
+            term = raw_term.strip()
+            if not term:
+                continue
+            category_key = self.find_category(guild_id, term)
+            if category_key is not None:
+                category_members = self.guild_categories(guild_id)[category_key]
+                if category_members:
+                    pokemon_names.extend(str(name) for name in category_members)
+                else:
+                    empty_categories.append(category_key)
+                continue
+            if term.casefold() == "collection" and collection_names is not None:
+                pokemon_names.extend(str(name) for name in collection_names)
+                continue
+            resolved, unresolved = self.resolve_pokemon_list(term)
+            pokemon_names.extend(resolved)
+            unknown.extend(unresolved)
+        return (
+            list(dict.fromkeys(pokemon_names)),
+            unknown,
+            list(dict.fromkeys(empty_categories)),
+        )
+
     @commands.command(name="addcategory", aliases=["ac"])
     async def add_category(self, ctx, *, name: str = ""):
         """Create an empty Pokémon category. Restricted."""
@@ -6204,8 +6238,8 @@ class PokéTwoNamingBot(commands.Cog):
         elif not action_entry:
             await ctx.send(
                 "Use `v!r list [@user]` / `v!reserve list [@user]`, "
-                "`v!r add <pokemon,...> <@user> [<@user2> ...]`, "
-                "`v!r remove <pokemon,...|category> [@user]`, "
+                "`v!r add <pokemon/category,...> <@user> [<@user2> ...]`, "
+                "`v!r remove <pokemon/category,...> [@user]`, "
                 "`v!r search <pokemon|category>`, `v!r clear`, or `v!r all`."
             )
         else:
@@ -6313,7 +6347,10 @@ class PokéTwoNamingBot(commands.Cog):
         # Extract all user mentions from the end of the entry
         user_matches = list(re.finditer(r"<@!?(\d+)>", entry))
         if not user_matches:
-            await ctx.send("Usage: `v!r add <pokémon name> <@user> [<@user2> ...]`")
+            await ctx.send(
+                "Usage: `v!r add <pokémon/category,...> "
+                "<@user> [<@user2> ...]`"
+            )
             return
         
         # Get all user IDs from matches
@@ -6326,7 +6363,10 @@ class PokéTwoNamingBot(commands.Cog):
         pokemon_input = pokemon_input.strip()
         
         if not pokemon_input:
-            await ctx.send("Usage: `v!r add <pokémon name> <@user> [<@user2> ...]`")
+            await ctx.send(
+                "Usage: `v!r add <pokémon/category,...> "
+                "<@user> [<@user2> ...]`"
+            )
             return
         
         # Fetch all members and validate they exist in the server
@@ -6343,23 +6383,31 @@ class PokéTwoNamingBot(commands.Cog):
                 return
             members.append(member)
         
-        pokemon_names = []
-        unknown = []
-        
-        category_key = self.find_category(ctx.guild.id, pokemon_input)
-        if category_key:
-            pokemon_names = self.guild_categories(ctx.guild.id)[category_key]
-        else:
-            collection_dict = self.bot_state["collections"].get(str(ctx.guild.id), {})
-            if pokemon_input.casefold() == "collection" and str(ctx.author.id) in collection_dict:
-                pokemon_names = collection_dict[str(ctx.author.id)]
-            else:
-                pokemon_names, unknown = self.resolve_pokemon_list(pokemon_input)
+        author_id = getattr(getattr(ctx, "author", None), "id", None)
+        collection_names = (
+            self.bot_state["collections"]
+            .get(str(ctx.guild.id), {})
+            .get(str(author_id))
+            if author_id is not None
+            else None
+        )
+        pokemon_names, unknown, empty_categories = self.resolve_reservation_list(
+            ctx.guild.id,
+            pokemon_input,
+            collection_names,
+        )
         
         if unknown:
             await ctx.send(
                 "❌ Unknown Pokémon: "
                 + ", ".join(f"`{name}`" for name in unknown)
+            )
+            return
+        if empty_categories:
+            await ctx.send(
+                "❌ Empty categor"
+                + ("y: " if len(empty_categories) == 1 else "ies: ")
+                + ", ".join(f"**{name}**" for name in empty_categories)
             )
             return
 
@@ -6423,19 +6471,21 @@ class PokéTwoNamingBot(commands.Cog):
                 return
 
         guild_id = ctx.guild.id
-        category_key = self.find_category(guild_id, pokemon_input)
-        if category_key is not None:
-            pokemon_names = self.guild_categories(guild_id)[category_key]
-            unknown = []
-            if not pokemon_names:
-                await ctx.send(f"❌ Category **{category_key}** is empty.")
-                return
-        else:
-            pokemon_names, unknown = self.resolve_pokemon_list(pokemon_input)
+        pokemon_names, unknown, empty_categories = self.resolve_reservation_list(
+            guild_id,
+            pokemon_input,
+        )
         if unknown:
             await ctx.send(
                 "❌ Unknown Pokémon: "
                 + ", ".join(f"`{name}`" for name in unknown)
+            )
+            return
+        if empty_categories:
+            await ctx.send(
+                "❌ Empty categor"
+                + ("y: " if len(empty_categories) == 1 else "ies: ")
+                + ", ".join(f"**{name}**" for name in empty_categories)
             )
             return
 

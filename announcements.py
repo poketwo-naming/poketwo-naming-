@@ -9,9 +9,10 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**Spawn image naming fixes**\n"
-    "• Improved image recognition for Greavard, Tandemaus, and Dipplin to avoid "
-    "confusing them with Shaymin, Maushold, and Applin."
+    "**Reservation category improvements**\n"
+    "• You can now add or remove multiple categories in one command, including "
+    "mixed category and Pokémon lists, for example "
+    "`v!r add rare, paradox <@user>` and `v!r remove rare, paradox`."
 )
 
 

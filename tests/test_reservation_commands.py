@@ -104,6 +104,49 @@ class ReservationCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("Eevee", self.cog.bot_state["reserves"]["123"])
         self.ctx.send.assert_awaited_once()
 
+    async def test_remove_multiple_categories_in_one_command(self):
+        self.cog.bot_state["categories"]["123"]["paradox"] = ["Raikou", "Entei"]
+        self.cog.bot_state["reserves"]["123"].update(
+            {"Raikou": ["456"], "Entei": "456"}
+        )
+
+        await self.cog.remove_reserve(
+            self.ctx,
+            entry="featured, paradox",
+        )
+
+        self.assertEqual(self.cog.bot_state["reserves"]["123"], {})
+        message = self.ctx.send.await_args.args[0]
+        self.assertIn("Pikachu", message)
+        self.assertIn("Raikou", message)
+        self.assertNotIn("Unknown Pokémon", message)
+
+    async def test_add_multiple_categories_in_one_command(self):
+        member = SimpleNamespace(id=789, mention="<@789>")
+        self.ctx.author = SimpleNamespace(id=456)
+        self.ctx.guild.get_member = (
+            lambda user_id: member if user_id == member.id else None
+        )
+        self.cog.bot_state["categories"]["123"]["rare"] = ["Raikou", "Pikachu"]
+        self.cog.bot_state["reserves"]["123"] = {}
+
+        await self.cog.add_reserve(
+            self.ctx,
+            entry="featured, rare <@789>",
+        )
+
+        self.assertEqual(
+            self.cog.bot_state["reserves"]["123"],
+            {
+                "Pikachu": ["789"],
+                "Eevee": ["789"],
+                "Raikou": ["789"],
+            },
+        )
+        message = self.ctx.send.await_args.args[0]
+        self.assertIn("featured, rare", message)
+        self.assertNotIn("Unknown Pokémon", message)
+
     async def test_search_shows_every_reserving_member(self):
         await self.cog.search_reserve(self.ctx, "Pikachu")
 
