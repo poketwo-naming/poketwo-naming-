@@ -367,6 +367,16 @@ COMMAND_CATALOG = (
         "Assigns the restricted-command role. Server administrators only.",
     ),
     (
+        "Administration",
+        "v!blacklist <user|userid>",
+        "Blacklist a user from using all bot commands. Restricted.",
+    ),
+    (
+        "Administration",
+        "v!blist (alias: v!blacklisted)",
+        "Show all blacklisted users. Restricted.",
+    ),
+    (
         "Premium",
         "v!premium",
         "Shows the current server's Bronze, Silver, or Gold tier.",
@@ -3284,6 +3294,7 @@ class PokéTwoNamingBot(commands.Cog):
             "last_update_announcement": "",
             "automatic_update_announcement": "",
             "automatic_update_pending_message": None,
+            "blacklist": [],
         }
         if not os.path.exists(BOT_STATE_FILE):
             return default_state
@@ -3327,6 +3338,7 @@ class PokéTwoNamingBot(commands.Cog):
         state.setdefault("last_update_announcement", "")
         state.setdefault("automatic_update_announcement", "")
         state.setdefault("automatic_update_pending_message", None)
+        state.setdefault("blacklist", [])
         return state
 
     def seed_restricted_roles(self):
@@ -3866,6 +3878,26 @@ class PokéTwoNamingBot(commands.Cog):
             return True
         role_ids = self.restricted_role_ids(ctx.guild.id)
         return any(role.id in role_ids for role in ctx.author.roles)
+
+    def is_blacklisted(self, user_id: int) -> bool:
+        """Check if a user is blacklisted from using bot commands."""
+        return user_id in self.bot_state.get("blacklist", [])
+
+    def add_to_blacklist(self, user_id: int) -> None:
+        """Add a user to the blacklist."""
+        blacklist = self.bot_state.get("blacklist", [])
+        if user_id not in blacklist:
+            blacklist.append(user_id)
+            self.bot_state["blacklist"] = blacklist
+            self.save_bot_state()
+
+    def remove_from_blacklist(self, user_id: int) -> None:
+        """Remove a user from the blacklist."""
+        blacklist = self.bot_state.get("blacklist", [])
+        if user_id in blacklist:
+            blacklist.remove(user_id)
+            self.bot_state["blacklist"] = blacklist
+            self.save_bot_state()
 
     def incense_auto_pause_enabled(self, guild_id: int) -> bool:
         """Return whether confirmed incense purchases auto-pause in a server."""
@@ -5084,6 +5116,57 @@ class PokéTwoNamingBot(commands.Cog):
         self.guild_categories(ctx.guild.id).pop(key)
         self.save_bot_state()
         await ctx.send(f"✅ Deleted category **{key}**.")
+
+    @commands.command(name="blacklist")
+    async def blacklist_command(self, ctx, *, user_input: str = ""):
+        """Blacklist a user from using bot commands. Restricted."""
+        if not self.has_restricted_permission(ctx):
+            await ctx.send("❌ You don't have permission to manage the blacklist.")
+            return
+        if not user_input.strip():
+            await ctx.send("Usage: `v!blacklist <user> or <userid>`")
+            return
+        
+        user_id = None
+        match = re.search(r"<@!?(\d+)>|\b(\d{15,20})\b", user_input.strip())
+        if match:
+            user_id = int(match.group(1) or match.group(2))
+        else:
+            try:
+                user_id = int(user_input.strip())
+            except ValueError:
+                await ctx.send(
+                    "❌ Please mention a user, provide their ID, or use `<user>`."
+                )
+                return
+        
+        if self.is_blacklisted(user_id):
+            await ctx.send(f"❌ User <@{user_id}> is already blacklisted.")
+            return
+        
+        self.add_to_blacklist(user_id)
+        await ctx.send(f"✅ User <@{user_id}> has been blacklisted.")
+
+    @commands.command(name="blist", aliases=["blacklisted"])
+    async def show_blacklist(self, ctx):
+        """Show all blacklisted users. Restricted."""
+        if not self.has_restricted_permission(ctx):
+            await ctx.send("❌ You don't have permission to view the blacklist.")
+            return
+        
+        blacklist = self.bot_state.get("blacklist", [])
+        if not blacklist:
+            await ctx.send("✅ No users are currently blacklisted.")
+            return
+        
+        user_mentions = [f"<@{user_id}>" for user_id in blacklist]
+        embed = discord.Embed(
+            title="Blacklisted Users",
+            description="\n".join(user_mentions) if user_mentions else "None",
+            color=discord.Color.red(),
+        )
+        embed.set_footer(text=f"{len(blacklist)} user(s) blacklisted")
+        await ctx.send(embed=embed)
 
     def report_pokemon_names(self) -> list[str]:
         """Return Pokémon names usable when reading catch and naming-bot messages."""

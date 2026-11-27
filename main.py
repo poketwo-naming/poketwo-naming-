@@ -97,6 +97,15 @@ async def on_message(message):
     """Handle incoming messages"""
     if message.author == bot.user:
         return
+    
+    cog = bot.get_cog("PokéTwoNamingBot")
+    if cog is not None and hasattr(cog, "is_blacklisted"):
+        if cog.is_blacklisted(message.author.id):
+            await message.channel.send(
+                f"❌ {message.author.mention}, you are blacklisted and cannot use bot commands."
+            )
+            return
+    
     breeding_box_match = re.match(
         r"^\s*v!(?P<command>boxhelp|box|dc)(?:\s+(?P<entry>.*))?\s*$",
         message.content,

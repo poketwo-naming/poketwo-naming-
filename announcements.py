@@ -9,10 +9,10 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**Reservation category improvements**\n"
-    "• You can now add or remove multiple categories in one command, including "
-    "mixed category and Pokémon lists, for example "
-    "`v!r add rare, paradox <@user>` and `v!r remove rare, paradox`."
+    "**User blacklist system**\n"
+    "• New commands: `v!blacklist <user|userid>` to blacklist users from using any bot commands, "
+    "and `v!blist` to view all blacklisted users.\n"
+    "• Blacklisted users receive a message when they try to use commands."
 )
 
 
