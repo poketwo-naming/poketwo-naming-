@@ -99,7 +99,14 @@ async def on_message(message):
         return
     
     cog = bot.get_cog("PokéTwoNamingBot")
-    if cog is not None and hasattr(cog, "is_blacklisted"):
+    is_command_message = re.match(
+        r"^\s*v!", message.content, re.IGNORECASE
+    ) is not None
+    if (
+        is_command_message
+        and cog is not None
+        and hasattr(cog, "is_blacklisted")
+    ):
         if cog.is_blacklisted(message.author.id):
             await message.channel.send(
                 f"❌ {message.author.mention}, you are blacklisted and cannot use bot commands."

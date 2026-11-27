@@ -11,6 +11,41 @@ with patch.dict(os.environ, {"DISCORD_TOKEN": "test-token"}):
 
 
 class SlashSyncTests(unittest.IsolatedAsyncioTestCase):
+    async def test_blacklisted_user_normal_message_is_processed_normally(self):
+        message = SimpleNamespace(
+            author=SimpleNamespace(id=123, mention="<@123>"),
+            content="hello everyone",
+            channel=SimpleNamespace(send=AsyncMock()),
+        )
+        cog = SimpleNamespace(is_blacklisted=Mock(return_value=True))
+
+        with (
+            patch.object(main.bot, "get_cog", return_value=cog),
+            patch.object(main.bot, "process_commands", new_callable=AsyncMock) as process,
+        ):
+            await main.on_message(message)
+
+        message.channel.send.assert_not_awaited()
+        process.assert_awaited_once_with(message)
+
+    async def test_blacklisted_user_command_receives_warning(self):
+        message = SimpleNamespace(
+            author=SimpleNamespace(id=123, mention="<@123>"),
+            content="v!premium",
+            channel=SimpleNamespace(send=AsyncMock()),
+        )
+        cog = SimpleNamespace(is_blacklisted=Mock(return_value=True))
+
+        with (
+            patch.object(main.bot, "get_cog", return_value=cog),
+            patch.object(main.bot, "process_commands", new_callable=AsyncMock) as process,
+        ):
+            await main.on_message(message)
+
+        message.channel.send.assert_awaited_once()
+        self.assertIn("blacklisted", message.channel.send.await_args.args[0])
+        process.assert_not_awaited()
+
     async def test_ready_syncs_global_slash_commands(self):
         commands = [SimpleNamespace(name="dc")]
 

@@ -13,11 +13,16 @@ class BlacklistCommandCallback:
     async def __call__(self, cog: PokéTwoNamingBot, ctx: commands.Context, *, user_input: str) -> None: ...
 
 
+class UnblacklistCommandCallback:
+    async def __call__(self, cog: PokéTwoNamingBot, ctx: commands.Context, *, user_input: str) -> None: ...
+
+
 class BlacklistCommandTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.cog = PokéTwoNamingBot.__new__(PokéTwoNamingBot)
         self.cog.bot_state = {
             "blacklist": [],
+            "blacklist_reasons": {},
         }
         self.cog.has_restricted_permission = lambda ctx: True
         self.cog.save_bot_state = lambda: None
@@ -34,6 +39,13 @@ class BlacklistCommandTests(unittest.IsolatedAsyncioTestCase):
         callback = cast(BlacklistCommandCallback, PokéTwoNamingBot.show_blacklist.callback)
         await callback(self.cog, cast(commands.Context, self.ctx))
 
+    async def unblacklist_user(self, user_input: str):
+        callback = cast(
+            UnblacklistCommandCallback,
+            PokéTwoNamingBot.unblacklist_command.callback,
+        )
+        await callback(self.cog, cast(commands.Context, self.ctx), user_input=user_input)
+
     async def test_blacklist_user_by_mention(self):
         await self.blacklist_user("<@456>")
 
@@ -48,6 +60,32 @@ class BlacklistCommandTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn(789, self.cog.bot_state["blacklist"])
         self.ctx.send.assert_awaited_once()
+
+    async def test_blacklist_stores_and_displays_reason(self):
+        await self.blacklist_user("<@456> repeated command abuse")
+
+        self.assertEqual(
+            self.cog.bot_state["blacklist_reasons"]["456"],
+            "repeated command abuse",
+        )
+        await self.show_blacklist()
+        embed = self.ctx.send.await_args.kwargs["embed"]
+        self.assertIn("<@456> — repeated command abuse", embed.description)
+
+    async def test_unblacklist_user_by_id_removes_user_and_reason(self):
+        self.cog.bot_state["blacklist"] = [456]
+        self.cog.bot_state["blacklist_reasons"] = {"456": "spam"}
+
+        await self.unblacklist_user("456")
+
+        self.assertNotIn(456, self.cog.bot_state["blacklist"])
+        self.assertNotIn("456", self.cog.bot_state["blacklist_reasons"])
+
+    async def test_unblacklist_rejects_user_not_on_list(self):
+        await self.unblacklist_user("<@456>")
+
+        message = self.ctx.send.await_args.args[0]
+        self.assertIn("not blacklisted", message)
 
     async def test_blacklist_already_blacklisted_user(self):
         self.cog.bot_state["blacklist"] = [456]

@@ -368,8 +368,13 @@ COMMAND_CATALOG = (
     ),
     (
         "Administration",
-        "v!blacklist <user|userid>",
-        "Blacklist a user from using all bot commands. Restricted.",
+        "v!blacklist <user|userid> [reason]",
+        "Blacklist a user from using bot commands, optionally with a reason. Restricted.",
+    ),
+    (
+        "Administration",
+        "v!unblacklist <user|userid>",
+        "Remove a user from the blacklist. Restricted.",
     ),
     (
         "Administration",
@@ -3295,6 +3300,7 @@ class PokéTwoNamingBot(commands.Cog):
             "automatic_update_announcement": "",
             "automatic_update_pending_message": None,
             "blacklist": [],
+            "blacklist_reasons": {},
         }
         if not os.path.exists(BOT_STATE_FILE):
             return default_state
@@ -3339,6 +3345,7 @@ class PokéTwoNamingBot(commands.Cog):
         state.setdefault("automatic_update_announcement", "")
         state.setdefault("automatic_update_pending_message", None)
         state.setdefault("blacklist", [])
+        state.setdefault("blacklist_reasons", {})
         return state
 
     def seed_restricted_roles(self):
@@ -3883,12 +3890,17 @@ class PokéTwoNamingBot(commands.Cog):
         """Check if a user is blacklisted from using bot commands."""
         return user_id in self.bot_state.get("blacklist", [])
 
-    def add_to_blacklist(self, user_id: int) -> None:
+    def add_to_blacklist(self, user_id: int, reason: str = "") -> None:
         """Add a user to the blacklist."""
         blacklist = self.bot_state.get("blacklist", [])
         if user_id not in blacklist:
             blacklist.append(user_id)
             self.bot_state["blacklist"] = blacklist
+            reasons = self.bot_state.setdefault("blacklist_reasons", {})
+            if reason:
+                reasons[str(user_id)] = reason
+            else:
+                reasons.pop(str(user_id), None)
             self.save_bot_state()
 
     def remove_from_blacklist(self, user_id: int) -> None:
@@ -3897,7 +3909,16 @@ class PokéTwoNamingBot(commands.Cog):
         if user_id in blacklist:
             blacklist.remove(user_id)
             self.bot_state["blacklist"] = blacklist
+            self.bot_state.setdefault("blacklist_reasons", {}).pop(str(user_id), None)
             self.save_bot_state()
+
+    def blacklist_reason(self, user_id: int) -> str:
+        """Return the stored reason for a blacklisted user."""
+        reasons = self.bot_state.get("blacklist_reasons", {})
+        if not isinstance(reasons, dict):
+            return ""
+        reason = reasons.get(str(user_id), "")
+        return reason if isinstance(reason, str) else ""
 
     def incense_auto_pause_enabled(self, guild_id: int) -> bool:
         """Return whether confirmed incense purchases auto-pause in a server."""
@@ -5124,28 +5145,47 @@ class PokéTwoNamingBot(commands.Cog):
             await ctx.send("❌ You don't have permission to manage the blacklist.")
             return
         if not user_input.strip():
-            await ctx.send("Usage: `v!blacklist <user> or <userid>`")
+            await ctx.send("Usage: `v!blacklist <user|userid> [reason]`")
             return
-        
-        user_id = None
-        match = re.search(r"<@!?(\d+)>|\b(\d{15,20})\b", user_input.strip())
-        if match:
-            user_id = int(match.group(1) or match.group(2))
-        else:
-            try:
-                user_id = int(user_input.strip())
-            except ValueError:
-                await ctx.send(
-                    "❌ Please mention a user, provide their ID, or use `<user>`."
-                )
-                return
-        
+
+        target, _, reason = user_input.strip().partition(" ")
+        match = re.fullmatch(r"<@!?(\d+)>|(\d+)", target)
+        if match is None:
+            await ctx.send("❌ Please mention a user or provide their ID.")
+            return
+        user_id = int(match.group(1) or match.group(2))
+
         if self.is_blacklisted(user_id):
             await ctx.send(f"❌ User <@{user_id}> is already blacklisted.")
             return
-        
-        self.add_to_blacklist(user_id)
-        await ctx.send(f"✅ User <@{user_id}> has been blacklisted.")
+
+        reason = reason.strip()
+        self.add_to_blacklist(user_id, reason)
+        response = f"✅ User <@{user_id}> has been blacklisted."
+        if reason:
+            response += f"\n**Reason:** {reason}"
+        await ctx.send(response)
+
+    @commands.command(name="unblacklist")
+    async def unblacklist_command(self, ctx, *, user_input: str = ""):
+        """Remove a user from the blacklist. Restricted."""
+        if not self.has_restricted_permission(ctx):
+            await ctx.send("❌ You don't have permission to manage the blacklist.")
+            return
+
+        target = user_input.strip()
+        match = re.fullmatch(r"<@!?(\d+)>|(\d+)", target)
+        if match is None:
+            await ctx.send("Usage: `v!unblacklist <user|userid>`")
+            return
+
+        user_id = int(match.group(1) or match.group(2))
+        if not self.is_blacklisted(user_id):
+            await ctx.send(f"❌ User <@{user_id}> is not blacklisted.")
+            return
+
+        self.remove_from_blacklist(user_id)
+        await ctx.send(f"✅ User <@{user_id}> has been removed from the blacklist.")
 
     @commands.command(name="blist", aliases=["blacklisted"])
     async def show_blacklist(self, ctx):
@@ -5158,8 +5198,14 @@ class PokéTwoNamingBot(commands.Cog):
         if not blacklist:
             await ctx.send("✅ No users are currently blacklisted.")
             return
-        
-        user_mentions = [f"<@{user_id}>" for user_id in blacklist]
+
+        user_mentions = []
+        for user_id in blacklist:
+            line = f"<@{user_id}>"
+            reason = self.blacklist_reason(user_id)
+            if reason:
+                line += f" — {reason}"
+            user_mentions.append(line)
         embed = discord.Embed(
             title="Blacklisted Users",
             description="\n".join(user_mentions) if user_mentions else "None",
