@@ -9,9 +9,9 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**Vivillon starboard fix**\n"
-    "• Fixed Vivillon, shiny, and main starboard catches when Pokétwo places the "
-    "catch confirmation inside an embed field, including bold-formatted IVs."
+    "**Spawn image reliability fix**\n"
+    "• Vivillon now retries Discord connection timeouts when downloading Pokétwo "
+    "spawn images, so temporary CDN slowdowns are less likely to prevent identification."
 )
 
 

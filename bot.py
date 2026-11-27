@@ -4738,21 +4738,31 @@ class PokéTwoNamingBot(commands.Cog):
                         ),
                         asyncio.create_task(attachment.read(use_cached=True)),
                     }
-                    image_data = await self.first_spawn_download(downloads)
+                    image_data = await self.first_spawn_download(
+                        downloads, log_errors=False
+                    )
                     if image_data is not None:
                         return image_data, perf_counter() - started
                 else:
                     try:
                         image_data = await attachment.read(use_cached=True)
                         return image_data, perf_counter() - started
-                    except discord.HTTPException as error:
+                    except (
+                        aiohttp.ClientError,
+                        discord.HTTPException,
+                        TimeoutError,
+                    ) as error:
                         print(
                             "Could not download Pokétwo spawn image from Discord's "
                             f"cached media URL; retrying the original URL: {error}"
                         )
                 try:
-                    image_data = await attachment.read()
-                except discord.HTTPException as error:
+                    image_data = await self._read_spawn_attachment_with_retry(attachment)
+                except (
+                    aiohttp.ClientError,
+                    discord.HTTPException,
+                    TimeoutError,
+                ) as error:
                     print(
                         "Could not download Pokétwo spawn image from Discord's "
                         f"original URL: {error}"
@@ -4813,20 +4823,41 @@ class PokéTwoNamingBot(commands.Cog):
             return await response.read()
 
     async def _read_spawn_image_with_retry(self, image_url: str) -> bytes:
-        """Retry one transient failure when fetching an embedded image."""
-        try:
-            return await self._read_spawn_image_url(image_url)
-        except aiohttp.ClientResponseError as error:
-            if not 500 <= error.status < 600:
-                raise
-        except (aiohttp.ClientConnectionError, TimeoutError):
-            pass
-        await asyncio.sleep(0.25)
-        return await self._read_spawn_image_url(image_url)
+        """Retry transient failures when fetching an embedded image."""
+        for attempt in range(3):
+            try:
+                return await self._read_spawn_image_url(image_url)
+            except aiohttp.ClientResponseError as error:
+                if not 500 <= error.status < 600 or attempt == 2:
+                    raise
+            except (aiohttp.ClientConnectionError, TimeoutError):
+                if attempt == 2:
+                    raise
+            await asyncio.sleep(0.25 * (attempt + 1))
+        raise RuntimeError("Spawn image retry loop ended unexpectedly")
+
+    @staticmethod
+    async def _read_spawn_attachment_with_retry(attachment) -> bytes:
+        """Retry original attachment downloads after transient failures."""
+        for attempt in range(3):
+            try:
+                return await attachment.read()
+            except discord.HTTPException as error:
+                if error.status is not None and not 500 <= error.status < 600:
+                    raise
+                if attempt == 2:
+                    raise
+            except (aiohttp.ClientConnectionError, TimeoutError):
+                if attempt == 2:
+                    raise
+            await asyncio.sleep(0.25 * (attempt + 1))
+        raise RuntimeError("Spawn attachment retry loop ended unexpectedly")
 
     @staticmethod
     async def first_spawn_download(
         downloads: set[asyncio.Task[bytes]],
+        *,
+        log_errors: bool = True,
     ) -> bytes | None:
         """Return the first successful image download and cancel slower requests."""
         errors = []
@@ -4848,7 +4879,7 @@ class PokéTwoNamingBot(commands.Cog):
                         errors.append(error)
                     else:
                         return image_data
-            if errors:
+            if errors and log_errors:
                 print(
                     "Could not download Pokétwo spawn image from Discord's "
                     f"fast media URLs: {errors[-1]}"

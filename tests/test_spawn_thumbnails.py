@@ -195,6 +195,21 @@ class SpawnThumbnailTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(attachment.read.await_args_list[1].args, ())
         self.assertEqual(attachment.read.await_args_list[1].kwargs, {})
 
+    async def test_spawn_image_download_retries_timed_out_attachment(self):
+        attachment = SimpleNamespace(
+            content_type="image/png",
+            read=AsyncMock(side_effect=[TimeoutError(), self.image_data]),
+        )
+        self.message.attachments = [attachment]
+
+        image_data, _ = await PokéTwoNamingBot._get_spawn_image(
+            self.cog,
+            self.message,
+        )
+
+        self.assertEqual(image_data, self.image_data)
+        self.assertEqual(attachment.read.await_count, 2)
+
     async def test_spawn_image_download_races_optimized_proxy_image(self):
         async def slow_download(**_kwargs):
             await asyncio.sleep(1)
@@ -272,6 +287,32 @@ class SpawnThumbnailTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(image_data, self.image_data)
         self.assertEqual(self.cog.http_session.get.call_count, 2)
+
+    async def test_embed_spawn_survives_multiple_transient_timeouts(self):
+        self.message.attachments = []
+        self.message.embeds = [
+            SimpleNamespace(
+                image=SimpleNamespace(url="https://cdn.example/spawn.jpg"),
+                thumbnail=SimpleNamespace(url=None),
+            )
+        ]
+        self.cog.http_session = SimpleNamespace(
+            get=Mock(
+                side_effect=[
+                    self.spawn_http_response(read_error=TimeoutError()),
+                    self.spawn_http_response(read_error=TimeoutError()),
+                    self.spawn_http_response(),
+                ]
+            )
+        )
+
+        with patch("bot.asyncio.sleep", new_callable=AsyncMock):
+            image_data, _ = await PokéTwoNamingBot._get_spawn_image(
+                self.cog, self.message
+            )
+
+        self.assertEqual(image_data, self.image_data)
+        self.assertEqual(self.cog.http_session.get.call_count, 3)
 
     async def test_embed_bad_request_is_not_retried(self):
         self.message.attachments = []
