@@ -78,6 +78,29 @@ class StarboardTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((catch.user_id, catch.pokemon, catch.iv_text, catch.chain),
                          ("999", "Charizard", "9.99", "42"))
 
+    async def test_vivillon_catch_embedded_in_fields_posts(self):
+        self.message.content = ""
+        self.message.embeds = [SimpleNamespace(
+            title="Pokétwo Catch",
+            description=None,
+            footer=None,
+            fields=[
+                SimpleNamespace(
+                    name="Result",
+                    value=(
+                        "Congratulations <@999>! You caught a **Level 22 "
+                        "Charizard** (**IV: 92.47%**)!"
+                    ),
+                ),
+            ],
+        )]
+        await self.service.handle(self.message)
+        self.channels[3].send.assert_awaited_once()
+        self.assertIn(
+            "High IV Catch Detected",
+            self.channels[3].send.await_args.kwargs["embed"].title,
+        )
+
     def test_gender_emoji_and_nidoran_names(self):
         for suffix, name, gender in (
             (":male:", "Galarian Ponyta", "♂"),

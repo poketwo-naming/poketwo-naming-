@@ -101,13 +101,26 @@ class Catch:
     chain: str | None
 
 
-def parse_catch(message) -> Catch | None:
-    text = message.content or ""
-    for embed in message.embeds:
-        text += "\n" + "\n".join(filter(None, (
-            embed.title, embed.description,
-            embed.footer.text if embed.footer else None,
+def message_text(message) -> str:
+    parts = [getattr(message, "content", "") or ""]
+    for embed in getattr(message, "embeds", ()) or ():
+        parts.extend(filter(None, (
+            getattr(embed, "title", None),
+            getattr(embed, "description", None),
         )))
+        for field in getattr(embed, "fields", ()) or ():
+            parts.extend(filter(None, (
+                getattr(field, "name", None),
+                getattr(field, "value", None),
+            )))
+        footer = getattr(embed, "footer", None)
+        if footer is not None:
+            parts.append(getattr(footer, "text", "") or "")
+    return re.sub(r"\*{1,2}", "", "\n".join(parts))
+
+
+def parse_catch(message) -> Catch | None:
+    text = message_text(message)
     match = re.search(
         r"Congratulations\s+<@!?(\d+)>!\s*You caught an?\s+Level\s+(\d+)\s+"
         r"(.+?)\s*\((?:IV:\s*)?(\d+(?:\.\d+)?)%\)!",
@@ -157,12 +170,7 @@ def main_category(name: str) -> str | None:
 
 def parse_missingno_catch(message) -> Catch | None:
     """Parse a Missingno catch from a Pokétwo confirmation message."""
-    text = message.content or ""
-    for embed in message.embeds:
-        text += "\n" + "\n".join(filter(None, (
-            embed.title, embed.description,
-            embed.footer.text if embed.footer else None,
-        )))
+    text = message_text(message)
     match = re.search(
         r"Congratulations\s+<@!?(\d+)>!\s*You caught an?\s+Level\s+(\d+)\s+"
         r"(MissingNo\.?)\s*\((?:IV:\s*)?(\d+(?:\.\d+)?)%\)!",

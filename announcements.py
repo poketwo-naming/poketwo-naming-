@@ -9,9 +9,9 @@ ANNOUNCEMENT_STATE_KEY = "automatic_update_announcement"
 PENDING_MESSAGE_STATE_KEY = "automatic_update_pending_message"
 # Replace this summary for each update instead of appending previous updates.
 UPDATE_ANNOUNCEMENT = (
-    "**Starboard sprite fix**\n"
-    "• Partner Eevee and Partner Pikachu catches now show their correct custom "
-    "sprites on the starboard."
+    "**Vivillon starboard fix**\n"
+    "• Fixed Vivillon, shiny, and main starboard catches when Pokétwo places the "
+    "catch confirmation inside an embed field, including bold-formatted IVs."
 )
 
 
